@@ -5,6 +5,7 @@ import "./style.css";
 import { loadFont, loadSprites } from "./assets";
 import { adjustAim, createMatch, fire, matchView, step, type AimDelta } from "./core/match";
 import { applyFit, fitPlayingArea } from "./display";
+import { describeFrame } from "./frame";
 import { startGameLoop } from "./gameLoop";
 import { bindControls } from "./input";
 import { drawFrame } from "./renderer";
@@ -35,7 +36,8 @@ async function start(): Promise<void> {
   const stepMatch = () => step(match);
   const render = () => {
     const view = matchView(match);
-    drawFrame(context, sprites, view);
+    const frame = describeFrame(view);
+    drawFrame(context, sprites, frame);
   };
   startGameLoop(stepMatch, render);
 }
