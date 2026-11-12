@@ -11,8 +11,6 @@ import {
   fire,
   isTimedOut,
   isZoomViewShown,
-  lastRoundResult,
-  missile,
   phase,
   planets,
   powerPenalty,
@@ -21,12 +19,13 @@ import {
   scores,
   ships,
   step,
-  stepsSinceRoundOver,
   timeoutCountdown,
   trails,
+  type InFlightPhase,
   type Match,
   type Planet,
   type RoundLayout,
+  type RoundOverPhase,
   type Side,
 } from "./match";
 import { isInsidePlayingArea } from "./flight";
@@ -43,6 +42,26 @@ function inactivePlayer(match: Match): Side {
   return activePlayer(match) === "left" ? "right" : "left";
 }
 
+function inFlight(match: Match): Readonly<InFlightPhase> {
+  const current = phase(match);
+  if (current.kind !== "inFlight") {
+    throw new Error(`expected a shot in flight, phase is ${current.kind}`);
+  }
+  return current;
+}
+
+function roundOver(match: Match): Readonly<RoundOverPhase> {
+  const current = phase(match);
+  if (current.kind !== "roundOver") {
+    throw new Error(`expected the round to be over, phase is ${current.kind}`);
+  }
+  return current;
+}
+
+function shotEndPoint(match: Match) {
+  return trails(match).at(-1)!.to;
+}
+
 function observableState(match: Match) {
   return {
     phase: phase(match),
@@ -52,11 +71,8 @@ function observableState(match: Match) {
     roundNumber: roundNumber(match),
     roundStepCount: roundStepCount(match),
     scores: scores(match),
-    missile: missile(match),
     trails: trails(match),
     attempts: attempts(match),
-    lastRoundResult: lastRoundResult(match),
-    stepsSinceRoundOver: stepsSinceRoundOver(match),
   };
 }
 
@@ -91,7 +107,7 @@ function aimAt(match: Match, angle: number, power: number): void {
 function stepUntilShotEnds(match: Match, maxSteps: number): number {
   for (let i = 1; i <= maxSteps; i++) {
     step(match);
-    if (phase(match) !== "inFlight") {
+    if (phase(match).kind !== "inFlight") {
       return i;
     }
   }
@@ -137,7 +153,7 @@ describe("createMatch", () => {
     const match = createMatch(42);
 
     expect(roundNumber(match)).toBe(1);
-    expect(phase(match)).toBe("aiming");
+    expect(phase(match).kind).toBe("aiming");
     expect(scores(match)).toEqual({ left: 0, right: 0 });
     expect(roundStepCount(match)).toBe(0);
   });
@@ -331,8 +347,8 @@ describe("fire", () => {
 
     fire(match);
 
-    const launched = missile(match)!;
-    expect(phase(match)).toBe("inFlight");
+    const launched = inFlight(match).missile;
+    expect(phase(match).kind).toBe("inFlight");
     expect(launched.x).toBeCloseTo(ship.x + BARREL_DISTANCE[side] * Math.sin(radians), 10);
     expect(launched.y).toBeCloseTo(ship.y - BARREL_DISTANCE[side] * Math.cos(radians), 10);
     expect(launched.vx).toBeCloseTo(0.1 * ship.aim.power * Math.sin(radians), 10);
@@ -353,16 +369,16 @@ describe("fire", () => {
     fire(match);
     step(match);
     const aimBefore = activeAim(match);
-    const missileBefore = { ...missile(match)! };
+    const missileBefore = { ...inFlight(match).missile };
     const trailLengthBefore = trails(match).length;
 
     adjustAim(match, { angle: 5, power: 25 });
     fire(match);
 
     expect(activeAim(match)).toEqual(aimBefore);
-    expect(missile(match)).toEqual(missileBefore);
+    expect(inFlight(match).missile).toEqual(missileBefore);
     expect(trails(match)).toHaveLength(trailLengthBefore);
-    expect(phase(match)).toBe("inFlight");
+    expect(phase(match).kind).toBe("inFlight");
   });
 });
 
@@ -372,13 +388,13 @@ describe("flight", () => {
     const shooter = activePlayer(match);
     adjustAim(match, { angle: 20, power: 0 });
     fire(match);
-    const launched = { ...missile(match)! };
+    const launched = { ...inFlight(match).missile };
 
     for (let i = 0; i < 10; i++) {
       step(match);
     }
 
-    const flying = missile(match)!;
+    const flying = inFlight(match).missile;
     expect(flying.x).toBeCloseTo(launched.x + 10 * launched.vx, 9);
     expect(flying.y).toBeCloseTo(launched.y + 10 * launched.vy, 9);
     expect(flying.vx).toBe(launched.vx);
@@ -398,7 +414,7 @@ describe("flight", () => {
       step(match);
     }
 
-    const flying = missile(match)!;
+    const flying = inFlight(match).missile;
     expect(flying.vy).toBeLessThan(0);
     expect(flying.y).toBeLessThan(ship.y);
   });
@@ -412,11 +428,10 @@ describe("flight", () => {
 
     stepUntilShotEnds(match, 200);
 
-    const stopped = missile(match)!;
+    const stopped = shotEndPoint(match);
     const distanceToCentre = Math.sqrt((stopped.x - planet.x) ** 2 + (stopped.y - planet.y) ** 2);
     expect(distanceToCentre).toBeCloseTo(planet.radius, 9);
-    expect(trails(match).at(-1)!.to).toEqual({ x: stopped.x, y: stopped.y });
-    expect(phase(match)).toBe("aiming");
+    expect(phase(match).kind).toBe("aiming");
     expect(activePlayer(match)).not.toBe(shooter);
     expect(ships(match)[shooter].aim).toEqual(shooterAim);
   });
@@ -446,10 +461,10 @@ describe("flight", () => {
 
     stepUntilShotEnds(match, 200);
 
-    const lost = missile(match)!;
+    const lost = shotEndPoint(match);
     const outside = lost.x < -800 || lost.x >= 1600 || lost.y < -600 || lost.y >= 1200;
     expect(outside).toBe(true);
-    expect(phase(match)).toBe("aiming");
+    expect(phase(match).kind).toBe("aiming");
     expect(activePlayer(match)).not.toBe(shooter);
   });
 
@@ -460,7 +475,7 @@ describe("flight", () => {
       fire(match);
       for (let i = 0; i < 300; i++) {
         step(match);
-        if (phase(match) === "aiming") {
+        if (phase(match).kind === "aiming") {
           adjustAim(match, { angle: 7, power: -20 });
           fire(match);
         }
@@ -480,8 +495,8 @@ describe("leaving the playing area", () => {
     fire(match);
     const flagHistory: boolean[] = [];
 
-    while (phase(match) === "inFlight") {
-      expect(isZoomViewShown(match)).toBe(!isInsidePlayingArea(missile(match)!));
+    while (phase(match).kind === "inFlight") {
+      expect(isZoomViewShown(match)).toBe(!isInsidePlayingArea(inFlight(match).missile));
       flagHistory.push(isZoomViewShown(match));
       step(match);
     }
@@ -497,16 +512,16 @@ describe("leaving the playing area", () => {
     fire(match);
     let stepsOffScreenInFlight = 0;
 
-    while (phase(match) === "inFlight") {
+    while (phase(match).kind === "inFlight") {
       step(match);
-      if (phase(match) === "inFlight" && isZoomViewShown(match)) {
+      if (phase(match).kind === "inFlight" && isZoomViewShown(match)) {
         stepsOffScreenInFlight++;
-        expect(isTimedOut(match)).toBe(false);
+        expect(isTimedOut(inFlight(match))).toBe(false);
       }
     }
 
     expect(stepsOffScreenInFlight).toBeGreaterThan(0);
-    expect(missile(match)!.y).toBeLessThan(-600);
+    expect(shotEndPoint(match).y).toBeLessThan(-600);
   });
 
   test("the timeout counts down once per step and is reached after 750 steps", () => {
@@ -514,17 +529,17 @@ describe("leaving the playing area", () => {
     aimAt(match, 0, 0);
     fire(match);
 
-    expect(timeoutCountdown(match)).toBe(750);
+    expect(timeoutCountdown(inFlight(match))).toBe(750);
     step(match);
-    expect(timeoutCountdown(match)).toBe(749);
+    expect(timeoutCountdown(inFlight(match))).toBe(749);
     for (let i = 0; i < 749; i++) {
       step(match);
     }
-    expect(timeoutCountdown(match)).toBe(0);
-    expect(isTimedOut(match)).toBe(false);
+    expect(timeoutCountdown(inFlight(match))).toBe(0);
+    expect(isTimedOut(inFlight(match))).toBe(false);
     step(match);
-    expect(timeoutCountdown(match)).toBe(-1);
-    expect(isTimedOut(match)).toBe(true);
+    expect(timeoutCountdown(inFlight(match))).toBe(-1);
+    expect(isTimedOut(inFlight(match))).toBe(true);
   });
 
   test("a timed-out missile inside the playing area keeps flying", () => {
@@ -536,9 +551,9 @@ describe("leaving the playing area", () => {
       step(match);
     }
 
-    expect(isTimedOut(match)).toBe(true);
-    expect(phase(match)).toBe("inFlight");
-    expect(isInsidePlayingArea(missile(match)!)).toBe(true);
+    expect(isTimedOut(inFlight(match))).toBe(true);
+    expect(phase(match).kind).toBe("inFlight");
+    expect(isInsidePlayingArea(inFlight(match).missile)).toBe(true);
   });
 
   test("after timeout the shot ends as soon as the missile leaves the playing area", () => {
@@ -547,13 +562,13 @@ describe("leaving the playing area", () => {
     aimAt(match, 0, 1);
     fire(match);
 
-    stepUntilShotEnds(match, 6000);
+    const shotSteps = stepUntilShotEnds(match, 6000);
 
-    const lost = missile(match)!;
-    expect(isTimedOut(match)).toBe(true);
+    const lost = shotEndPoint(match);
+    expect(shotSteps).toBeGreaterThan(750);
     expect(lost.y).toBeLessThan(0);
     expect(lost.y).toBeGreaterThanOrEqual(-0.1 - 1e-9);
-    expect(phase(match)).toBe("aiming");
+    expect(phase(match).kind).toBe("aiming");
     expect(activePlayer(match)).not.toBe(shooter);
   });
 });
@@ -566,11 +581,10 @@ describe("ship hits", () => {
 
     hitOpponent(match, 100);
 
-    const stopped = missile(match)!;
-    expect(phase(match)).toBe("roundOver");
-    expect(lastRoundResult(match)).toMatchObject({ outcome: "hit", shooter, hitShip: target });
+    const stopped = shotEndPoint(match);
+    expect(phase(match).kind).toBe("roundOver");
+    expect(roundOver(match).result).toMatchObject({ outcome: "hit", shooter, hitShip: target });
     expect(distanceBetween(stopped, ships(match)[target])).toBeLessThanOrEqual(14);
-    expect(trails(match).at(-1)!.to).toEqual({ x: stopped.x, y: stopped.y });
   });
 
   test("a fast missile cannot pass through a ship between two steps", () => {
@@ -579,9 +593,9 @@ describe("ship hits", () => {
 
     hitOpponent(match, 350);
 
-    const distance = distanceBetween(missile(match)!, ships(match)[target]);
-    expect(phase(match)).toBe("roundOver");
-    expect(lastRoundResult(match)!.hitShip).toBe(target);
+    const distance = distanceBetween(shotEndPoint(match), ships(match)[target]);
+    expect(phase(match).kind).toBe("roundOver");
+    expect(roundOver(match).result.hitShip).toBe(target);
     expect(distance).toBeLessThanOrEqual(14);
     expect(distance).toBeGreaterThan(14 - 3.5);
   });
@@ -592,9 +606,9 @@ describe("ship hits", () => {
 
     hitOwnShip(match);
 
-    expect(phase(match)).toBe("roundOver");
-    expect(lastRoundResult(match)).toMatchObject({ outcome: "selfHit", shooter, hitShip: shooter });
-    expect(distanceBetween(missile(match)!, ships(match)[shooter])).toBeLessThanOrEqual(14);
+    expect(phase(match).kind).toBe("roundOver");
+    expect(roundOver(match).result).toMatchObject({ outcome: "selfHit", shooter, hitShip: shooter });
+    expect(distanceBetween(shotEndPoint(match), ships(match)[shooter])).toBeLessThanOrEqual(14);
   });
 
   test("attempts are counted per player within the round", () => {
@@ -614,11 +628,11 @@ describe("ship hits", () => {
     const match = createMatch(65, fixedLayout([]));
     hitOpponent(match, 100);
 
-    expect(stepsSinceRoundOver(match)).toBe(0);
+    expect(roundOver(match).stepsSinceRoundOver).toBe(0);
     step(match);
     step(match);
     step(match);
-    expect(stepsSinceRoundOver(match)).toBe(3);
+    expect(roundOver(match).stepsSinceRoundOver).toBe(3);
   });
 });
 
@@ -638,7 +652,7 @@ describe("scoring", () => {
 
     const expectedChange = 1500 + bonus - 500;
     expect(attempts(match)[shooter]).toBe(attempt);
-    expect(lastRoundResult(match)).toMatchObject({
+    expect(roundOver(match).result).toMatchObject({
       outcome: "hit",
       baseScore: 1500,
       quickHitBonus: bonus,
@@ -655,7 +669,7 @@ describe("scoring", () => {
 
     hitOpponent(match, 200);
 
-    expect(lastRoundResult(match)!.powerPenalty).toBe(1000);
+    expect(roundOver(match).result.powerPenalty).toBe(1000);
     expect(scores(match)[shooter]).toBe(1500 + 500 - 1000);
   });
 
@@ -666,7 +680,7 @@ describe("scoring", () => {
 
     hitOwnShip(match);
 
-    expect(lastRoundResult(match)!.scoreChange).toBe(-2000);
+    expect(roundOver(match).result.scoreChange).toBe(-2000);
     expect(scores(match)[shooter]).toBe(-2000);
     expect(scores(match)[other]).toBe(0);
   });
@@ -682,7 +696,7 @@ describe("round end and next round", () => {
 
     expect(ships(match).left.aim).toEqual(aimsBefore.left);
     expect(ships(match).right.aim).toEqual(aimsBefore.right);
-    expect(phase(match)).toBe("roundOver");
+    expect(phase(match).kind).toBe("roundOver");
   });
 
   test("fire during round over starts the next round with a new layout, default aims and cleared trails", () => {
@@ -695,11 +709,10 @@ describe("round end and next round", () => {
 
     fire(match);
 
-    expect(phase(match)).toBe("aiming");
+    expect(phase(match)).toEqual({ kind: "aiming" });
     expect(roundNumber(match)).toBe(2);
     expect(roundStepCount(match)).toBe(0);
     expect(trails(match)).toEqual([]);
-    expect(missile(match)).toBeUndefined();
     expect(attempts(match)).toEqual({ left: 0, right: 0 });
     expect(ships(match).left.aim).toEqual({ angle: 90, power: 100 });
     expect(ships(match).right.aim).toEqual({ angle: 270, power: 100 });
@@ -758,7 +771,7 @@ describe("round end and next round", () => {
       fire(match);
       for (let i = 0; i < 300; i++) {
         step(match);
-        if (phase(match) === "aiming") {
+        if (phase(match).kind === "aiming") {
           adjustAim(match, { angle: 7, power: -20 });
           fire(match);
         }

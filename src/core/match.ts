@@ -13,8 +13,6 @@ export type { Missile, Point } from "./flight";
 export type { Aim, Planet, RoundLayout, Ship, Side } from "./round";
 export { BARREL_DISTANCE } from "./round";
 
-export type Phase = "aiming" | "inFlight" | "roundOver";
-
 export type RoundOutcome = "hit" | "selfHit";
 
 export interface RoundResult {
@@ -26,6 +24,23 @@ export interface RoundResult {
   powerPenalty: number;
   scoreChange: number;
 }
+
+export interface AimingPhase {
+  kind: "aiming";
+}
+
+export interface InFlightPhase {
+  kind: "inFlight";
+  missile: Missile;
+}
+
+export interface RoundOverPhase {
+  kind: "roundOver";
+  result: RoundResult;
+  stepsSinceRoundOver: number;
+}
+
+export type Phase = AimingPhase | InFlightPhase | RoundOverPhase;
 
 export interface AimDelta {
   angle: number;
@@ -54,11 +69,8 @@ export interface Match {
   scores: Record<Side, number>;
   ships: Record<Side, Ship>;
   planets: Planet[];
-  missile: Missile | undefined;
   trails: TrailSegment[];
   attempts: Record<Side, number>;
-  lastRoundResult: RoundResult | undefined;
-  stepsSinceRoundOver: number;
 }
 
 export function createMatch(seed: number, firstRoundLayout?: RoundLayout): Match {
@@ -68,18 +80,15 @@ export function createMatch(seed: number, firstRoundLayout?: RoundLayout): Match
   const layout = firstRoundLayout ?? generatedLayout;
   return {
     rng,
-    phase: "aiming",
+    phase: { kind: "aiming" },
     activePlayer,
     roundNumber: 1,
     roundStepCount: 0,
     scores: { left: 0, right: 0 },
     ships: layout.ships,
     planets: layout.planets,
-    missile: undefined,
     trails: [],
     attempts: { left: 0, right: 0 },
-    lastRoundResult: undefined,
-    stepsSinceRoundOver: 0,
   };
 }
 
@@ -89,15 +98,15 @@ function drawFirstShooter(rng: Rng): Side {
 
 export function step(match: Match): void {
   match.roundStepCount++;
-  if (match.phase === "inFlight") {
-    advanceShot(match);
-  } else if (match.phase === "roundOver") {
-    match.stepsSinceRoundOver++;
+  if (match.phase.kind === "inFlight") {
+    advanceShot(match, match.phase.missile);
+  } else if (match.phase.kind === "roundOver") {
+    match.phase.stepsSinceRoundOver++;
   }
 }
 
-function advanceShot(match: Match): void {
-  const flightStep = flyMissile(match.missile!, match.planets, match.ships);
+function advanceShot(match: Match, missile: Missile): void {
+  const flightStep = flyMissile(missile, match.planets, match.ships);
   const trailSegment = { shooter: match.activePlayer, ...flightStep.segment };
   match.trails.push(trailSegment);
   if (flightStep.hitShip !== undefined) {
@@ -108,7 +117,7 @@ function advanceShot(match: Match): void {
 }
 
 function endShot(match: Match): void {
-  match.phase = "aiming";
+  match.phase = { kind: "aiming" };
   match.activePlayer = opponentOf(match.activePlayer);
 }
 
@@ -120,9 +129,7 @@ function endRound(match: Match, hitShip: Side): void {
   const shooter = match.activePlayer;
   const result = roundResultFor(shooter, hitShip, match.attempts[shooter], match.ships[shooter].aim.power);
   match.scores[shooter] += result.scoreChange;
-  match.lastRoundResult = result;
-  match.stepsSinceRoundOver = 0;
-  match.phase = "roundOver";
+  match.phase = { kind: "roundOver", result, stepsSinceRoundOver: 0 };
 }
 
 function roundResultFor(shooter: Side, hitShip: Side, attempt: number, power: number): RoundResult {
@@ -153,12 +160,11 @@ function roundResultFor(shooter: Side, hitShip: Side, attempt: number, power: nu
 function startNextRound(match: Match): void {
   const layout = createRoundLayout(match.rng);
   match.activePlayer = nextRoundShooter(match.scores, match.activePlayer);
-  match.phase = "aiming";
+  match.phase = { kind: "aiming" };
   match.roundNumber++;
   match.roundStepCount = 0;
   match.ships = layout.ships;
   match.planets = layout.planets;
-  match.missile = undefined;
   match.trails = [];
   match.attempts = { left: 0, right: 0 };
 }
@@ -174,7 +180,7 @@ function nextRoundShooter(scores: Readonly<Record<Side, number>>, lastShooter: S
 }
 
 export function adjustAim(match: Match, delta: AimDelta): void {
-  if (match.phase !== "aiming") {
+  if (match.phase.kind !== "aiming") {
     return;
   }
   const aim = match.ships[match.activePlayer].aim;
@@ -183,9 +189,9 @@ export function adjustAim(match: Match, delta: AimDelta): void {
 }
 
 export function fire(match: Match): void {
-  if (match.phase === "roundOver") {
+  if (match.phase.kind === "roundOver") {
     startNextRound(match);
-  } else if (match.phase === "aiming") {
+  } else if (match.phase.kind === "aiming") {
     launchShot(match);
   }
 }
@@ -193,12 +199,12 @@ export function fire(match: Match): void {
 function launchShot(match: Match): void {
   const side = match.activePlayer;
   const shot = shotRecordFor(match.ships[side], BARREL_DISTANCE[side]);
-  match.missile = launchMissile(shot);
+  const missile = launchMissile(shot);
   match.attempts[side]++;
-  match.phase = "inFlight";
+  match.phase = { kind: "inFlight", missile };
 }
 
-export function phase(match: Match): Phase {
+export function phase(match: Match): Readonly<Phase> {
   return match.phase;
 }
 
@@ -214,20 +220,16 @@ export function planets(match: Match): readonly Readonly<Planet>[] {
   return match.planets;
 }
 
-export function missile(match: Match): Readonly<Missile> | undefined {
-  return match.missile;
-}
-
 export function isZoomViewShown(match: Match): boolean {
-  return match.phase === "inFlight" && !isInsidePlayingArea(match.missile!);
+  return match.phase.kind === "inFlight" && !isInsidePlayingArea(match.phase.missile);
 }
 
-export function timeoutCountdown(match: Match): number {
-  return match.missile!.flightStepsLeft;
+export function timeoutCountdown(flight: Readonly<InFlightPhase>): number {
+  return flight.missile.flightStepsLeft;
 }
 
-export function isTimedOut(match: Match): boolean {
-  return hasTimedOut(match.missile!);
+export function isTimedOut(flight: Readonly<InFlightPhase>): boolean {
+  return hasTimedOut(flight.missile);
 }
 
 export function trails(match: Match): readonly Readonly<TrailSegment>[] {
@@ -252,12 +254,4 @@ export function scores(match: Match): Readonly<Record<Side, number>> {
 
 export function attempts(match: Match): Readonly<Record<Side, number>> {
   return match.attempts;
-}
-
-export function lastRoundResult(match: Match): Readonly<RoundResult> | undefined {
-  return match.lastRoundResult;
-}
-
-export function stepsSinceRoundOver(match: Match): number {
-  return match.stepsSinceRoundOver;
 }
