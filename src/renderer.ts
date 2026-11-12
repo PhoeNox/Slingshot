@@ -2,16 +2,22 @@ import { FONT_FAMILY } from "./assets";
 import {
   activePlayer,
   BARREL_DISTANCE,
+  isMissileInPlayingArea,
+  missile,
   phase,
   planets,
+  powerPenalty,
   roundNumber,
   roundStepCount,
   ships,
+  trails,
   type Aim,
   type Match,
+  type Missile,
   type Planet,
   type Ship,
   type Side,
+  type TrailSegment,
 } from "./core/match";
 import { PLAYING_AREA_HEIGHT, PLAYING_AREA_WIDTH } from "./core/playingArea";
 
@@ -19,6 +25,7 @@ export interface Sprites {
   backdrop: HTMLImageElement;
   planets: HTMLImageElement[];
   ships: Record<Side, HTMLImageElement>;
+  missile: HTMLImageElement;
 }
 
 const PLANET_SPRITE_FILL = 0.96;
@@ -33,6 +40,7 @@ const HUD_FONT_SIZE = 14;
 const HUD_TOP = 5;
 const ANGLE_INFO_LEFT = 290;
 const POWER_INFO_LEFT = 403;
+const POWER_PENALTY_CENTRE_X = 399;
 
 interface ShipPose {
   rotation: number;
@@ -52,9 +60,12 @@ const BANNER_CENTRE_Y = 299;
 export function drawFrame(context: CanvasRenderingContext2D, sprites: Sprites, match: Match): void {
   drawBackdrop(context, sprites.backdrop);
   drawPlanets(context, sprites.planets, planets(match));
+  drawTrails(context, trails(match));
   drawShips(context, sprites.ships, ships(match));
   if (phase(match) === "aiming") {
     drawAiming(context, ships(match), activePlayer(match));
+  } else {
+    drawFlight(context, sprites.missile, match);
   }
   drawRoundBanner(context, roundNumber(match), roundStepCount(match));
 }
@@ -74,6 +85,23 @@ function drawPlanets(
     const top = planet.y - Math.floor(size / 2);
     context.drawImage(planetSprites[planet.sprite - 1], left, top, size, size);
   }
+}
+
+function drawTrails(context: CanvasRenderingContext2D, roundTrails: readonly Readonly<TrailSegment>[]): void {
+  context.save();
+  context.lineWidth = 1;
+  for (const side of ["left", "right"] as const) {
+    context.strokeStyle = SHIP_COLOURS[side];
+    context.beginPath();
+    for (const segment of roundTrails) {
+      if (segment.shooter === side) {
+        context.moveTo(segment.from.x, segment.from.y);
+        context.lineTo(segment.to.x, segment.to.y);
+      }
+    }
+    context.stroke();
+  }
+  context.restore();
 }
 
 function drawShips(
@@ -165,6 +193,29 @@ function drawAimInfo(context: CanvasRenderingContext2D, aim: Readonly<Aim>): voi
   context.textBaseline = "top";
   context.fillText(`Angle: ${aim.angle.toFixed(2)}`, ANGLE_INFO_LEFT, HUD_TOP);
   context.fillText(`Power: ${aim.power.toFixed(1)}`, POWER_INFO_LEFT, HUD_TOP);
+  context.restore();
+}
+
+function drawFlight(context: CanvasRenderingContext2D, missileSprite: HTMLImageElement, match: Match): void {
+  if (isMissileInPlayingArea(match)) {
+    drawMissile(context, missileSprite, missile(match)!);
+  }
+  drawPowerPenalty(context, powerPenalty(match));
+}
+
+function drawMissile(context: CanvasRenderingContext2D, missileSprite: HTMLImageElement, flyingMissile: Readonly<Missile>): void {
+  const left = flyingMissile.x - missileSprite.width / 2;
+  const top = flyingMissile.y - missileSprite.height / 2;
+  context.drawImage(missileSprite, left, top);
+}
+
+function drawPowerPenalty(context: CanvasRenderingContext2D, penalty: number): void {
+  context.save();
+  context.fillStyle = "#fff";
+  context.font = `${HUD_FONT_SIZE}px ${FONT_FAMILY}`;
+  context.textAlign = "center";
+  context.textBaseline = "top";
+  context.fillText(`Power penalty: ${Math.trunc(penalty)}`, POWER_PENALTY_CENTRE_X, HUD_TOP);
   context.restore();
 }
 

@@ -24,9 +24,9 @@ const AIM_DIRECTIONS: Record<string, AimDelta> = {
   KeyS: { angle: 0, power: -1 },
 };
 
-const SCROLL_KEYS = new Set(["Space"]);
+const FIRE_KEYS = new Set(["Space", "Enter"]);
 
-export function bindAimKeys(target: Window, adjustAim: (delta: AimDelta) => void): void {
+export function bindControls(target: Window, adjustAim: (delta: AimDelta) => void, fire: () => void): void {
   const repeat: KeyRepeat = { heldCode: undefined, shiftHeld: false, timer: undefined };
 
   const applyHeldKey = () => {
@@ -48,7 +48,11 @@ export function bindAimKeys(target: Window, adjustAim: (delta: AimDelta) => void
       return;
     }
     event.preventDefault();
-    if (event.repeat || !(event.code in AIM_DIRECTIONS)) {
+    if (event.repeat) {
+      return;
+    }
+    if (FIRE_KEYS.has(event.code)) {
+      fire();
       return;
     }
     releaseHeldKey();
@@ -66,7 +70,7 @@ export function bindAimKeys(target: Window, adjustAim: (delta: AimDelta) => void
 }
 
 function isHandledKey(code: string): boolean {
-  return code in AIM_DIRECTIONS || SCROLL_KEYS.has(code);
+  return code in AIM_DIRECTIONS || FIRE_KEYS.has(code);
 }
 
 function aimDeltaFor(code: string, coarse: boolean): AimDelta {
