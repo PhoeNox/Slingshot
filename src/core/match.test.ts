@@ -26,10 +26,14 @@ import {
   trails,
   type Match,
   type Planet,
+  type RoundLayout,
   type Side,
 } from "./match";
+import { isInsidePlayingArea } from "./flight";
 
 const SEEDS = Array.from({ length: 1000 }, (_, i) => i * 7919 + 1);
+
+const SHIP_X: Record<Side, number> = { left: 40, right: 760 };
 
 function activeAim(match: Match) {
   return { ...ships(match)[activePlayer(match)].aim };
@@ -60,19 +64,19 @@ function activeShip(match: Match) {
   return ships(match)[activePlayer(match)];
 }
 
-function withPlanets(match: Match, roundPlanets: Planet[]): Match {
-  match.planets = roundPlanets;
-  return match;
+function fixedLayout(roundPlanets: Planet[], leftY = 300, rightY = 300): RoundLayout {
+  return {
+    ships: {
+      left: { x: SHIP_X.left, y: leftY, aim: { angle: 90, power: 100 } },
+      right: { x: SHIP_X.right, y: rightY, aim: { angle: 270, power: 100 } },
+    },
+    planets: roundPlanets,
+  };
 }
 
-function withShipsAt(match: Match, leftY: number, rightY: number): Match {
-  match.ships.left.y = leftY;
-  match.ships.right.y = rightY;
-  return match;
-}
-
-function facingShips(match: Match): Match {
-  return withShipsAt(withPlanets(match, []), 300, 300);
+function selfHitMatch(seed: number): Match {
+  const shooter = activePlayer(createMatch(seed));
+  return createMatch(seed, fixedLayout([planetAt(SHIP_X[shooter], 450, 100, 10)]));
 }
 
 function planetAt(x: number, y: number, mass: number, radius: number): Planet {
@@ -82,10 +86,6 @@ function planetAt(x: number, y: number, mass: number, radius: number): Planet {
 function aimAt(match: Match, angle: number, power: number): void {
   const aim = activeAim(match);
   adjustAim(match, { angle: angle - aim.angle, power: power - aim.power });
-}
-
-function isInsidePlayingArea(point: { x: number; y: number }): boolean {
-  return point.x >= 0 && point.x < 800 && point.y >= 0 && point.y < 600;
 }
 
 function stepUntilShotEnds(match: Match, maxSteps: number): number {
@@ -123,8 +123,6 @@ function hitOpponentOnAttempt(match: Match, attempt: number, power: number): voi
 }
 
 function hitOwnShip(match: Match): void {
-  const ship = activeShip(match);
-  withPlanets(match, [planetAt(ship.x, ship.y + 150, 100, 10)]);
   aimAt(match, 0, 20);
   fire(match);
   stepUntilShotEnds(match, 1000);
@@ -165,6 +163,19 @@ describe("createMatch", () => {
     const layouts = new Set(SEEDS.map((seed) => JSON.stringify(planets(createMatch(seed)))));
 
     expect(layouts.size).toBeGreaterThan(SEEDS.length * 0.99);
+  });
+
+  test("a fixed first-round layout replaces the generated ships and planets", () => {
+    const match = createMatch(42, fixedLayout([planetAt(400, 300, 100, 10)], 150, 450));
+
+    expect(ships(match)).toEqual(fixedLayout([], 150, 450).ships);
+    expect(planets(match)).toEqual([planetAt(400, 300, 100, 10)]);
+  });
+
+  test("a fixed first-round layout leaves the first shooter seed-determined", () => {
+    for (const seed of SEEDS.slice(0, 50)) {
+      expect(activePlayer(createMatch(seed, fixedLayout([])))).toBe(activePlayer(createMatch(seed)));
+    }
   });
 });
 
@@ -338,7 +349,7 @@ describe("fire", () => {
   });
 
   test("aim and fire have no effect while the missile is in flight", () => {
-    const match = withPlanets(createMatch(23), []);
+    const match = createMatch(23, fixedLayout([]));
     fire(match);
     step(match);
     const aimBefore = activeAim(match);
@@ -357,7 +368,7 @@ describe("fire", () => {
 
 describe("flight", () => {
   test("a missile with no planets flies in a straight line and leaves a trail in the shooter's name", () => {
-    const match = withPlanets(createMatch(31), []);
+    const match = createMatch(31, fixedLayout([]));
     const shooter = activePlayer(match);
     adjustAim(match, { angle: 20, power: 0 });
     fire(match);
@@ -379,9 +390,8 @@ describe("flight", () => {
   });
 
   test("gravity pulls the missile toward a planet", () => {
-    const match = createMatch(32);
+    const match = createMatch(32, fixedLayout([planetAt(400, 100, 100, 10)]));
     const ship = activeShip(match);
-    withPlanets(match, [planetAt(400, ship.y - 200, 100, 10)]);
     fire(match);
 
     for (let i = 0; i < 20; i++) {
@@ -394,11 +404,9 @@ describe("flight", () => {
   });
 
   test("a missile touching a planet stops at its surface and hands the turn over", () => {
-    const match = createMatch(33);
+    const planet = planetAt(400, 300, 8, 25);
+    const match = createMatch(33, fixedLayout([planet]));
     const shooter = activePlayer(match);
-    const ship = activeShip(match);
-    const planet = planetAt(400, ship.y, 8, 25);
-    withPlanets(match, [planet]);
     const shooterAim = activeAim(match);
     fire(match);
 
@@ -414,7 +422,7 @@ describe("flight", () => {
   });
 
   test("each player keeps their own aim between their shots", () => {
-    const match = withShipsAt(withPlanets(createMatch(34), []), 100, 500);
+    const match = createMatch(34, fixedLayout([], 100, 500));
     const first = activePlayer(match);
     adjustAim(match, { angle: 10, power: 50 });
     const firstAim = activeAim(match);
@@ -431,7 +439,7 @@ describe("flight", () => {
   });
 
   test("leaving the tracking area ends the shot and hands the turn over", () => {
-    const match = withPlanets(createMatch(35), []);
+    const match = createMatch(35, fixedLayout([], 100, 500));
     const shooter = activePlayer(match);
     adjustAim(match, { angle: 0, power: 250 });
     fire(match);
@@ -466,7 +474,7 @@ describe("flight", () => {
 
 describe("leaving the playing area", () => {
   test("zoom-view flag is set exactly while the missile is outside the playing area", () => {
-    const match = withPlanets(createMatch(51), []);
+    const match = createMatch(51, fixedLayout([]));
     aimAt(match, 0, 100);
     expect(isZoomViewShown(match)).toBe(false);
     fire(match);
@@ -484,7 +492,7 @@ describe("leaving the playing area", () => {
   });
 
   test("an off-screen missile keeps flying before timeout until it leaves the tracking area", () => {
-    const match = withPlanets(createMatch(52), []);
+    const match = createMatch(52, fixedLayout([]));
     aimAt(match, 0, 100);
     fire(match);
     let stepsOffScreenInFlight = 0;
@@ -502,7 +510,7 @@ describe("leaving the playing area", () => {
   });
 
   test("the timeout counts down once per step and is reached after 750 steps", () => {
-    const match = withPlanets(createMatch(53), []);
+    const match = createMatch(53, fixedLayout([]));
     aimAt(match, 0, 0);
     fire(match);
 
@@ -520,7 +528,7 @@ describe("leaving the playing area", () => {
   });
 
   test("a timed-out missile inside the playing area keeps flying", () => {
-    const match = withPlanets(createMatch(54), []);
+    const match = createMatch(54, fixedLayout([]));
     aimAt(match, 0, 0);
     fire(match);
 
@@ -534,7 +542,7 @@ describe("leaving the playing area", () => {
   });
 
   test("after timeout the shot ends as soon as the missile leaves the playing area", () => {
-    const match = withPlanets(createMatch(55), []);
+    const match = createMatch(55, fixedLayout([]));
     const shooter = activePlayer(match);
     aimAt(match, 0, 1);
     fire(match);
@@ -552,7 +560,7 @@ describe("leaving the playing area", () => {
 
 describe("ship hits", () => {
   test("a missile reaching the opposing ship is a hit that ends the round", () => {
-    const match = facingShips(createMatch(61));
+    const match = createMatch(61, fixedLayout([]));
     const shooter = activePlayer(match);
     const target = inactivePlayer(match);
 
@@ -566,7 +574,7 @@ describe("ship hits", () => {
   });
 
   test("a fast missile cannot pass through a ship between two steps", () => {
-    const match = facingShips(createMatch(62));
+    const match = createMatch(62, fixedLayout([]));
     const target = inactivePlayer(match);
 
     hitOpponent(match, 350);
@@ -579,7 +587,7 @@ describe("ship hits", () => {
   });
 
   test("a missile curving back into the shooter's own ship is a self-hit", () => {
-    const match = createMatch(63);
+    const match = selfHitMatch(63);
     const shooter = activePlayer(match);
 
     hitOwnShip(match);
@@ -590,7 +598,7 @@ describe("ship hits", () => {
   });
 
   test("attempts are counted per player within the round", () => {
-    const match = facingShips(createMatch(64));
+    const match = createMatch(64, fixedLayout([]));
     const first = activePlayer(match);
     const second = inactivePlayer(match);
 
@@ -603,7 +611,7 @@ describe("ship hits", () => {
   });
 
   test("steps since the round ended are counted while the round is over", () => {
-    const match = facingShips(createMatch(65));
+    const match = createMatch(65, fixedLayout([]));
     hitOpponent(match, 100);
 
     expect(stepsSinceRoundOver(match)).toBe(0);
@@ -622,7 +630,7 @@ describe("scoring", () => {
     [4, 0],
     [5, 0],
   ])("a hit on attempt %i earns a quick-hit bonus of %i", (attempt, bonus) => {
-    const match = facingShips(createMatch(71));
+    const match = createMatch(71, fixedLayout([]));
     const shooter = activePlayer(match);
     const target = inactivePlayer(match);
 
@@ -642,7 +650,7 @@ describe("scoring", () => {
   });
 
   test("five times the power of the hitting shot is deducted from a hit", () => {
-    const match = facingShips(createMatch(72));
+    const match = createMatch(72, fixedLayout([]));
     const shooter = activePlayer(match);
 
     hitOpponent(match, 200);
@@ -652,7 +660,7 @@ describe("scoring", () => {
   });
 
   test("a self-hit deducts 2000 from the shooter only", () => {
-    const match = createMatch(73);
+    const match = selfHitMatch(73);
     const shooter = activePlayer(match);
     const other = inactivePlayer(match);
 
@@ -666,7 +674,7 @@ describe("scoring", () => {
 
 describe("round end and next round", () => {
   test("adjustAim has no effect while the round is over", () => {
-    const match = facingShips(createMatch(81));
+    const match = createMatch(81, fixedLayout([]));
     hitOpponent(match, 100);
     const aimsBefore = { left: { ...ships(match).left.aim }, right: { ...ships(match).right.aim } };
 
@@ -678,7 +686,7 @@ describe("round end and next round", () => {
   });
 
   test("fire during round over starts the next round with a new layout, default aims and cleared trails", () => {
-    const match = facingShips(createMatch(82));
+    const match = createMatch(82, fixedLayout([]));
     hitOpponent(match, 100);
     const scoresBefore = { ...scores(match) };
     for (let i = 0; i < 10; i++) {
@@ -700,7 +708,7 @@ describe("round end and next round", () => {
   });
 
   test("the hit player has the lower score and shoots first in the next round", () => {
-    const match = facingShips(createMatch(83));
+    const match = createMatch(83, fixedLayout([]));
     const target = inactivePlayer(match);
     hitOpponent(match, 100);
 
@@ -710,7 +718,7 @@ describe("round end and next round", () => {
   });
 
   test("a player who hit their own ship has the lower score and shoots first in the next round", () => {
-    const match = createMatch(84);
+    const match = selfHitMatch(84);
     const shooter = activePlayer(match);
     hitOwnShip(match);
 
@@ -720,7 +728,7 @@ describe("round end and next round", () => {
   });
 
   test("on tied scores the player next in alternation shoots first in the next round", () => {
-    const match = facingShips(createMatch(85));
+    const match = createMatch(85, fixedLayout([]));
     const shooter = activePlayer(match);
     hitOpponentOnAttempt(match, 3, 320);
     expect(scores(match)).toEqual({ left: 0, right: 0 });
@@ -730,21 +738,37 @@ describe("round end and next round", () => {
     expect(activePlayer(match)).not.toBe(shooter);
   });
 
-  test("rounds continue without limit and replay identically from the same seed", () => {
+  test("the next round's layout comes from the seed regardless of the fixed first-round layout", () => {
+    const first = createMatch(86, fixedLayout([]));
+    const second = createMatch(86, fixedLayout([], 250, 250));
+    hitOpponent(first, 100);
+    hitOpponent(second, 100);
+
+    fire(first);
+    fire(second);
+
+    expect(ships(second)).toEqual(ships(first));
+    expect(planets(second)).toEqual(planets(first));
+  });
+
+  test("later rounds replay identically from the same seed", () => {
     const play = () => {
-      const match = createMatch(4242);
-      for (let round = 0; round < 6; round++) {
-        facingShips(match);
-        hitOpponent(match, 100 + 10 * round);
-        fire(match);
+      const match = createMatch(4242, fixedLayout([]));
+      hitOpponent(match, 100);
+      fire(match);
+      for (let i = 0; i < 300; i++) {
+        step(match);
+        if (phase(match) === "aiming") {
+          adjustAim(match, { angle: 7, power: -20 });
+          fire(match);
+        }
       }
       return observableState(match);
     };
 
     const first = play();
 
-    expect(first.roundNumber).toBe(7);
-    expect(first.phase).toBe("aiming");
+    expect(first.roundNumber).toBe(2);
     expect(play()).toEqual(first);
   });
 });

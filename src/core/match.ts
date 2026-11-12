@@ -7,10 +7,10 @@
 
 import { flyMissile, hasTimedOut, isInsidePlayingArea, launchMissile, shotRecordFor, type Missile, type Point } from "./flight";
 import { createRng, randomInt, type Rng } from "./random";
-import { BARREL_DISTANCE, createRoundLayout, type Planet, type Ship, type Side } from "./round";
+import { BARREL_DISTANCE, createRoundLayout, type Planet, type RoundLayout, type Ship, type Side } from "./round";
 
 export type { Missile, Point } from "./flight";
-export type { Aim, Planet, Ship, Side } from "./round";
+export type { Aim, Planet, RoundLayout, Ship, Side } from "./round";
 export { BARREL_DISTANCE } from "./round";
 
 export type Phase = "aiming" | "inFlight" | "roundOver";
@@ -61,10 +61,11 @@ export interface Match {
   stepsSinceRoundOver: number;
 }
 
-export function createMatch(seed: number): Match {
+export function createMatch(seed: number, firstRoundLayout?: RoundLayout): Match {
   const rng = createRng(seed);
   const activePlayer = drawFirstShooter(rng);
-  const layout = createRoundLayout(rng);
+  const generatedLayout = createRoundLayout(rng);
+  const layout = firstRoundLayout ?? generatedLayout;
   return {
     rng,
     phase: "aiming",
