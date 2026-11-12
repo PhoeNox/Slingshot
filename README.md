@@ -2,6 +2,8 @@
 
 A browser port of Slingshot, the two-player, turn-based gravity artillery game: missiles are bent by the gravity of planets on their way to the opposing ship. Two players share one keyboard and take shots in alternation.
 
+**Play it in the browser: <https://phoenox.github.io/Slingshot/>**
+
 Controls: ←/→ or A/D angle · ↑/↓ or W/S power · Shift ×2.5 · Space fire
 
 ## Development
