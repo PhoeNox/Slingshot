@@ -5,6 +5,8 @@ import {
   BARREL_DISTANCE,
   createMatch,
   fire,
+  isTimedOut,
+  isZoomViewShown,
   missile,
   phase,
   planets,
@@ -14,6 +16,7 @@ import {
   scores,
   ships,
   step,
+  timeoutCountdown,
   trails,
   type Match,
   type Planet,
@@ -55,6 +58,15 @@ function withPlanets(match: Match, roundPlanets: Planet[]): Match {
 
 function planetAt(x: number, y: number, mass: number, radius: number): Planet {
   return { sprite: 1, mass, radius, x, y };
+}
+
+function aimAt(match: Match, angle: number, power: number): void {
+  const aim = activeAim(match);
+  adjustAim(match, { angle: angle - aim.angle, power: power - aim.power });
+}
+
+function isInsidePlayingArea(point: { x: number; y: number }): boolean {
+  return point.x >= 0 && point.x < 800 && point.y >= 0 && point.y < 600;
 }
 
 function stepUntilShotEnds(match: Match, maxSteps: number): number {
@@ -394,5 +406,91 @@ describe("flight", () => {
     };
 
     expect(play()).toEqual(play());
+  });
+});
+
+describe("leaving the playing area", () => {
+  test("zoom-view flag is set exactly while the missile is outside the playing area", () => {
+    const match = withPlanets(createMatch(51), []);
+    aimAt(match, 0, 100);
+    expect(isZoomViewShown(match)).toBe(false);
+    fire(match);
+    const flagHistory: boolean[] = [];
+
+    while (phase(match) === "inFlight") {
+      expect(isZoomViewShown(match)).toBe(!isInsidePlayingArea(missile(match)!));
+      flagHistory.push(isZoomViewShown(match));
+      step(match);
+    }
+
+    expect(flagHistory).toContain(false);
+    expect(flagHistory).toContain(true);
+    expect(isZoomViewShown(match)).toBe(false);
+  });
+
+  test("an off-screen missile keeps flying before timeout until it leaves the tracking area", () => {
+    const match = withPlanets(createMatch(52), []);
+    aimAt(match, 0, 100);
+    fire(match);
+    let stepsOffScreenInFlight = 0;
+
+    while (phase(match) === "inFlight") {
+      step(match);
+      if (phase(match) === "inFlight" && isZoomViewShown(match)) {
+        stepsOffScreenInFlight++;
+        expect(isTimedOut(match)).toBe(false);
+      }
+    }
+
+    expect(stepsOffScreenInFlight).toBeGreaterThan(0);
+    expect(missile(match)!.y).toBeLessThan(-600);
+  });
+
+  test("the timeout counts down once per step and is reached after 750 steps", () => {
+    const match = withPlanets(createMatch(53), []);
+    aimAt(match, 0, 0);
+    fire(match);
+
+    expect(timeoutCountdown(match)).toBe(750);
+    step(match);
+    expect(timeoutCountdown(match)).toBe(749);
+    for (let i = 0; i < 749; i++) {
+      step(match);
+    }
+    expect(timeoutCountdown(match)).toBe(0);
+    expect(isTimedOut(match)).toBe(false);
+    step(match);
+    expect(timeoutCountdown(match)).toBe(-1);
+    expect(isTimedOut(match)).toBe(true);
+  });
+
+  test("a timed-out missile inside the playing area keeps flying", () => {
+    const match = withPlanets(createMatch(54), []);
+    aimAt(match, 0, 0);
+    fire(match);
+
+    for (let i = 0; i < 1000; i++) {
+      step(match);
+    }
+
+    expect(isTimedOut(match)).toBe(true);
+    expect(phase(match)).toBe("inFlight");
+    expect(isInsidePlayingArea(missile(match)!)).toBe(true);
+  });
+
+  test("after timeout the shot ends as soon as the missile leaves the playing area", () => {
+    const match = withPlanets(createMatch(55), []);
+    const shooter = activePlayer(match);
+    aimAt(match, 0, 1);
+    fire(match);
+
+    stepUntilShotEnds(match, 6000);
+
+    const lost = missile(match)!;
+    expect(isTimedOut(match)).toBe(true);
+    expect(lost.y).toBeLessThan(0);
+    expect(lost.y).toBeGreaterThanOrEqual(-0.1 - 1e-9);
+    expect(phase(match)).toBe("aiming");
+    expect(activePlayer(match)).not.toBe(shooter);
   });
 });

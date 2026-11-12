@@ -2,7 +2,8 @@ import { FONT_FAMILY } from "./assets";
 import {
   activePlayer,
   BARREL_DISTANCE,
-  isMissileInPlayingArea,
+  isTimedOut,
+  isZoomViewShown,
   missile,
   phase,
   planets,
@@ -10,6 +11,7 @@ import {
   roundNumber,
   roundStepCount,
   ships,
+  timeoutCountdown,
   trails,
   type Aim,
   type Match,
@@ -19,7 +21,14 @@ import {
   type Side,
   type TrailSegment,
 } from "./core/match";
-import { PLAYING_AREA_HEIGHT, PLAYING_AREA_WIDTH } from "./core/playingArea";
+import {
+  PLAYING_AREA_HEIGHT,
+  PLAYING_AREA_WIDTH,
+  TRACKING_AREA_BOTTOM,
+  TRACKING_AREA_LEFT,
+  TRACKING_AREA_RIGHT,
+  TRACKING_AREA_TOP,
+} from "./core/playingArea";
 
 export interface Sprites {
   backdrop: HTMLImageElement;
@@ -41,6 +50,22 @@ const HUD_TOP = 5;
 const ANGLE_INFO_LEFT = 290;
 const POWER_INFO_LEFT = 403;
 const POWER_PENALTY_CENTRE_X = 399;
+const TIMEOUT_INFO_CENTRE_X = 399;
+const TIMEOUT_INFO_BOTTOM = 594;
+
+const DIM_COLOUR = "rgba(0, 0, 0, 0.69)";
+const ZOOM_SCALE = 0.25;
+const ZOOM_MISSILE_SCALE = 1 / 3;
+const ZOOM_VIEW_WIDTH = (TRACKING_AREA_RIGHT - TRACKING_AREA_LEFT) * ZOOM_SCALE;
+const ZOOM_VIEW_HEIGHT = (TRACKING_AREA_BOTTOM - TRACKING_AREA_TOP) * ZOOM_SCALE;
+const ZOOM_VIEW_LEFT = (PLAYING_AREA_WIDTH - ZOOM_VIEW_WIDTH) / 2;
+const ZOOM_VIEW_TOP = (PLAYING_AREA_HEIGHT - ZOOM_VIEW_HEIGHT) / 2;
+const ZOOMED_PLAYING_AREA_LEFT = -TRACKING_AREA_LEFT * ZOOM_SCALE;
+const ZOOMED_PLAYING_AREA_TOP = -TRACKING_AREA_TOP * ZOOM_SCALE;
+const ZOOMED_PLAYING_AREA_WIDTH = PLAYING_AREA_WIDTH * ZOOM_SCALE;
+const ZOOMED_PLAYING_AREA_HEIGHT = PLAYING_AREA_HEIGHT * ZOOM_SCALE;
+const ZOOM_VIEW_OUTLINE_COLOUR = "#fff";
+const ZOOMED_PLAYING_AREA_OUTLINE_COLOUR = "rgb(150, 150, 150)";
 
 interface ShipPose {
   rotation: number;
@@ -65,7 +90,7 @@ export function drawFrame(context: CanvasRenderingContext2D, sprites: Sprites, m
   if (phase(match) === "aiming") {
     drawAiming(context, ships(match), activePlayer(match));
   } else {
-    drawFlight(context, sprites.missile, match);
+    drawFlight(context, sprites, match);
   }
   drawRoundBanner(context, roundNumber(match), roundStepCount(match));
 }
@@ -196,17 +221,74 @@ function drawAimInfo(context: CanvasRenderingContext2D, aim: Readonly<Aim>): voi
   context.restore();
 }
 
-function drawFlight(context: CanvasRenderingContext2D, missileSprite: HTMLImageElement, match: Match): void {
-  if (isMissileInPlayingArea(match)) {
-    drawMissile(context, missileSprite, missile(match)!);
+function drawFlight(context: CanvasRenderingContext2D, sprites: Sprites, match: Match): void {
+  if (isZoomViewShown(match)) {
+    drawZoomView(context, sprites, match);
+  } else {
+    drawMissile(context, sprites.missile, missile(match)!);
   }
   drawPowerPenalty(context, powerPenalty(match));
+  drawTimeoutInfo(context, timeoutCountdown(match), isTimedOut(match));
 }
 
 function drawMissile(context: CanvasRenderingContext2D, missileSprite: HTMLImageElement, flyingMissile: Readonly<Missile>): void {
   const left = flyingMissile.x - missileSprite.width / 2;
   const top = flyingMissile.y - missileSprite.height / 2;
   context.drawImage(missileSprite, left, top);
+}
+
+function drawZoomView(context: CanvasRenderingContext2D, sprites: Sprites, match: Match): void {
+  drawDimming(context);
+  context.save();
+  context.translate(ZOOM_VIEW_LEFT, ZOOM_VIEW_TOP);
+  context.drawImage(sprites.backdrop, 0, 0, ZOOM_VIEW_WIDTH, ZOOM_VIEW_HEIGHT);
+  drawZoomedPlayingArea(context, sprites, match);
+  drawZoomedMissile(context, sprites.missile, missile(match)!);
+  drawZoomOutlines(context);
+  context.restore();
+}
+
+function drawDimming(context: CanvasRenderingContext2D): void {
+  context.save();
+  context.fillStyle = DIM_COLOUR;
+  context.fillRect(0, 0, PLAYING_AREA_WIDTH, PLAYING_AREA_HEIGHT);
+  context.restore();
+}
+
+function drawZoomedPlayingArea(context: CanvasRenderingContext2D, sprites: Sprites, match: Match): void {
+  context.save();
+  context.translate(ZOOMED_PLAYING_AREA_LEFT, ZOOMED_PLAYING_AREA_TOP);
+  context.scale(ZOOM_SCALE, ZOOM_SCALE);
+  drawPlanets(context, sprites.planets, planets(match));
+  drawShips(context, sprites.ships, ships(match));
+  context.restore();
+}
+
+function drawZoomedMissile(
+  context: CanvasRenderingContext2D,
+  missileSprite: HTMLImageElement,
+  flyingMissile: Readonly<Missile>,
+): void {
+  const width = missileSprite.width * ZOOM_MISSILE_SCALE;
+  const height = missileSprite.height * ZOOM_MISSILE_SCALE;
+  const left = ZOOMED_PLAYING_AREA_LEFT + flyingMissile.x * ZOOM_SCALE - width / 2;
+  const top = ZOOMED_PLAYING_AREA_TOP + flyingMissile.y * ZOOM_SCALE - height / 2;
+  context.drawImage(missileSprite, left, top, width, height);
+}
+
+function drawZoomOutlines(context: CanvasRenderingContext2D): void {
+  context.save();
+  context.lineWidth = 1;
+  context.strokeStyle = ZOOM_VIEW_OUTLINE_COLOUR;
+  context.strokeRect(0.5, 0.5, ZOOM_VIEW_WIDTH - 1, ZOOM_VIEW_HEIGHT - 1);
+  context.strokeStyle = ZOOMED_PLAYING_AREA_OUTLINE_COLOUR;
+  context.strokeRect(
+    ZOOMED_PLAYING_AREA_LEFT + 0.5,
+    ZOOMED_PLAYING_AREA_TOP + 0.5,
+    ZOOMED_PLAYING_AREA_WIDTH - 1,
+    ZOOMED_PLAYING_AREA_HEIGHT - 1,
+  );
+  context.restore();
 }
 
 function drawPowerPenalty(context: CanvasRenderingContext2D, penalty: number): void {
@@ -216,6 +298,17 @@ function drawPowerPenalty(context: CanvasRenderingContext2D, penalty: number): v
   context.textAlign = "center";
   context.textBaseline = "top";
   context.fillText(`Power penalty: ${Math.trunc(penalty)}`, POWER_PENALTY_CENTRE_X, HUD_TOP);
+  context.restore();
+}
+
+function drawTimeoutInfo(context: CanvasRenderingContext2D, countdown: number, timedOut: boolean): void {
+  const text = timedOut ? "Shot timed out..." : `Timeout in ${countdown}`;
+  context.save();
+  context.fillStyle = "#fff";
+  context.font = `${HUD_FONT_SIZE}px ${FONT_FAMILY}`;
+  context.textAlign = "center";
+  context.textBaseline = "bottom";
+  context.fillText(text, TIMEOUT_INFO_CENTRE_X, TIMEOUT_INFO_BOTTOM);
   context.restore();
 }
 

@@ -1,4 +1,4 @@
-import { flyMissile, isInsidePlayingArea, launchMissile, shotRecordFor, type Missile, type Point } from "./flight";
+import { flyMissile, hasTimedOut, isInsidePlayingArea, launchMissile, shotRecordFor, type Missile, type Point } from "./flight";
 import { createRng, randomInt, type Rng } from "./random";
 import { BARREL_DISTANCE, createRoundLayout, type Planet, type Ship, type Side } from "./round";
 
@@ -118,8 +118,16 @@ export function missile(match: Match): Readonly<Missile> | undefined {
   return match.missile;
 }
 
-export function isMissileInPlayingArea(match: Match): boolean {
-  return match.missile !== undefined && isInsidePlayingArea(match.missile);
+export function isZoomViewShown(match: Match): boolean {
+  return match.phase === "inFlight" && !isInsidePlayingArea(match.missile!);
+}
+
+export function timeoutCountdown(match: Match): number {
+  return match.missile!.flightStepsLeft;
+}
+
+export function isTimedOut(match: Match): boolean {
+  return hasTimedOut(match.missile!);
 }
 
 export function trails(match: Match): readonly Readonly<TrailSegment>[] {

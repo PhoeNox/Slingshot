@@ -59,7 +59,9 @@ export function launchMissile(shot: ShotRecord): Missile {
 export function flyMissile(missile: Missile, planets: readonly Readonly<Planet>[]): FlightStep {
   const from = { x: missile.x, y: missile.y };
   advanceMissile(missile, planets);
-  const shotEnded = !isInsideTrackingArea(missile) || stopAtPlanetSurface(missile, from, planets);
+  const shotEnded = !isInsideTrackingArea(missile)
+    || stopAtPlanetSurface(missile, from, planets)
+    || isLostAfterTimeout(missile);
   const to = { x: missile.x, y: missile.y };
   return { segment: { from, to }, shotEnded };
 }
@@ -90,6 +92,14 @@ export function isInsidePlayingArea(point: Readonly<Point>): boolean {
     && point.x < PLAYING_AREA_WIDTH
     && point.y >= 0
     && point.y < PLAYING_AREA_HEIGHT;
+}
+
+export function hasTimedOut(missile: Readonly<Missile>): boolean {
+  return missile.flightStepsLeft < 0;
+}
+
+function isLostAfterTimeout(missile: Readonly<Missile>): boolean {
+  return hasTimedOut(missile) && !isInsidePlayingArea(missile);
 }
 
 function stopAtPlanetSurface(missile: Missile, from: Readonly<Point>, planets: readonly Readonly<Planet>[]): boolean {
