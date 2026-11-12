@@ -47,6 +47,8 @@ const DEFAULT_POWER = 100;
 const LEFT_DEFAULT_ANGLE = 90;
 const RIGHT_DEFAULT_ANGLE = 270;
 
+export const BARREL_DISTANCE: Record<Side, number> = { left: 22, right: 23 };
+
 export function createRoundLayout(rng: Rng): RoundLayout {
   const ships = placeShips(rng);
   const planets = generatePlanets(rng);

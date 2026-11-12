@@ -2,8 +2,17 @@ import { createRng, randomInt, type Rng } from "./random";
 import { createRoundLayout, type Planet, type Ship, type Side } from "./round";
 
 export type { Aim, Planet, Ship, Side } from "./round";
+export { BARREL_DISTANCE } from "./round";
 
 export type Phase = "aiming";
+
+export interface AimDelta {
+  angle: number;
+  power: number;
+}
+
+const MAX_POWER = 350;
+const FULL_TURN = 360;
 
 export interface Match {
   rng: Rng;
@@ -38,6 +47,15 @@ function drawFirstShooter(rng: Rng): Side {
 
 export function step(match: Match): void {
   match.roundStepCount++;
+}
+
+export function adjustAim(match: Match, delta: AimDelta): void {
+  if (match.phase !== "aiming") {
+    return;
+  }
+  const aim = match.ships[match.activePlayer].aim;
+  aim.angle = (((aim.angle + delta.angle) % FULL_TURN) + FULL_TURN) % FULL_TURN;
+  aim.power = Math.min(Math.max(aim.power + delta.power, 0), MAX_POWER);
 }
 
 export function phase(match: Match): Phase {

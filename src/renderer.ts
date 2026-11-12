@@ -1,5 +1,18 @@
 import { FONT_FAMILY } from "./assets";
-import { planets, roundNumber, roundStepCount, ships, type Match, type Planet, type Ship, type Side } from "./core/match";
+import {
+  activePlayer,
+  BARREL_DISTANCE,
+  phase,
+  planets,
+  roundNumber,
+  roundStepCount,
+  ships,
+  type Aim,
+  type Match,
+  type Planet,
+  type Ship,
+  type Side,
+} from "./core/match";
 import { PLAYING_AREA_HEIGHT, PLAYING_AREA_WIDTH } from "./core/playingArea";
 
 export interface Sprites {
@@ -11,7 +24,22 @@ export interface Sprites {
 const PLANET_SPRITE_FILL = 0.96;
 const SHIP_FRAME_WIDTH = 40;
 const SHIP_FRAME_HEIGHT = 33;
-const DEFAULT_AIM_FRAME = 0;
+const SHIP_FRAME_COUNT = 8;
+const SHIP_FRAME_ANGLE = 360 / SHIP_FRAME_COUNT;
+const SHIP_SHEET_FACING_ANGLE: Record<Side, number> = { left: 90, right: 270 };
+const SHIP_COLOURS: Record<Side, string> = { left: "rgb(209, 170, 133)", right: "rgb(132, 152, 192)" };
+
+const HUD_FONT_SIZE = 14;
+const HUD_TOP = 5;
+const ANGLE_INFO_LEFT = 290;
+const POWER_INFO_LEFT = 403;
+
+interface ShipPose {
+  rotation: number;
+  frame: number;
+  nextFrame: number;
+  nextFrameWeight: number;
+}
 
 const BANNER_START_INTENSITY = 100;
 const BANNER_END_INTENSITY = 30;
@@ -25,6 +53,9 @@ export function drawFrame(context: CanvasRenderingContext2D, sprites: Sprites, m
   drawBackdrop(context, sprites.backdrop);
   drawPlanets(context, sprites.planets, planets(match));
   drawShips(context, sprites.ships, ships(match));
+  if (phase(match) === "aiming") {
+    drawAiming(context, ships(match), activePlayer(match));
+  }
   drawRoundBanner(context, roundNumber(match), roundStepCount(match));
 }
 
@@ -52,21 +83,89 @@ function drawShips(
 ): void {
   for (const side of ["left", "right"] as const) {
     const ship = roundShips[side];
-    const frameLeft = DEFAULT_AIM_FRAME * SHIP_FRAME_WIDTH;
-    const left = ship.x - SHIP_FRAME_WIDTH / 2;
-    const top = ship.y - Math.floor(SHIP_FRAME_HEIGHT / 2);
-    context.drawImage(
-      shipSheets[side],
-      frameLeft,
-      0,
-      SHIP_FRAME_WIDTH,
-      SHIP_FRAME_HEIGHT,
-      left,
-      top,
-      SHIP_FRAME_WIDTH,
-      SHIP_FRAME_HEIGHT,
-    );
+    const pose = shipPose(ship.aim.angle, SHIP_SHEET_FACING_ANGLE[side]);
+    drawShip(context, shipSheets[side], ship, pose);
   }
+}
+
+function shipPose(aimAngle: number, sheetFacingAngle: number): ShipPose {
+  const rotation = (aimAngle - sheetFacingAngle + 360) % 360;
+  const frame = Math.floor(rotation / SHIP_FRAME_ANGLE);
+  return {
+    rotation,
+    frame,
+    nextFrame: (frame + 1) % SHIP_FRAME_COUNT,
+    nextFrameWeight: (rotation - frame * SHIP_FRAME_ANGLE) / SHIP_FRAME_ANGLE,
+  };
+}
+
+function drawShip(
+  context: CanvasRenderingContext2D,
+  shipSheet: HTMLImageElement,
+  ship: Readonly<Ship>,
+  pose: ShipPose,
+): void {
+  context.save();
+  context.translate(ship.x, ship.y);
+  context.rotate((pose.rotation * Math.PI) / 180);
+  drawShipFrame(context, shipSheet, pose.frame);
+  context.globalAlpha = pose.nextFrameWeight;
+  drawShipFrame(context, shipSheet, pose.nextFrame);
+  context.restore();
+}
+
+function drawShipFrame(context: CanvasRenderingContext2D, shipSheet: HTMLImageElement, frame: number): void {
+  const frameLeft = frame * SHIP_FRAME_WIDTH;
+  const left = -SHIP_FRAME_WIDTH / 2;
+  const top = -Math.floor(SHIP_FRAME_HEIGHT / 2);
+  context.drawImage(
+    shipSheet,
+    frameLeft,
+    0,
+    SHIP_FRAME_WIDTH,
+    SHIP_FRAME_HEIGHT,
+    left,
+    top,
+    SHIP_FRAME_WIDTH,
+    SHIP_FRAME_HEIGHT,
+  );
+}
+
+function drawAiming(
+  context: CanvasRenderingContext2D,
+  roundShips: Readonly<Record<Side, Readonly<Ship>>>,
+  side: Side,
+): void {
+  const ship = roundShips[side];
+  drawAimLine(context, ship, BARREL_DISTANCE[side], SHIP_COLOURS[side]);
+  drawAimInfo(context, ship.aim);
+}
+
+function drawAimLine(context: CanvasRenderingContext2D, ship: Readonly<Ship>, barrelDistance: number, colour: string): void {
+  const radians = (ship.aim.angle * Math.PI) / 180;
+  const directionX = Math.sin(radians);
+  const directionY = -Math.cos(radians);
+  const barrelX = ship.x + barrelDistance * directionX;
+  const barrelY = ship.y + barrelDistance * directionY;
+  context.save();
+  context.strokeStyle = colour;
+  context.lineWidth = 1;
+  context.beginPath();
+  context.moveTo(barrelX, barrelY);
+  context.lineTo(barrelX + ship.aim.power * directionX, barrelY + ship.aim.power * directionY);
+  context.stroke();
+  context.restore();
+}
+
+function drawAimInfo(context: CanvasRenderingContext2D, aim: Readonly<Aim>): void {
+  context.save();
+  context.fillStyle = "#fff";
+  context.font = `${HUD_FONT_SIZE}px ${FONT_FAMILY}`;
+  context.textAlign = "left";
+  context.textBaseline = "top";
+  context.fillText(`Angle: ${aim.angle.toFixed(2)}`, ANGLE_INFO_LEFT, HUD_TOP);
+  context.fillText(`Power: ${aim.power.toFixed(1)}`, POWER_INFO_LEFT, HUD_TOP);
+  context.restore();
 }
 
 function drawRoundBanner(context: CanvasRenderingContext2D, round: number, stepsIntoRound: number): void {

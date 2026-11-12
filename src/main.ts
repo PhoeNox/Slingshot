@@ -1,8 +1,9 @@
 import "./style.css";
 import { loadFont, loadSprites } from "./assets";
-import { createMatch, step } from "./core/match";
+import { adjustAim, createMatch, step, type AimDelta } from "./core/match";
 import { applyFit, fitPlayingArea } from "./display";
 import { startGameLoop } from "./gameLoop";
+import { bindAimKeys } from "./input";
 import { drawFrame } from "./renderer";
 
 async function start(): Promise<void> {
@@ -23,6 +24,9 @@ async function start(): Promise<void> {
   };
   window.addEventListener("resize", fitCanvas);
   fitCanvas();
+
+  const adjustMatchAim = (delta: AimDelta) => adjustAim(match, delta);
+  bindAimKeys(window, adjustMatchAim);
 
   const stepMatch = () => step(match);
   const render = () => drawFrame(context, sprites, match);
