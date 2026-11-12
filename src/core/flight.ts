@@ -13,7 +13,7 @@ import {
   TRACKING_AREA_RIGHT,
   TRACKING_AREA_TOP,
 } from "./playingArea";
-import type { Planet, Ship, Side } from "./round";
+import type { Aim, Planet, Ship, Side } from "./round";
 
 export interface Point {
   x: number;
@@ -51,15 +51,32 @@ const SHIP_HIT_SAMPLES = 10;
 const SHIP_HIT_SAMPLE_SPACING = 0.1;
 
 export function shotRecordFor(ship: Readonly<Ship>, barrelDistance: number): ShotRecord {
-  const radians = ship.aim.angle * RADIANS_PER_DEGREE;
-  const directionX = Math.sin(radians);
-  const directionY = -Math.cos(radians);
+  const direction = directionOf(ship.aim);
+  const barrelTip = offsetAlong(ship, direction, barrelDistance);
   const speed = LAUNCH_SPEED_PER_POWER * ship.aim.power;
   return {
-    x: ship.x + barrelDistance * directionX,
-    y: ship.y + barrelDistance * directionY,
-    vx: speed * directionX,
-    vy: speed * directionY,
+    ...barrelTip,
+    vx: speed * direction.x,
+    vy: speed * direction.y,
+  };
+}
+
+export function aimLineFor(ship: Readonly<Ship>, barrelDistance: number): Segment {
+  const direction = directionOf(ship.aim);
+  const from = offsetAlong(ship, direction, barrelDistance);
+  const to = offsetAlong(from, direction, ship.aim.power);
+  return { from, to };
+}
+
+function directionOf(aim: Readonly<Aim>): Point {
+  const radians = aim.angle * RADIANS_PER_DEGREE;
+  return { x: Math.sin(radians), y: -Math.cos(radians) };
+}
+
+function offsetAlong(origin: Readonly<Point>, direction: Readonly<Point>, distance: number): Point {
+  return {
+    x: origin.x + distance * direction.x,
+    y: origin.y + distance * direction.y,
   };
 }
 

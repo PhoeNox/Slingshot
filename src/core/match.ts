@@ -5,13 +5,22 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { flyMissile, hasTimedOut, isInsidePlayingArea, launchMissile, shotRecordFor, type Missile, type Point } from "./flight";
+import {
+  aimLineFor,
+  flyMissile,
+  hasTimedOut,
+  isInsidePlayingArea,
+  launchMissile,
+  shotRecordFor,
+  type Missile,
+  type Point,
+  type Segment,
+} from "./flight";
 import { createRng, randomInt, type Rng } from "./random";
 import { BARREL_DISTANCE, createRoundLayout, type Planet, type RoundLayout, type Ship, type Side } from "./round";
 import { nextRoundShooter, powerPenaltyFor, roundResultFor, type RoundResult } from "./scoring";
 
 export type { RoundLayout } from "./round";
-export { BARREL_DISTANCE } from "./round";
 export type { RoundOutcome, RoundResult } from "./scoring";
 
 interface AimingPhase {
@@ -165,6 +174,11 @@ function launchShot(match: Match): void {
 
 export function matchView(match: Match): MatchView {
   return match;
+}
+
+export function aimLine(view: MatchView): Segment {
+  const side = view.activePlayer;
+  return aimLineFor(view.ships[side], BARREL_DISTANCE[side]);
 }
 
 export function isZoomViewShown(view: MatchView): boolean {

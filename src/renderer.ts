@@ -6,9 +6,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { FONT_FAMILY } from "./assets";
-import type { Missile } from "./core/flight";
+import type { Missile, Segment } from "./core/flight";
 import {
-  BARREL_DISTANCE,
+  aimLine,
   isTimedOut,
   isZoomViewShown,
   powerPenalty,
@@ -108,7 +108,7 @@ export function drawFrame(context: CanvasRenderingContext2D, sprites: Sprites, v
   drawTrails(context, view.trails);
   if (view.phase.kind === "aiming") {
     drawShips(context, sprites.ships, view.ships);
-    drawAiming(context, view.ships, view.activePlayer);
+    drawAiming(context, view);
   } else if (view.phase.kind === "inFlight") {
     drawShips(context, sprites.ships, view.ships);
     drawFlight(context, sprites, view, view.phase);
@@ -212,28 +212,20 @@ function drawShipFrame(context: CanvasRenderingContext2D, shipSheet: HTMLImageEl
   );
 }
 
-function drawAiming(
-  context: CanvasRenderingContext2D,
-  roundShips: MatchView["ships"],
-  side: Side,
-): void {
-  const ship = roundShips[side];
-  drawAimLine(context, ship, BARREL_DISTANCE[side], SHIP_COLOURS[side]);
-  drawAimInfo(context, ship.aim);
+function drawAiming(context: CanvasRenderingContext2D, view: MatchView): void {
+  const side = view.activePlayer;
+  const line = aimLine(view);
+  drawAimLine(context, line, SHIP_COLOURS[side]);
+  drawAimInfo(context, view.ships[side].aim);
 }
 
-function drawAimLine(context: CanvasRenderingContext2D, ship: Readonly<Ship>, barrelDistance: number, colour: string): void {
-  const radians = (ship.aim.angle * Math.PI) / 180;
-  const directionX = Math.sin(radians);
-  const directionY = -Math.cos(radians);
-  const barrelX = ship.x + barrelDistance * directionX;
-  const barrelY = ship.y + barrelDistance * directionY;
+function drawAimLine(context: CanvasRenderingContext2D, line: Readonly<Segment>, colour: string): void {
   context.save();
   context.strokeStyle = colour;
   context.lineWidth = 1;
   context.beginPath();
-  context.moveTo(barrelX, barrelY);
-  context.lineTo(barrelX + ship.aim.power * directionX, barrelY + ship.aim.power * directionY);
+  context.moveTo(line.from.x, line.from.y);
+  context.lineTo(line.to.x, line.to.y);
   context.stroke();
   context.restore();
 }

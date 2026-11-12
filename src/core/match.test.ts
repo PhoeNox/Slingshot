@@ -4,7 +4,7 @@
 import { describe, expect, test } from "vitest";
 import {
   adjustAim,
-  BARREL_DISTANCE,
+  aimLine,
   createMatch,
   fire,
   isTimedOut,
@@ -17,7 +17,7 @@ import {
   type RoundLayout,
   type RoundOverView,
 } from "./match";
-import type { Planet, Side } from "./round";
+import { BARREL_DISTANCE, type Planet, type Side } from "./round";
 import { isInsidePlayingArea } from "./flight";
 
 const SEEDS = Array.from({ length: 1000 }, (_, i) => i * 7919 + 1);
@@ -329,6 +329,18 @@ describe("fire", () => {
     expect(launched.y).toBeCloseTo(ship.y - BARREL_DISTANCE[side] * Math.cos(radians), 10);
     expect(launched.vx).toBeCloseTo(0.1 * ship.aim.power * Math.sin(radians), 10);
     expect(launched.vy).toBeCloseTo(-0.1 * ship.aim.power * Math.cos(radians), 10);
+  });
+
+  test("launches the missile from the start of the aim line", () => {
+    const match = createMatch(24);
+    adjustAim(match, { angle: 47, power: -20 });
+    const lineStart = aimLine(matchView(match)).from;
+
+    fire(match);
+
+    const launched = inFlight(match).missile;
+    expect(launched.x).toBe(lineStart.x);
+    expect(launched.y).toBe(lineStart.y);
   });
 
   test("shows a power penalty of five times the shot power", () => {
