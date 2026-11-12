@@ -8,21 +8,11 @@
 import { flyMissile, hasTimedOut, isInsidePlayingArea, launchMissile, shotRecordFor, type Missile, type Point } from "./flight";
 import { createRng, randomInt, type Rng } from "./random";
 import { BARREL_DISTANCE, createRoundLayout, type Planet, type RoundLayout, type Ship, type Side } from "./round";
+import { nextRoundShooter, powerPenaltyFor, roundResultFor, type RoundResult } from "./scoring";
 
 export type { RoundLayout } from "./round";
 export { BARREL_DISTANCE } from "./round";
-
-export type RoundOutcome = "hit" | "selfHit";
-
-export interface RoundResult {
-  outcome: RoundOutcome;
-  shooter: Side;
-  hitShip: Side;
-  baseScore: number;
-  quickHitBonus: number;
-  powerPenalty: number;
-  scoreChange: number;
-}
+export type { RoundOutcome, RoundResult } from "./scoring";
 
 interface AimingPhase {
   kind: "aiming";
@@ -54,10 +44,6 @@ interface TrailSegment {
 
 const MAX_POWER = 350;
 const FULL_TURN = 360;
-const POWER_PENALTY_FACTOR = 5;
-const HIT_SCORE = 1500;
-const SELF_HIT_SCORE = -2000;
-const QUICK_HIT_BONUSES = [500, 200, 100];
 
 interface MatchState {
   phase: Phase;
@@ -140,31 +126,6 @@ function endRound(match: Match, hitShip: Side): void {
   match.phase = { kind: "roundOver", result, stepsSinceRoundOver: 0 };
 }
 
-function roundResultFor(shooter: Side, hitShip: Side, attempt: number, power: number): RoundResult {
-  if (hitShip === shooter) {
-    return {
-      outcome: "selfHit",
-      shooter,
-      hitShip,
-      baseScore: SELF_HIT_SCORE,
-      quickHitBonus: 0,
-      powerPenalty: 0,
-      scoreChange: SELF_HIT_SCORE,
-    };
-  }
-  const quickHitBonus = QUICK_HIT_BONUSES[attempt - 1] ?? 0;
-  const powerPenalty = POWER_PENALTY_FACTOR * power;
-  return {
-    outcome: "hit",
-    shooter,
-    hitShip,
-    baseScore: HIT_SCORE,
-    quickHitBonus,
-    powerPenalty,
-    scoreChange: HIT_SCORE + quickHitBonus - powerPenalty,
-  };
-}
-
 function startNextRound(match: Match): void {
   const layout = createRoundLayout(match.rng);
   match.activePlayer = nextRoundShooter(match.scores, match.activePlayer);
@@ -175,16 +136,6 @@ function startNextRound(match: Match): void {
   match.planets = layout.planets;
   match.trails = [];
   match.attempts = { left: 0, right: 0 };
-}
-
-function nextRoundShooter(scores: Readonly<Record<Side, number>>, lastShooter: Side): Side {
-  if (scores.left < scores.right) {
-    return "left";
-  }
-  if (scores.right < scores.left) {
-    return "right";
-  }
-  return opponentOf(lastShooter);
 }
 
 export function adjustAim(match: Match, delta: AimDelta): void {
@@ -225,5 +176,5 @@ export function isTimedOut(flight: InFlightView): boolean {
 }
 
 export function powerPenalty(view: MatchView): number {
-  return POWER_PENALTY_FACTOR * view.ships[view.activePlayer].aim.power;
+  return powerPenaltyFor(view.ships[view.activePlayer].aim.power);
 }
