@@ -4,19 +4,23 @@ import {
   BARREL_DISTANCE,
   isTimedOut,
   isZoomViewShown,
+  lastRoundResult,
   missile,
   phase,
   planets,
   powerPenalty,
   roundNumber,
   roundStepCount,
+  scores,
   ships,
+  stepsSinceRoundOver,
   timeoutCountdown,
   trails,
   type Aim,
   type Match,
   type Missile,
   type Planet,
+  type RoundResult,
   type Ship,
   type Side,
   type TrailSegment,
@@ -35,6 +39,7 @@ export interface Sprites {
   planets: HTMLImageElement[];
   ships: Record<Side, HTMLImageElement>;
   missile: HTMLImageElement;
+  explosion: HTMLImageElement;
 }
 
 const PLANET_SPRITE_FILL = 0.96;
@@ -52,6 +57,28 @@ const POWER_INFO_LEFT = 403;
 const POWER_PENALTY_CENTRE_X = 399;
 const TIMEOUT_INFO_CENTRE_X = 399;
 const TIMEOUT_INFO_BOTTOM = 594;
+const LEFT_SCORE_LEFT = 5;
+const RIGHT_SCORE_RIGHT = 794;
+const PLAYER_NAMES: Record<Side, string> = { left: "Player 1", right: "Player 2" };
+
+const EXPLOSION_STEPS = 6;
+const EXPLOSION_SIZE_FACTOR = 100 / 9;
+
+const MESSAGE_WIDTH = 450;
+const MESSAGE_BASE_HEIGHT = 190;
+const MESSAGE_HIT_EXTRA_HEIGHT = 40;
+const MESSAGE_CENTRE_X = 399;
+const MESSAGE_CENTRE_Y = 299;
+const MESSAGE_TEXT_CENTRE_X = 224;
+const MESSAGE_LABEL_LEFT = 50;
+const MESSAGE_VALUE_RIGHT = 399;
+const MESSAGE_TITLE_TOP = 28;
+const MESSAGE_FIRST_ROW_TOP = 65;
+const MESSAGE_ROW_HEIGHT = 20;
+const MESSAGE_SCORE_CHANGE_TOP = 100;
+const MESSAGE_PROMPT_TOP = 140;
+const MESSAGE_DIM_COLOUR = "rgba(0, 0, 0, 0.69)";
+const MESSAGE_OUTLINE_COLOUR = "rgb(150, 150, 150)";
 
 const DIM_COLOUR = "rgba(0, 0, 0, 0.69)";
 const ZOOM_SCALE = 0.25;
@@ -86,12 +113,16 @@ export function drawFrame(context: CanvasRenderingContext2D, sprites: Sprites, m
   drawBackdrop(context, sprites.backdrop);
   drawPlanets(context, sprites.planets, planets(match));
   drawTrails(context, trails(match));
-  drawShips(context, sprites.ships, ships(match));
   if (phase(match) === "aiming") {
+    drawShips(context, sprites.ships, ships(match));
     drawAiming(context, ships(match), activePlayer(match));
-  } else {
+  } else if (phase(match) === "inFlight") {
+    drawShips(context, sprites.ships, ships(match));
     drawFlight(context, sprites, match);
+  } else {
+    drawRoundOver(context, sprites, match);
   }
+  drawScores(context, scores(match));
   drawRoundBanner(context, roundNumber(match), roundStepCount(match));
 }
 
@@ -133,8 +164,12 @@ function drawShips(
   context: CanvasRenderingContext2D,
   shipSheets: Record<Side, HTMLImageElement>,
   roundShips: Readonly<Record<Side, Readonly<Ship>>>,
+  destroyedShip?: Side,
 ): void {
   for (const side of ["left", "right"] as const) {
+    if (side === destroyedShip) {
+      continue;
+    }
     const ship = roundShips[side];
     const pose = shipPose(ship.aim.angle, SHIP_SHEET_FACING_ANGLE[side]);
     drawShip(context, shipSheets[side], ship, pose);
@@ -326,4 +361,91 @@ function drawRoundBanner(context: CanvasRenderingContext2D, round: number, steps
   context.textBaseline = "middle";
   context.fillText(`Round ${round}`, BANNER_CENTRE_X, BANNER_CENTRE_Y);
   context.restore();
+}
+
+function drawScores(context: CanvasRenderingContext2D, matchScores: Readonly<Record<Side, number>>): void {
+  context.save();
+  context.font = `${HUD_FONT_SIZE}px ${FONT_FAMILY}`;
+  context.textBaseline = "top";
+  context.fillStyle = SHIP_COLOURS.left;
+  context.textAlign = "left";
+  context.fillText(`${PLAYER_NAMES.left}  --  ${matchScores.left}`, LEFT_SCORE_LEFT, HUD_TOP);
+  context.fillStyle = SHIP_COLOURS.right;
+  context.textAlign = "right";
+  context.fillText(`${matchScores.right}  --  ${PLAYER_NAMES.right}`, RIGHT_SCORE_RIGHT, HUD_TOP);
+  context.restore();
+}
+
+function drawRoundOver(context: CanvasRenderingContext2D, sprites: Sprites, match: Match): void {
+  const result = lastRoundResult(match)!;
+  drawShips(context, sprites.ships, ships(match), result.hitShip);
+  drawExplosion(context, sprites.explosion, ships(match)[result.hitShip], stepsSinceRoundOver(match));
+  drawRoundOverMessage(context, result);
+}
+
+function drawExplosion(
+  context: CanvasRenderingContext2D,
+  explosionSprite: HTMLImageElement,
+  ship: Readonly<Ship>,
+  stepsSinceHit: number,
+): void {
+  const explosionStep = stepsSinceHit + 1;
+  if (explosionStep >= EXPLOSION_STEPS) {
+    return;
+  }
+  const size = Math.floor(explosionStep * (EXPLOSION_STEPS - explosionStep) * EXPLOSION_SIZE_FACTOR);
+  context.drawImage(explosionSprite, ship.x - size / 2, ship.y - size / 2, size, size);
+}
+
+function drawRoundOverMessage(context: CanvasRenderingContext2D, result: Readonly<RoundResult>): void {
+  const isHit = result.outcome === "hit";
+  const height = MESSAGE_BASE_HEIGHT + (isHit ? MESSAGE_HIT_EXTRA_HEIGHT : 0);
+  const left = MESSAGE_CENTRE_X - MESSAGE_WIDTH / 2;
+  const top = MESSAGE_CENTRE_Y - Math.floor(height / 2);
+  const textOffset = isHit ? MESSAGE_HIT_EXTRA_HEIGHT : 0;
+  context.save();
+  context.translate(left, top);
+  context.fillStyle = MESSAGE_DIM_COLOUR;
+  context.fillRect(0, 0, MESSAGE_WIDTH, height);
+  context.strokeStyle = MESSAGE_OUTLINE_COLOUR;
+  context.lineWidth = 1;
+  context.strokeRect(0.5, 0.5, MESSAGE_WIDTH - 1, height - 1);
+  context.fillStyle = "#fff";
+  context.font = `${HUD_FONT_SIZE}px ${FONT_FAMILY}`;
+  context.textBaseline = "top";
+  context.textAlign = "center";
+  context.fillText(roundOverTitle(result), MESSAGE_TEXT_CENTRE_X, MESSAGE_TITLE_TOP);
+  context.fillText(scoreChangeText(result.scoreChange), MESSAGE_TEXT_CENTRE_X, MESSAGE_SCORE_CHANGE_TOP + textOffset);
+  context.fillText("Press Space or Enter for the next round", MESSAGE_TEXT_CENTRE_X, MESSAGE_PROMPT_TOP + textOffset);
+  const rows = scoreBreakdownRows(result);
+  rows.forEach(([label, value], index) => {
+    const rowTop = MESSAGE_FIRST_ROW_TOP + index * MESSAGE_ROW_HEIGHT;
+    context.textAlign = "left";
+    context.fillText(label, MESSAGE_LABEL_LEFT, rowTop);
+    context.textAlign = "right";
+    context.fillText(`${value}`, MESSAGE_VALUE_RIGHT, rowTop);
+  });
+  context.restore();
+}
+
+function roundOverTitle(result: Readonly<RoundResult>): string {
+  const shooterName = PLAYER_NAMES[result.shooter];
+  return result.outcome === "hit"
+    ? `${shooterName} hit ${PLAYER_NAMES[result.hitShip].toLowerCase()}`
+    : `${shooterName} hit their own ship`;
+}
+
+function scoreBreakdownRows(result: Readonly<RoundResult>): [string, number][] {
+  if (result.outcome === "selfHit") {
+    return [["Hit self:", result.baseScore]];
+  }
+  return [
+    ["Hit opponent:", result.baseScore],
+    ["Quick-hit bonus:", result.quickHitBonus],
+    ["Power penalty:", -result.powerPenalty],
+  ];
+}
+
+function scoreChangeText(scoreChange: number): string {
+  return scoreChange >= 0 ? `${scoreChange} added to score` : `${-scoreChange} deducted from score`;
 }

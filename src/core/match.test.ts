@@ -2,11 +2,13 @@ import { describe, expect, test } from "vitest";
 import {
   activePlayer,
   adjustAim,
+  attempts,
   BARREL_DISTANCE,
   createMatch,
   fire,
   isTimedOut,
   isZoomViewShown,
+  lastRoundResult,
   missile,
   phase,
   planets,
@@ -16,6 +18,7 @@ import {
   scores,
   ships,
   step,
+  stepsSinceRoundOver,
   timeoutCountdown,
   trails,
   type Match,
@@ -44,6 +47,9 @@ function observableState(match: Match) {
     scores: scores(match),
     missile: missile(match),
     trails: trails(match),
+    attempts: attempts(match),
+    lastRoundResult: lastRoundResult(match),
+    stepsSinceRoundOver: stepsSinceRoundOver(match),
   };
 }
 
@@ -54,6 +60,16 @@ function activeShip(match: Match) {
 function withPlanets(match: Match, roundPlanets: Planet[]): Match {
   match.planets = roundPlanets;
   return match;
+}
+
+function withShipsAt(match: Match, leftY: number, rightY: number): Match {
+  match.ships.left.y = leftY;
+  match.ships.right.y = rightY;
+  return match;
+}
+
+function facingShips(match: Match): Match {
+  return withShipsAt(withPlanets(match, []), 300, 300);
 }
 
 function planetAt(x: number, y: number, mass: number, radius: number): Planet {
@@ -77,6 +93,42 @@ function stepUntilShotEnds(match: Match, maxSteps: number): number {
     }
   }
   throw new Error(`shot still in flight after ${maxSteps} steps`);
+}
+
+function opponentAngle(match: Match): number {
+  return activePlayer(match) === "left" ? 90 : 270;
+}
+
+function missShot(match: Match): void {
+  aimAt(match, 0, 250);
+  fire(match);
+  stepUntilShotEnds(match, 200);
+}
+
+function hitOpponent(match: Match, power: number): void {
+  aimAt(match, opponentAngle(match), power);
+  fire(match);
+  stepUntilShotEnds(match, 1000);
+}
+
+function hitOpponentOnAttempt(match: Match, attempt: number, power: number): void {
+  for (let i = 1; i < attempt; i++) {
+    missShot(match);
+    missShot(match);
+  }
+  hitOpponent(match, power);
+}
+
+function hitOwnShip(match: Match): void {
+  const ship = activeShip(match);
+  withPlanets(match, [planetAt(ship.x, ship.y + 150, 100, 10)]);
+  aimAt(match, 0, 20);
+  fire(match);
+  stepUntilShotEnds(match, 1000);
+}
+
+function distanceBetween(a: { x: number; y: number }, b: { x: number; y: number }): number {
+  return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
 }
 
 describe("createMatch", () => {
@@ -359,7 +411,7 @@ describe("flight", () => {
   });
 
   test("each player keeps their own aim between their shots", () => {
-    const match = withPlanets(createMatch(34), []);
+    const match = withShipsAt(withPlanets(createMatch(34), []), 100, 500);
     const first = activePlayer(match);
     adjustAim(match, { angle: 10, power: 50 });
     const firstAim = activeAim(match);
@@ -492,5 +544,204 @@ describe("leaving the playing area", () => {
     expect(lost.y).toBeGreaterThanOrEqual(-0.1 - 1e-9);
     expect(phase(match)).toBe("aiming");
     expect(activePlayer(match)).not.toBe(shooter);
+  });
+});
+
+describe("ship hits", () => {
+  test("a missile reaching the opposing ship is a hit that ends the round", () => {
+    const match = facingShips(createMatch(61));
+    const shooter = activePlayer(match);
+    const target = inactivePlayer(match);
+
+    hitOpponent(match, 100);
+
+    const stopped = missile(match)!;
+    expect(phase(match)).toBe("roundOver");
+    expect(lastRoundResult(match)).toMatchObject({ outcome: "hit", shooter, hitShip: target });
+    expect(distanceBetween(stopped, ships(match)[target])).toBeLessThanOrEqual(14);
+    expect(trails(match).at(-1)!.to).toEqual({ x: stopped.x, y: stopped.y });
+  });
+
+  test("a fast missile cannot pass through a ship between two steps", () => {
+    const match = facingShips(createMatch(62));
+    const target = inactivePlayer(match);
+
+    hitOpponent(match, 350);
+
+    const distance = distanceBetween(missile(match)!, ships(match)[target]);
+    expect(phase(match)).toBe("roundOver");
+    expect(lastRoundResult(match)!.hitShip).toBe(target);
+    expect(distance).toBeLessThanOrEqual(14);
+    expect(distance).toBeGreaterThan(14 - 3.5);
+  });
+
+  test("a missile curving back into the shooter's own ship is a self-hit", () => {
+    const match = createMatch(63);
+    const shooter = activePlayer(match);
+
+    hitOwnShip(match);
+
+    expect(phase(match)).toBe("roundOver");
+    expect(lastRoundResult(match)).toMatchObject({ outcome: "selfHit", shooter, hitShip: shooter });
+    expect(distanceBetween(missile(match)!, ships(match)[shooter])).toBeLessThanOrEqual(14);
+  });
+
+  test("attempts are counted per player within the round", () => {
+    const match = facingShips(createMatch(64));
+    const first = activePlayer(match);
+    const second = inactivePlayer(match);
+
+    missShot(match);
+    missShot(match);
+    missShot(match);
+
+    expect(attempts(match)[first]).toBe(2);
+    expect(attempts(match)[second]).toBe(1);
+  });
+
+  test("steps since the round ended are counted while the round is over", () => {
+    const match = facingShips(createMatch(65));
+    hitOpponent(match, 100);
+
+    expect(stepsSinceRoundOver(match)).toBe(0);
+    step(match);
+    step(match);
+    step(match);
+    expect(stepsSinceRoundOver(match)).toBe(3);
+  });
+});
+
+describe("scoring", () => {
+  test.each([
+    [1, 500],
+    [2, 200],
+    [3, 100],
+    [4, 0],
+    [5, 0],
+  ])("a hit on attempt %i earns a quick-hit bonus of %i", (attempt, bonus) => {
+    const match = facingShips(createMatch(71));
+    const shooter = activePlayer(match);
+    const target = inactivePlayer(match);
+
+    hitOpponentOnAttempt(match, attempt, 100);
+
+    const expectedChange = 1500 + bonus - 500;
+    expect(attempts(match)[shooter]).toBe(attempt);
+    expect(lastRoundResult(match)).toMatchObject({
+      outcome: "hit",
+      baseScore: 1500,
+      quickHitBonus: bonus,
+      powerPenalty: 500,
+      scoreChange: expectedChange,
+    });
+    expect(scores(match)[shooter]).toBe(expectedChange);
+    expect(scores(match)[target]).toBe(0);
+  });
+
+  test("five times the power of the hitting shot is deducted from a hit", () => {
+    const match = facingShips(createMatch(72));
+    const shooter = activePlayer(match);
+
+    hitOpponent(match, 200);
+
+    expect(lastRoundResult(match)!.powerPenalty).toBe(1000);
+    expect(scores(match)[shooter]).toBe(1500 + 500 - 1000);
+  });
+
+  test("a self-hit deducts 2000 from the shooter only", () => {
+    const match = createMatch(73);
+    const shooter = activePlayer(match);
+    const other = inactivePlayer(match);
+
+    hitOwnShip(match);
+
+    expect(lastRoundResult(match)!.scoreChange).toBe(-2000);
+    expect(scores(match)[shooter]).toBe(-2000);
+    expect(scores(match)[other]).toBe(0);
+  });
+});
+
+describe("round end and next round", () => {
+  test("adjustAim has no effect while the round is over", () => {
+    const match = facingShips(createMatch(81));
+    hitOpponent(match, 100);
+    const aimsBefore = { left: { ...ships(match).left.aim }, right: { ...ships(match).right.aim } };
+
+    adjustAim(match, { angle: 5, power: 25 });
+
+    expect(ships(match).left.aim).toEqual(aimsBefore.left);
+    expect(ships(match).right.aim).toEqual(aimsBefore.right);
+    expect(phase(match)).toBe("roundOver");
+  });
+
+  test("fire during round over starts the next round with a new layout, default aims and cleared trails", () => {
+    const match = facingShips(createMatch(82));
+    hitOpponent(match, 100);
+    const scoresBefore = { ...scores(match) };
+    for (let i = 0; i < 10; i++) {
+      step(match);
+    }
+
+    fire(match);
+
+    expect(phase(match)).toBe("aiming");
+    expect(roundNumber(match)).toBe(2);
+    expect(roundStepCount(match)).toBe(0);
+    expect(trails(match)).toEqual([]);
+    expect(missile(match)).toBeUndefined();
+    expect(attempts(match)).toEqual({ left: 0, right: 0 });
+    expect(ships(match).left.aim).toEqual({ angle: 90, power: 100 });
+    expect(ships(match).right.aim).toEqual({ angle: 270, power: 100 });
+    expect(planets(match).length).toBeGreaterThanOrEqual(2);
+    expect(scores(match)).toEqual(scoresBefore);
+  });
+
+  test("the hit player has the lower score and shoots first in the next round", () => {
+    const match = facingShips(createMatch(83));
+    const target = inactivePlayer(match);
+    hitOpponent(match, 100);
+
+    fire(match);
+
+    expect(activePlayer(match)).toBe(target);
+  });
+
+  test("a player who hit their own ship has the lower score and shoots first in the next round", () => {
+    const match = createMatch(84);
+    const shooter = activePlayer(match);
+    hitOwnShip(match);
+
+    fire(match);
+
+    expect(activePlayer(match)).toBe(shooter);
+  });
+
+  test("on tied scores the player next in alternation shoots first in the next round", () => {
+    const match = facingShips(createMatch(85));
+    const shooter = activePlayer(match);
+    hitOpponentOnAttempt(match, 3, 320);
+    expect(scores(match)).toEqual({ left: 0, right: 0 });
+
+    fire(match);
+
+    expect(activePlayer(match)).not.toBe(shooter);
+  });
+
+  test("rounds continue without limit and replay identically from the same seed", () => {
+    const play = () => {
+      const match = createMatch(4242);
+      for (let round = 0; round < 6; round++) {
+        facingShips(match);
+        hitOpponent(match, 100 + 10 * round);
+        fire(match);
+      }
+      return observableState(match);
+    };
+
+    const first = play();
+
+    expect(first.roundNumber).toBe(7);
+    expect(first.phase).toBe("aiming");
+    expect(play()).toEqual(first);
   });
 });

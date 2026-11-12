@@ -6,7 +6,7 @@ import {
   TRACKING_AREA_RIGHT,
   TRACKING_AREA_TOP,
 } from "./playingArea";
-import type { Planet, Ship } from "./round";
+import type { Planet, Ship, Side } from "./round";
 
 export interface Point {
   x: number;
@@ -32,12 +32,16 @@ export interface Segment {
 export interface FlightStep {
   segment: Segment;
   shotEnded: boolean;
+  hitShip: Side | undefined;
 }
 
 const GRAVITY = 120;
 const LAUNCH_SPEED_PER_POWER = 0.1;
 const RADIANS_PER_DEGREE = Math.PI / 180;
 const FLIGHT_TIMEOUT_STEPS = 750;
+const SHIP_HIT_RADIUS = 14;
+const SHIP_HIT_SAMPLES = 10;
+const SHIP_HIT_SAMPLE_SPACING = 0.1;
 
 export function shotRecordFor(ship: Readonly<Ship>, barrelDistance: number): ShotRecord {
   const radians = ship.aim.angle * RADIANS_PER_DEGREE;
@@ -56,14 +60,22 @@ export function launchMissile(shot: ShotRecord): Missile {
   return { ...shot, flightStepsLeft: FLIGHT_TIMEOUT_STEPS };
 }
 
-export function flyMissile(missile: Missile, planets: readonly Readonly<Planet>[]): FlightStep {
+export function flyMissile(
+  missile: Missile,
+  planets: readonly Readonly<Planet>[],
+  ships: Readonly<Record<Side, Readonly<Ship>>>,
+): FlightStep {
   const from = { x: missile.x, y: missile.y };
   advanceMissile(missile, planets);
-  const shotEnded = !isInsideTrackingArea(missile)
-    || stopAtPlanetSurface(missile, from, planets)
+  const leftTrackingArea = !isInsideTrackingArea(missile);
+  const hitPlanet = !leftTrackingArea && stopAtPlanetSurface(missile, from, planets);
+  const hitShip = leftTrackingArea ? undefined : stopAtShip(missile, from, ships);
+  const shotEnded = leftTrackingArea
+    || hitPlanet
+    || hitShip !== undefined
     || isLostAfterTimeout(missile);
   const to = { x: missile.x, y: missile.y };
-  return { segment: { from, to }, shotEnded };
+  return { segment: { from, to }, shotEnded, hitShip };
 }
 
 function advanceMissile(missile: Missile, planets: readonly Readonly<Planet>[]): void {
@@ -123,4 +135,26 @@ function stopAtPlanetSurface(missile: Missile, from: Readonly<Point>, planets: r
     return true;
   }
   return false;
+}
+
+function stopAtShip(
+  missile: Missile,
+  from: Readonly<Point>,
+  ships: Readonly<Record<Side, Readonly<Ship>>>,
+): Side | undefined {
+  const radiusSquared = SHIP_HIT_RADIUS * SHIP_HIT_RADIUS;
+  for (let i = 0; i < SHIP_HIT_SAMPLES; i++) {
+    const sampleX = from.x + i * SHIP_HIT_SAMPLE_SPACING * missile.vx;
+    const sampleY = from.y + i * SHIP_HIT_SAMPLE_SPACING * missile.vy;
+    for (const side of ["left", "right"] as const) {
+      const dx = sampleX - ships[side].x;
+      const dy = sampleY - ships[side].y;
+      if (dx * dx + dy * dy <= radiusSquared) {
+        missile.x = sampleX;
+        missile.y = sampleY;
+        return side;
+      }
+    }
+  }
+  return undefined;
 }

@@ -16,6 +16,7 @@ export async function loadSprites(): Promise<Sprites> {
   const leftShipLoad = loadImage("data/red_ship.png");
   const rightShipLoad = loadImage("data/blue_ship.png");
   const missileLoad = loadImage("data/shot.png");
+  const explosionLoad = loadImage("data/explosion.png");
   const planetLoads = PLANET_SPRITE_URLS.map(loadImage);
   const planets = await Promise.all(planetLoads);
   return {
@@ -23,6 +24,7 @@ export async function loadSprites(): Promise<Sprites> {
     planets,
     ships: { left: await leftShipLoad, right: await rightShipLoad },
     missile: await missileLoad,
+    explosion: await explosionLoad,
   };
 }
 
