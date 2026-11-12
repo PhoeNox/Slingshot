@@ -3,7 +3,7 @@
 
 import "./style.css";
 import { loadFont, loadSprites } from "./assets";
-import { adjustAim, createMatch, fire, step, type AimDelta } from "./core/match";
+import { adjustAim, createMatch, fire, matchView, step, type AimDelta } from "./core/match";
 import { applyFit, fitPlayingArea } from "./display";
 import { startGameLoop } from "./gameLoop";
 import { bindControls } from "./input";
@@ -33,7 +33,10 @@ async function start(): Promise<void> {
   bindControls(window, adjustMatchAim, fireMatch);
 
   const stepMatch = () => step(match);
-  const render = () => drawFrame(context, sprites, match);
+  const render = () => {
+    const view = matchView(match);
+    drawFrame(context, sprites, view);
+  };
   startGameLoop(stepMatch, render);
 }
 

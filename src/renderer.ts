@@ -6,30 +6,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { FONT_FAMILY } from "./assets";
+import type { Missile } from "./core/flight";
 import {
-  activePlayer,
   BARREL_DISTANCE,
   isTimedOut,
   isZoomViewShown,
-  phase,
-  planets,
   powerPenalty,
-  roundNumber,
-  roundStepCount,
-  scores,
-  ships,
-  timeoutCountdown,
-  trails,
-  type Aim,
-  type InFlightPhase,
-  type Match,
-  type Missile,
-  type Planet,
-  type RoundOverPhase,
+  type InFlightView,
+  type MatchView,
+  type RoundOverView,
   type RoundResult,
-  type Ship,
-  type Side,
-  type TrailSegment,
 } from "./core/match";
 import {
   PLAYING_AREA_HEIGHT,
@@ -39,6 +25,7 @@ import {
   TRACKING_AREA_RIGHT,
   TRACKING_AREA_TOP,
 } from "./core/playingArea";
+import type { Aim, Ship, Side } from "./core/round";
 
 export interface Sprites {
   backdrop: HTMLImageElement;
@@ -115,22 +102,21 @@ const BANNER_GROWTH_DIVISOR = 25;
 const BANNER_CENTRE_X = 399;
 const BANNER_CENTRE_Y = 299;
 
-export function drawFrame(context: CanvasRenderingContext2D, sprites: Sprites, match: Match): void {
+export function drawFrame(context: CanvasRenderingContext2D, sprites: Sprites, view: MatchView): void {
   drawBackdrop(context, sprites.backdrop);
-  drawPlanets(context, sprites.planets, planets(match));
-  drawTrails(context, trails(match));
-  const matchPhase = phase(match);
-  if (matchPhase.kind === "aiming") {
-    drawShips(context, sprites.ships, ships(match));
-    drawAiming(context, ships(match), activePlayer(match));
-  } else if (matchPhase.kind === "inFlight") {
-    drawShips(context, sprites.ships, ships(match));
-    drawFlight(context, sprites, match, matchPhase);
+  drawPlanets(context, sprites.planets, view.planets);
+  drawTrails(context, view.trails);
+  if (view.phase.kind === "aiming") {
+    drawShips(context, sprites.ships, view.ships);
+    drawAiming(context, view.ships, view.activePlayer);
+  } else if (view.phase.kind === "inFlight") {
+    drawShips(context, sprites.ships, view.ships);
+    drawFlight(context, sprites, view, view.phase);
   } else {
-    drawRoundOver(context, sprites, ships(match), matchPhase);
+    drawRoundOver(context, sprites, view.ships, view.phase);
   }
-  drawScores(context, scores(match));
-  drawRoundBanner(context, roundNumber(match), roundStepCount(match));
+  drawScores(context, view.scores);
+  drawRoundBanner(context, view.roundNumber, view.roundStepCount);
 }
 
 function drawBackdrop(context: CanvasRenderingContext2D, backdrop: HTMLImageElement): void {
@@ -140,7 +126,7 @@ function drawBackdrop(context: CanvasRenderingContext2D, backdrop: HTMLImageElem
 function drawPlanets(
   context: CanvasRenderingContext2D,
   planetSprites: HTMLImageElement[],
-  roundPlanets: readonly Readonly<Planet>[],
+  roundPlanets: MatchView["planets"],
 ): void {
   for (const planet of roundPlanets) {
     const size = Math.round((2 * planet.radius) / PLANET_SPRITE_FILL);
@@ -150,7 +136,7 @@ function drawPlanets(
   }
 }
 
-function drawTrails(context: CanvasRenderingContext2D, roundTrails: readonly Readonly<TrailSegment>[]): void {
+function drawTrails(context: CanvasRenderingContext2D, roundTrails: MatchView["trails"]): void {
   context.save();
   context.lineWidth = 1;
   for (const side of ["left", "right"] as const) {
@@ -170,7 +156,7 @@ function drawTrails(context: CanvasRenderingContext2D, roundTrails: readonly Rea
 function drawShips(
   context: CanvasRenderingContext2D,
   shipSheets: Record<Side, HTMLImageElement>,
-  roundShips: Readonly<Record<Side, Readonly<Ship>>>,
+  roundShips: MatchView["ships"],
   destroyedShip?: Side,
 ): void {
   for (const side of ["left", "right"] as const) {
@@ -228,7 +214,7 @@ function drawShipFrame(context: CanvasRenderingContext2D, shipSheet: HTMLImageEl
 
 function drawAiming(
   context: CanvasRenderingContext2D,
-  roundShips: Readonly<Record<Side, Readonly<Ship>>>,
+  roundShips: MatchView["ships"],
   side: Side,
 ): void {
   const ship = roundShips[side];
@@ -266,16 +252,18 @@ function drawAimInfo(context: CanvasRenderingContext2D, aim: Readonly<Aim>): voi
 function drawFlight(
   context: CanvasRenderingContext2D,
   sprites: Sprites,
-  match: Match,
-  flight: Readonly<InFlightPhase>,
+  view: MatchView,
+  flight: InFlightView,
 ): void {
-  if (isZoomViewShown(match)) {
-    drawZoomView(context, sprites, match, flight.missile);
+  if (isZoomViewShown(view)) {
+    drawZoomView(context, sprites, view, flight.missile);
   } else {
     drawMissile(context, sprites.missile, flight.missile);
   }
-  drawPowerPenalty(context, powerPenalty(match));
-  drawTimeoutInfo(context, timeoutCountdown(flight), isTimedOut(flight));
+  const penalty = powerPenalty(view);
+  const timedOut = isTimedOut(flight);
+  drawPowerPenalty(context, penalty);
+  drawTimeoutInfo(context, flight.missile.flightStepsLeft, timedOut);
 }
 
 function drawMissile(context: CanvasRenderingContext2D, missileSprite: HTMLImageElement, flyingMissile: Readonly<Missile>): void {
@@ -287,14 +275,14 @@ function drawMissile(context: CanvasRenderingContext2D, missileSprite: HTMLImage
 function drawZoomView(
   context: CanvasRenderingContext2D,
   sprites: Sprites,
-  match: Match,
+  view: MatchView,
   flyingMissile: Readonly<Missile>,
 ): void {
   drawDimming(context);
   context.save();
   context.translate(ZOOM_VIEW_LEFT, ZOOM_VIEW_TOP);
   context.drawImage(sprites.backdrop, 0, 0, ZOOM_VIEW_WIDTH, ZOOM_VIEW_HEIGHT);
-  drawZoomedPlayingArea(context, sprites, match);
+  drawZoomedPlayingArea(context, sprites, view);
   drawZoomedMissile(context, sprites.missile, flyingMissile);
   drawZoomOutlines(context);
   context.restore();
@@ -307,12 +295,12 @@ function drawDimming(context: CanvasRenderingContext2D): void {
   context.restore();
 }
 
-function drawZoomedPlayingArea(context: CanvasRenderingContext2D, sprites: Sprites, match: Match): void {
+function drawZoomedPlayingArea(context: CanvasRenderingContext2D, sprites: Sprites, view: MatchView): void {
   context.save();
   context.translate(ZOOMED_PLAYING_AREA_LEFT, ZOOMED_PLAYING_AREA_TOP);
   context.scale(ZOOM_SCALE, ZOOM_SCALE);
-  drawPlanets(context, sprites.planets, planets(match));
-  drawShips(context, sprites.ships, ships(match));
+  drawPlanets(context, sprites.planets, view.planets);
+  drawShips(context, sprites.ships, view.ships);
   context.restore();
 }
 
@@ -380,7 +368,7 @@ function drawRoundBanner(context: CanvasRenderingContext2D, round: number, steps
   context.restore();
 }
 
-function drawScores(context: CanvasRenderingContext2D, matchScores: Readonly<Record<Side, number>>): void {
+function drawScores(context: CanvasRenderingContext2D, matchScores: MatchView["scores"]): void {
   context.save();
   context.font = `${HUD_FONT_SIZE}px ${FONT_FAMILY}`;
   context.textBaseline = "top";
@@ -396,8 +384,8 @@ function drawScores(context: CanvasRenderingContext2D, matchScores: Readonly<Rec
 function drawRoundOver(
   context: CanvasRenderingContext2D,
   sprites: Sprites,
-  roundShips: Readonly<Record<Side, Readonly<Ship>>>,
-  roundOver: Readonly<RoundOverPhase>,
+  roundShips: MatchView["ships"],
+  roundOver: RoundOverView,
 ): void {
   const result = roundOver.result;
   drawShips(context, sprites.ships, roundShips, result.hitShip);

@@ -9,8 +9,7 @@ import { flyMissile, hasTimedOut, isInsidePlayingArea, launchMissile, shotRecord
 import { createRng, randomInt, type Rng } from "./random";
 import { BARREL_DISTANCE, createRoundLayout, type Planet, type RoundLayout, type Ship, type Side } from "./round";
 
-export type { Missile, Point } from "./flight";
-export type { Aim, Planet, RoundLayout, Ship, Side } from "./round";
+export type { RoundLayout } from "./round";
 export { BARREL_DISTANCE } from "./round";
 
 export type RoundOutcome = "hit" | "selfHit";
@@ -25,29 +24,29 @@ export interface RoundResult {
   scoreChange: number;
 }
 
-export interface AimingPhase {
+interface AimingPhase {
   kind: "aiming";
 }
 
-export interface InFlightPhase {
+interface InFlightPhase {
   kind: "inFlight";
   missile: Missile;
 }
 
-export interface RoundOverPhase {
+interface RoundOverPhase {
   kind: "roundOver";
   result: RoundResult;
   stepsSinceRoundOver: number;
 }
 
-export type Phase = AimingPhase | InFlightPhase | RoundOverPhase;
+type Phase = AimingPhase | InFlightPhase | RoundOverPhase;
 
 export interface AimDelta {
   angle: number;
   power: number;
 }
 
-export interface TrailSegment {
+interface TrailSegment {
   shooter: Side;
   from: Point;
   to: Point;
@@ -60,8 +59,7 @@ const HIT_SCORE = 1500;
 const SELF_HIT_SCORE = -2000;
 const QUICK_HIT_BONUSES = [500, 200, 100];
 
-export interface Match {
-  rng: Rng;
+interface MatchState {
   phase: Phase;
   activePlayer: Side;
   roundNumber: number;
@@ -72,6 +70,16 @@ export interface Match {
   trails: TrailSegment[];
   attempts: Record<Side, number>;
 }
+
+export interface Match extends MatchState {
+  rng: Rng;
+}
+
+type DeepReadonly<T> = { readonly [K in keyof T]: DeepReadonly<T[K]> };
+
+export type MatchView = DeepReadonly<MatchState>;
+export type InFlightView = DeepReadonly<InFlightPhase>;
+export type RoundOverView = DeepReadonly<RoundOverPhase>;
 
 export function createMatch(seed: number, firstRoundLayout?: RoundLayout): Match {
   const rng = createRng(seed);
@@ -204,54 +212,18 @@ function launchShot(match: Match): void {
   match.phase = { kind: "inFlight", missile };
 }
 
-export function phase(match: Match): Readonly<Phase> {
-  return match.phase;
+export function matchView(match: Match): MatchView {
+  return match;
 }
 
-export function activePlayer(match: Match): Side {
-  return match.activePlayer;
+export function isZoomViewShown(view: MatchView): boolean {
+  return view.phase.kind === "inFlight" && !isInsidePlayingArea(view.phase.missile);
 }
 
-export function ships(match: Match): Readonly<Record<Side, Readonly<Ship>>> {
-  return match.ships;
-}
-
-export function planets(match: Match): readonly Readonly<Planet>[] {
-  return match.planets;
-}
-
-export function isZoomViewShown(match: Match): boolean {
-  return match.phase.kind === "inFlight" && !isInsidePlayingArea(match.phase.missile);
-}
-
-export function timeoutCountdown(flight: Readonly<InFlightPhase>): number {
-  return flight.missile.flightStepsLeft;
-}
-
-export function isTimedOut(flight: Readonly<InFlightPhase>): boolean {
+export function isTimedOut(flight: InFlightView): boolean {
   return hasTimedOut(flight.missile);
 }
 
-export function trails(match: Match): readonly Readonly<TrailSegment>[] {
-  return match.trails;
-}
-
-export function powerPenalty(match: Match): number {
-  return POWER_PENALTY_FACTOR * match.ships[match.activePlayer].aim.power;
-}
-
-export function roundNumber(match: Match): number {
-  return match.roundNumber;
-}
-
-export function roundStepCount(match: Match): number {
-  return match.roundStepCount;
-}
-
-export function scores(match: Match): Readonly<Record<Side, number>> {
-  return match.scores;
-}
-
-export function attempts(match: Match): Readonly<Record<Side, number>> {
-  return match.attempts;
+export function powerPenalty(view: MatchView): number {
+  return POWER_PENALTY_FACTOR * view.ships[view.activePlayer].aim.power;
 }
