@@ -1,3 +1,10 @@
+// SPDX-FileCopyrightText: 2007 Jonathan Musther <jmusther@gmail.com>
+// SPDX-FileCopyrightText: 2007 Bart Mak
+// SPDX-FileCopyrightText: 2009 Marcus Dreier <m-rei@gmx.net>
+// SPDX-FileCopyrightText: 2010 Ryan Kavanagh <ryanakca@kubuntu.org>
+// SPDX-FileCopyrightText: 2026 Thomas Eggerling
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 import { flyMissile, hasTimedOut, isInsidePlayingArea, launchMissile, shotRecordFor, type Missile, type Point } from "./flight";
 import { createRng, randomInt, type Rng } from "./random";
 import { BARREL_DISTANCE, createRoundLayout, type Planet, type Ship, type Side } from "./round";

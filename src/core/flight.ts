@@ -1,3 +1,10 @@
+// SPDX-FileCopyrightText: 2007 Jonathan Musther <jmusther@gmail.com>
+// SPDX-FileCopyrightText: 2007 Bart Mak
+// SPDX-FileCopyrightText: 2009 Marcus Dreier <m-rei@gmx.net>
+// SPDX-FileCopyrightText: 2010 Ryan Kavanagh <ryanakca@kubuntu.org>
+// SPDX-FileCopyrightText: 2026 Thomas Eggerling
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 import {
   PLAYING_AREA_HEIGHT,
   PLAYING_AREA_WIDTH,

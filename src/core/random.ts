@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Thomas Eggerling
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 export interface Rng {
   state: number;
 }

@@ -1,0 +1,31 @@
+version = 1
+
+[[annotations]]
+path = "public/data/*.png"
+SPDX-FileCopyrightText = [
+  "2007 Jonathan Musther <jmusther@gmail.com>",
+  "2007 Bart Mak",
+  "2009 Marcus Dreier <m-rei@gmx.net>",
+  "2010 Ryan Kavanagh <ryanakca@kubuntu.org>",
+]
+SPDX-License-Identifier = "GPL-2.0-or-later"
+
+[[annotations]]
+path = "public/data/FreeSansBold.ttf"
+SPDX-FileCopyrightText = "2002, 2003, 2005, 2008 Free Software Foundation"
+SPDX-License-Identifier = "GPL-2.0-or-later"
+
+[[annotations]]
+path = [
+  "README.md",
+  "CLAUDE.md",
+  "CONTEXT.md",
+  "docs/**",
+  ".github/**",
+  ".gitignore",
+  "package.json",
+  "package-lock.json",
+  "tsconfig.json",
+]
+SPDX-FileCopyrightText = "2026 Thomas Eggerling"
+SPDX-License-Identifier = "GPL-3.0-or-later"

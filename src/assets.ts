@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Thomas Eggerling
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 import type { Sprites } from "./renderer";
 
 export const FONT_FAMILY = "FreeSansBold";

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Thomas Eggerling
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 export const PLAYING_AREA_WIDTH = 800;
 export const PLAYING_AREA_HEIGHT = 600;
 

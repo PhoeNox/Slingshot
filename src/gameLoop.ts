@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Thomas Eggerling
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 const STEP_DURATION_MS = 1000 / 30;
 const MAX_FRAME_GAP_MS = 250;
 

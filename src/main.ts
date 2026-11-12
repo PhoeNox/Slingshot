@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Thomas Eggerling
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 import "./style.css";
 import { loadFont, loadSprites } from "./assets";
 import { adjustAim, createMatch, fire, step, type AimDelta } from "./core/match";
