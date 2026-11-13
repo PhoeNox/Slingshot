@@ -30,6 +30,7 @@ body {
 body {
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   background: var(--void);
   color: var(--instrument-dim);
   font: 500 16px/1.4 var(--text-font);
