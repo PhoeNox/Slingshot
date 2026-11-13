@@ -3,7 +3,7 @@
 
 import { createAttractMode, stepAttractMode, type AttractMode } from "./core/attract";
 import type { Point } from "./core/flight";
-import { createMatch, matchView, step, type Match } from "./core/match";
+import { createMatch, matchView, step, type Match, type MatchRules } from "./core/match";
 import { describeAttractFrame, describeFrame, type DisplaySettings, type FrameItem } from "./frame";
 import type { Screen } from "./navigation";
 import { NO_SHAKE, screenShakeOffset } from "./screenShake";
@@ -20,10 +20,15 @@ export function createScreenSession(): ScreenSession {
   return { screen: "mainMenu", match: undefined, attract: undefined };
 }
 
-export function enterScreen(session: ScreenSession, screen: Screen, seed: number): void {
+export function enterScreen(
+  session: ScreenSession,
+  screen: Screen,
+  seed: number,
+  matchRules: Readonly<MatchRules>,
+): void {
   session.screen = screen;
   if (screen === "match") {
-    session.match = createMatch(seed);
+    session.match = createMatch(seed, undefined, matchRules);
     session.attract = undefined;
   } else {
     session.match = undefined;

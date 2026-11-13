@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { describe, expect, test } from "vitest";
-import { createMatch, fire, matchView, step, type Match, type RoundLayout } from "./core/match";
+import { createMatch, DEFAULT_MATCH_RULES, fire, matchView, step, type Match, type MatchRules, type RoundLayout } from "./core/match";
 import { describeAttractFrame, describeFrame, type DisplaySettings } from "./frame";
 import {
   createScreenSession,
@@ -33,9 +33,11 @@ function roundOverMatch(): Match {
 
 function sessionOn(...screens: ScreenSession["screen"][]): ScreenSession {
   const session = createScreenSession();
-  screens.forEach((screen, index) => enterScreen(session, screen, index + 1));
+  screens.forEach((screen, index) => enterScreen(session, screen, index + 1, DEFAULT_MATCH_RULES));
   return session;
 }
+
+const SIX_PLANET_RULES: MatchRules = { ...DEFAULT_MATCH_RULES, planetCount: { min: 6, max: 6 } };
 
 const CONTOURS_HIDDEN: DisplaySettings = { gravityWellContours: false };
 
@@ -56,6 +58,23 @@ describe("entering a screen", () => {
     expect(session.match).toBeDefined();
   });
 
+  test("starts the match under the given match rules", () => {
+    const session = createScreenSession();
+
+    enterScreen(session, "match", 1, SIX_PLANET_RULES);
+
+    expect(session.match!.rules).toEqual(SIX_PLANET_RULES);
+    expect(session.match!.planets).toHaveLength(6);
+  });
+
+  test("keeps attract mode on the default match rules", () => {
+    const session = createScreenSession();
+
+    enterScreen(session, "mainMenu", 1, SIX_PLANET_RULES);
+
+    expect(session.attract!.match.rules).toEqual(DEFAULT_MATCH_RULES);
+  });
+
   test("drops the match when leaving it", () => {
     const session = sessionOn("mainMenu", "match", "mainMenu");
 
@@ -67,8 +86,8 @@ describe("entering a screen", () => {
     const session = sessionOn("mainMenu");
     const attract = session.attract;
 
-    enterScreen(session, "credits", 7);
-    enterScreen(session, "mainMenu", 8);
+    enterScreen(session, "credits", 7, DEFAULT_MATCH_RULES);
+    enterScreen(session, "mainMenu", 8, DEFAULT_MATCH_RULES);
 
     expect(session.attract).toBe(attract);
   });
@@ -87,7 +106,7 @@ describe("stepping", () => {
   test("plays the main menu's attract mode behind the settings", () => {
     const session = sessionOn("mainMenu");
     const attract = session.attract;
-    enterScreen(session, "settings", 7);
+    enterScreen(session, "settings", 7, DEFAULT_MATCH_RULES);
     const before = structuredClone(session.attract);
 
     stepScreenSession(session, false);

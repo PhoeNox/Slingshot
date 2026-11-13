@@ -195,6 +195,92 @@ body {
   border-color: var(--phosphor);
 }
 
+.setting-group {
+  padding-bottom: 1.4em;
+  cursor: default;
+}
+
+.range {
+  display: flex;
+  align-items: center;
+}
+
+.range-end {
+  position: relative;
+  display: flex;
+}
+
+.range-end select {
+  appearance: none;
+  margin: 0;
+  padding: 0.15em 1.5em 0.15em 0.6em;
+  border: 1px solid color-mix(in srgb, var(--instrument-dim) 70%, transparent);
+  background: color-mix(in srgb, var(--void) 70%, transparent);
+  color: var(--phosphor);
+  font: normal 0.8em/1.4 var(--title-font);
+  text-align: center;
+  text-shadow: inherit;
+  cursor: pointer;
+}
+
+.range-end select:focus {
+  outline: 1px solid var(--phosphor);
+  outline-offset: 3px;
+  border-color: var(--phosphor);
+  text-shadow: var(--phosphor-glow-strong);
+}
+
+.range-end::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0.55em;
+  width: 0.45em;
+  height: 0.28em;
+  translate: 0 -50%;
+  background: var(--instrument-dim);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  pointer-events: none;
+}
+
+.range-end:focus-within::after {
+  background: var(--phosphor);
+}
+
+.range-end option {
+  background: var(--void);
+}
+
+.range-caption {
+  position: absolute;
+  top: calc(100% + 0.35em);
+  left: 50%;
+  translate: -50% 0;
+  color: var(--instrument-dim);
+  font-size: 0.6em;
+  letter-spacing: 0.1em;
+  text-transform: none;
+  text-shadow: none;
+}
+
+.range-end:focus-within .range-caption {
+  color: var(--phosphor);
+}
+
+.range-span {
+  width: 3.5em;
+  height: 1px;
+  background: color-mix(in srgb, var(--instrument-dim) 70%, transparent);
+  transition:
+    background-color var(--bracket-snap),
+    box-shadow var(--bracket-snap);
+}
+
+.range:focus-within .range-span {
+  background: var(--phosphor);
+  box-shadow: var(--phosphor-glow-strong);
+}
+
 .menu {
   display: flex;
   flex-direction: column;
@@ -281,6 +367,10 @@ body {
   }
 
   .setting input[type="checkbox"]::before {
+    transition: none;
+  }
+
+  .range-span {
     transition: none;
   }
 }

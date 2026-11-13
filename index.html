@@ -27,6 +27,20 @@
               <input id="contours-checkbox" type="checkbox" />
               Gravity-well contours
             </label>
+            <div class="setting setting-group" role="group" aria-labelledby="planets-label">
+              <span id="planets-label">Planets per round</span>
+              <div class="range">
+                <label class="range-end">
+                  <select id="min-planets-select"></select>
+                  <span class="range-caption">min</span>
+                </label>
+                <span class="range-span" aria-hidden="true"></span>
+                <label class="range-end">
+                  <select id="max-planets-select"></select>
+                  <span class="range-caption">max</span>
+                </label>
+              </div>
+            </div>
           </div>
           <nav class="menu" aria-label="Settings">
             <button id="settings-back-button" type="button">Back</button>

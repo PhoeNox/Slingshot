@@ -10,8 +10,8 @@ import { startGameLoop } from "./gameLoop";
 import { bindControls, bindEscape } from "./input";
 import { MAIN_MENU_ITEMS, type Screen } from "./navigation";
 import { drawFrame, drawShakenFrame } from "./renderer";
-import { bindBracketFlash, bindContoursCheckbox, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, navigateBack, renderMenuItems, showScreen, traceTitleArc, type ScreenElements } from "./screens";
-import { parseSettings, serialiseSettings, type Settings } from "./settings";
+import { bindBracketFlash, bindContoursCheckbox, bindMainMenuButton, bindPlanetCountSelects, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, navigateBack, renderMenuItems, showScreen, traceTitleArc, type ScreenElements } from "./screens";
+import { matchRulesFor, parseSettings, serialiseSettings, type Settings } from "./settings";
 import { readStoredSettings, writeStoredSettings } from "./settingsStorage";
 import { createScreenSession, describeScreenSessionFrame, enterScreen, screenSessionShake, stepScreenSession } from "./screenSession";
 import { drawStars, renderStarSprites } from "./starLayer";
@@ -37,6 +37,8 @@ async function start(): Promise<void> {
     mainMenu: document.querySelector<HTMLElement>("#main-menu")!,
     settings: document.querySelector<HTMLElement>("#settings")!,
     contoursCheckbox: document.querySelector<HTMLInputElement>("#contours-checkbox")!,
+    minPlanetsSelect: document.querySelector<HTMLSelectElement>("#min-planets-select")!,
+    maxPlanetsSelect: document.querySelector<HTMLSelectElement>("#max-planets-select")!,
     credits: document.querySelector<HTMLElement>("#credits")!,
     creditsBackButton: document.querySelector<HTMLButtonElement>("#credits-back-button")!,
     keyHint: document.querySelector<HTMLElement>(".key-hint")!,
@@ -82,9 +84,11 @@ async function start(): Promise<void> {
   bindMainMenuButton(settingsBackButton);
   bindMainMenuButton(elements.creditsBackButton);
   bindContoursCheckbox(elements.contoursCheckbox, settings, saveSettings);
+  bindPlanetCountSelects(elements.minPlanetsSelect, elements.maxPlanetsSelect, settings, saveSettings);
   const enterAndShowScreen = (screen: Screen) => {
     const seed = randomSeed();
-    enterScreen(session, screen, seed);
+    const matchRules = matchRulesFor(settings);
+    enterScreen(session, screen, seed, matchRules);
     showScreen(elements, screen);
   };
   bindScreenRoutes(window, enterAndShowScreen);

@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from "vitest";
 import type { Point } from "./core/flight";
-import { adjustAim, fire, matchView, type Match } from "./core/match";
+import { adjustAim, DEFAULT_MATCH_RULES, fire, matchView, type Match } from "./core/match";
 import type { Side } from "./core/round";
 import { createScreenSession, enterScreen, stepScreenSession } from "./screenSession";
 
@@ -21,7 +21,7 @@ interface ShotOutcome {
 
 function fireThroughScreenSession(seed: number, angle: number, power: number): ShotOutcome {
   const session = createScreenSession();
-  enterScreen(session, "match", seed);
+  enterScreen(session, "match", seed, DEFAULT_MATCH_RULES);
   const match = session.match!;
   const ships = structuredClone(matchView(match).ships);
   aimAt(match, angle, power);

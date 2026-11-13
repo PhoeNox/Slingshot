@@ -4,13 +4,15 @@
 import { COLOURS } from "./colours";
 import { backTargetFor, hashFor, moveFocus, resolveHash, type FocusStep, type MenuItem, type Screen } from "./navigation";
 import { scrambleLabel } from "./scramble";
-import type { Settings } from "./settings";
+import { PLANET_COUNT_CHOICES, withMaxPlanets, withMinPlanets, type Settings } from "./settings";
 
 export interface ScreenElements {
   overlay: HTMLElement;
   mainMenu: HTMLElement;
   settings: HTMLElement;
   contoursCheckbox: HTMLInputElement;
+  minPlanetsSelect: HTMLSelectElement;
+  maxPlanetsSelect: HTMLSelectElement;
   credits: HTMLElement;
   creditsBackButton: HTMLButtonElement;
   keyHint: HTMLElement;
@@ -145,6 +147,41 @@ export function bindContoursCheckbox(
     settings.gravityWellContours = checkbox.checked;
     saveSettings(settings);
   });
+}
+
+export function bindPlanetCountSelects(
+  minSelect: HTMLSelectElement,
+  maxSelect: HTMLSelectElement,
+  settings: Settings,
+  saveSettings: (settings: Readonly<Settings>) => void,
+): void {
+  renderPlanetCountOptions(minSelect);
+  renderPlanetCountOptions(maxSelect);
+  const showPlanetCount = () => {
+    minSelect.value = String(settings.planetCount.min);
+    maxSelect.value = String(settings.planetCount.max);
+  };
+  showPlanetCount();
+  minSelect.addEventListener("change", () => {
+    settings.planetCount = withMinPlanets(settings.planetCount, Number(minSelect.value));
+    showPlanetCount();
+    saveSettings(settings);
+  });
+  maxSelect.addEventListener("change", () => {
+    settings.planetCount = withMaxPlanets(settings.planetCount, Number(maxSelect.value));
+    showPlanetCount();
+    saveSettings(settings);
+  });
+}
+
+function renderPlanetCountOptions(select: HTMLSelectElement): void {
+  const options = PLANET_COUNT_CHOICES.map(planetCountOption);
+  select.replaceChildren(...options);
+}
+
+function planetCountOption(count: number): HTMLOptionElement {
+  const label = String(count);
+  return new Option(label, label);
 }
 
 export function bindMainMenuButton(button: HTMLButtonElement): void {
