@@ -17,6 +17,10 @@ _Avoid_: Title screen, start screen
 **Credits**:
 The screen naming the original game's authors, the asset sources, and the licences.
 
+**Attract mode**:
+A demo round that plays itself behind the main menu, firing shots automatically; it never scores and never becomes a match.
+_Avoid_: Demo, idle mode, screensaver
+
 ### Match structure
 
 **Match**:
@@ -83,6 +87,10 @@ _Avoid_: Player (when meaning the vessel), tank
 
 **Planet**:
 A body whose gravity bends the missile and which destroys it on contact.
+
+**Gravity-well contour**:
+A set of faint rings drawn around a planet, spaced by the planet's mass, showing how strongly it pulls.
+_Avoid_: Gravity field, aura, halo
 
 **Missile**:
 The projectile of a shot, moved only by its launch velocity and planetary gravity.
