@@ -82,10 +82,25 @@ const STEPS_PER_SECOND = 30;
 const MAX_POWER = 350;
 const FULL_TURN = 360;
 
-const MIN_ZOOM_SCALE = 1 / 3;
 const ZOOM_PADDING = 40;
-const ZOOM_IN_SECONDS = 1;
-const ZOOM_IN_PER_STEP = (1 - MIN_ZOOM_SCALE) / (ZOOM_IN_SECONDS * STEPS_PER_SECOND);
+const ZOOM_IN_PER_STEP = 2 / 3 / STEPS_PER_SECOND;
+const ZOOM_PAN_PER_STEP = 10;
+
+export interface Zoom {
+  scale: number;
+  left: number;
+  top: number;
+}
+
+interface ZoomAxis {
+  missile: number | undefined;
+  extent: number;
+}
+
+interface Span {
+  min: number;
+  max: number;
+}
 
 interface MatchState {
   phase: Phase;
@@ -97,7 +112,7 @@ interface MatchState {
   planets: Planet[];
   trails: TrailSegment[];
   attempts: Record<Side, number>;
-  zoomScale: number;
+  zoom: Zoom;
 }
 
 type DeepReadonly<T> = { readonly [K in keyof T]: DeepReadonly<T[K]> };
@@ -145,7 +160,7 @@ export function createMatch(
     planets: layout.planets,
     trails: [],
     attempts: { left: 0, right: 0 },
-    zoomScale: 1,
+    zoom: { scale: 1, left: 0, top: 0 },
   };
 }
 
@@ -160,23 +175,50 @@ export function step(match: Match): void {
   } else if (match.phase.kind === "roundOver") {
     match.phase.stepsSinceRoundOver++;
   }
-  const fittingScale = fittingZoomScale(match.phase);
-  match.zoomScale = Math.min(fittingScale, match.zoomScale + ZOOM_IN_PER_STEP);
+  match.zoom = nextZoom(match.zoom, match.phase);
 }
 
-function fittingZoomScale(phase: Phase): number {
-  if (phase.kind !== "inFlight") {
-    return 1;
+function nextZoom(zoom: Readonly<Zoom>, phase: Phase): Zoom {
+  const missile = phase.kind === "inFlight" ? phase.missile : undefined;
+  const horizontal = { missile: missile?.x, extent: PLAYING_AREA_WIDTH };
+  const vertical = { missile: missile?.y, extent: PLAYING_AREA_HEIGHT };
+  const fittingScale = Math.min(fittingAxisScale(horizontal), fittingAxisScale(vertical));
+  const scale = Math.min(fittingScale, zoom.scale + ZOOM_IN_PER_STEP);
+  const keptHorizontal = keptSpan(horizontal, fittingScale);
+  const keptVertical = keptSpan(vertical, fittingScale);
+  const left = viewStart(zoom.left, keptHorizontal, horizontal.extent / scale, scale);
+  const top = viewStart(zoom.top, keptVertical, vertical.extent / scale, scale);
+  return { scale, left, top };
+}
+
+function missileSpan(axis: Readonly<ZoomAxis>): number {
+  return axis.missile === undefined ? 0 : Math.max(axis.missile, axis.extent - axis.missile);
+}
+
+function fittingAxisScale(axis: Readonly<ZoomAxis>): number {
+  const span = missileSpan(axis);
+  return span <= axis.extent ? 1 : (axis.extent - ZOOM_PADDING) / (span - ZOOM_PADDING);
+}
+
+function keptSpan(axis: Readonly<ZoomAxis>, scale: number): Span {
+  const missile = axis.missile;
+  const span = missileSpan(axis);
+  if (missile === undefined || span <= axis.extent) {
+    return { min: 0, max: axis.extent };
   }
-  const missile = phase.missile;
-  const horizontal = axisZoomScale(missile.x - PLAYING_AREA_WIDTH / 2, PLAYING_AREA_WIDTH / 2);
-  const vertical = axisZoomScale(missile.y - PLAYING_AREA_HEIGHT / 2, PLAYING_AREA_HEIGHT / 2);
-  return Math.max(Math.min(horizontal, vertical), MIN_ZOOM_SCALE);
+  const margin = (ZOOM_PADDING * (span - axis.extent)) / (span - ZOOM_PADDING) / scale;
+  return { min: Math.min(0, missile - margin), max: Math.max(axis.extent, missile + margin) };
 }
 
-function axisZoomScale(offsetFromCentre: number, halfExtent: number): number {
-  const distance = Math.abs(offsetFromCentre);
-  return distance <= halfExtent ? 1 : (halfExtent - ZOOM_PADDING) / (distance - ZOOM_PADDING);
+function viewStart(previous: number, kept: Readonly<Span>, viewLength: number, scale: number): number {
+  const centred = (kept.min + kept.max - viewLength) / 2;
+  const maxPan = ZOOM_PAN_PER_STEP / scale;
+  const panned = clamp(centred, previous - maxPan, previous + maxPan);
+  return clamp(panned, kept.max - viewLength, kept.min);
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
 }
 
 function advanceShot(match: Match, missile: Missile): void {
@@ -293,7 +335,7 @@ export function matchView(match: Match): MatchView {
     attempts: match.attempts,
     aimLine,
     powerPenalty,
-    zoomScale: match.zoomScale,
+    zoom: match.zoom,
   };
 }
 

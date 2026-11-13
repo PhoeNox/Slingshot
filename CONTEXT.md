@@ -84,7 +84,7 @@ A larger rectangle around the playing area within which a missile stays in fligh
 _Avoid_: Range
 
 **Zoom**:
-How far the view is shrunk around the centred playing area: none while the missile is inside, just enough to keep the missile in sight while it is outside, easing back as it returns.
+How far the view is shrunk and where it sits so the playing area and the missile are both in sight: none while the missile is inside, just enough while it is outside, leaning toward the missile's side instead of showing empty space beyond the far edge, easing back as it returns.
 _Avoid_: Zoom view, minimap, camera
 
 ### Bodies

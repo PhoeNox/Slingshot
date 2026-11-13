@@ -8,7 +8,7 @@
 import { afterglowSegments, explosionBloom, explosionSize, roundBanner, trailAlpha } from "./animationCurves";
 import { COLOURS } from "./colours";
 import type { Missile, Point, Segment } from "./core/flight";
-import type { InFlightView, MatchView, RoundOutcome, RoundOverView, RoundResult } from "./core/match";
+import type { InFlightView, MatchView, RoundOutcome, RoundOverView, RoundResult, Zoom } from "./core/match";
 import { PLAYING_AREA_HEIGHT, PLAYING_AREA_WIDTH } from "./core/playingArea";
 import type { Aim, Planet, Ship, Side } from "./core/round";
 
@@ -186,8 +186,6 @@ const MESSAGE_SCORE_CHANGE_TOP = 100;
 const MESSAGE_PROMPT_TOP = 140;
 const MESSAGE_PROMPT_TEXT = "Press Space or Enter for the next round";
 
-const ZOOM_CENTRE_X = PLAYING_AREA_WIDTH / 2;
-const ZOOM_CENTRE_Y = PLAYING_AREA_HEIGHT / 2;
 const ZOOM_OUTLINE_ALPHA = 0.5;
 
 const ATTRACT_DIM_COLOUR = "rgba(4, 8, 21, 0.55)";
@@ -196,7 +194,7 @@ const PLAYING_AREA: Readonly<Rect> = { left: 0, top: 0, width: PLAYING_AREA_WIDT
 
 export function describeFrame(view: MatchView, display: Readonly<DisplaySettings>): FrameItem[] {
   const scene = sceneItems(view, display);
-  const zoomedScene = zoomedSceneItems(scene, view.zoomScale);
+  const zoomedScene = zoomedSceneItems(scene, view.zoom);
   const hud = phaseHudItems(view);
   const scores = scoreItems(view.scores);
   const banner = roundBannerItems(view.roundNumber, view.roundStepCount);
@@ -210,26 +208,26 @@ function sceneItems(view: MatchView, display: Readonly<DisplaySettings>): FrameI
   return [...planets, ...trails, ...phase];
 }
 
-function zoomedSceneItems(scene: FrameItem[], scale: number): FrameItem[] {
-  if (scale === 1) {
+function zoomedSceneItems(scene: FrameItem[], zoom: Readonly<Zoom>): FrameItem[] {
+  if (zoom.scale === 1) {
     return scene;
   }
-  const outline = playingAreaOutlineItem(scale);
-  const zoomGroup: GroupItem = { kind: "group", transform: zoomTransform(scale), items: scene };
+  const transform = zoomTransform(zoom);
+  const outline = playingAreaOutlineItem(transform);
+  const zoomGroup: GroupItem = { kind: "group", transform, items: scene };
   return [outline, zoomGroup];
 }
 
-function zoomTransform(scale: number): Transform {
-  return { x: ZOOM_CENTRE_X * (1 - scale), y: ZOOM_CENTRE_Y * (1 - scale), rotation: 0, scale };
+function zoomTransform(zoom: Readonly<Zoom>): Transform {
+  return { x: 0 - zoom.left * zoom.scale, y: 0 - zoom.top * zoom.scale, rotation: 0, scale: zoom.scale };
 }
 
-function playingAreaOutlineItem(scale: number): LinesItem {
-  const transform = zoomTransform(scale);
+function playingAreaOutlineItem(transform: Readonly<Transform>): LinesItem {
   const zoomedArea = {
     left: transform.x,
     top: transform.y,
-    width: PLAYING_AREA_WIDTH * scale,
-    height: PLAYING_AREA_HEIGHT * scale,
+    width: PLAYING_AREA_WIDTH * transform.scale,
+    height: PLAYING_AREA_HEIGHT * transform.scale,
   };
   const outline = strokeOutline(zoomedArea);
   const segments = rectSegments(outline);
@@ -276,7 +274,7 @@ function phaseSceneItems(view: MatchView): FrameItem[] {
     case "aiming":
       return aimingSceneItems(view);
     case "inFlight":
-      return flightSceneItems(view, view.phase, MISSILE_SPRITE_SIZE / view.zoomScale);
+      return flightSceneItems(view, view.phase, MISSILE_SPRITE_SIZE / view.zoom.scale);
     case "roundOver":
       return hitSceneItems(view.ships, view.phase);
   }

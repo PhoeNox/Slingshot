@@ -15,6 +15,7 @@ import {
   type MatchRules,
   type RoundLayout,
   type RoundOverView,
+  type Zoom,
 } from "./match";
 import { BARREL_DISTANCE, type Planet, type Side } from "./round";
 import { isInsidePlayingArea } from "./flight";
@@ -23,9 +24,10 @@ const SEEDS = Array.from({ length: 1000 }, (_, i) => i * 7919 + 1);
 
 const SHIP_X: Record<Side, number> = { left: 40, right: 760 };
 
-const MIN_ZOOM_SCALE = 1 / 3;
 const ZOOM_PADDING = 40;
-const ZOOM_IN_PER_STEP = (1 - MIN_ZOOM_SCALE) / 30;
+const ZOOM_IN_PER_STEP = 2 / 3 / 30;
+const NO_ZOOM: Zoom = { scale: 1, left: 0, top: 0 };
+const EPSILON = 1e-9;
 
 function activeAim(match: Match) {
   return { ...matchView(match).ships[matchView(match).activePlayer].aim };
@@ -124,17 +126,30 @@ function hitOwnShip(match: Match): void {
 }
 
 function fittingZoomScale(point: { x: number; y: number }): number {
-  const horizontal = axisZoomScale(Math.abs(point.x - 400), 400);
-  const vertical = axisZoomScale(Math.abs(point.y - 300), 300);
-  return Math.max(Math.min(horizontal, vertical), MIN_ZOOM_SCALE);
+  return Math.min(axisZoomScale(point.x, 800), axisZoomScale(point.y, 600));
 }
 
-function axisZoomScale(distance: number, halfExtent: number): number {
-  return distance <= halfExtent ? 1 : (halfExtent - ZOOM_PADDING) / (distance - ZOOM_PADDING);
+function axisZoomScale(position: number, extent: number): number {
+  const span = Math.max(position, extent - position);
+  return span <= extent ? 1 : (extent - ZOOM_PADDING) / (span - ZOOM_PADDING);
 }
 
-function zoomScaleOf(match: Match): number {
-  return matchView(match).zoomScale;
+function zoomOf(match: Match): Readonly<Zoom> {
+  return matchView(match).zoom;
+}
+
+function expectOnScreen(zoom: Readonly<Zoom>, point: { x: number; y: number }): void {
+  const screenX = (point.x - zoom.left) * zoom.scale;
+  const screenY = (point.y - zoom.top) * zoom.scale;
+  expect(screenX).toBeGreaterThanOrEqual(-EPSILON);
+  expect(screenX).toBeLessThanOrEqual(800 + EPSILON);
+  expect(screenY).toBeGreaterThanOrEqual(-EPSILON);
+  expect(screenY).toBeLessThanOrEqual(600 + EPSILON);
+}
+
+function expectPlayingAreaOnScreen(zoom: Readonly<Zoom>): void {
+  expectOnScreen(zoom, { x: 0, y: 0 });
+  expectOnScreen(zoom, { x: 800, y: 600 });
 }
 
 function distanceBetween(a: { x: number; y: number }, b: { x: number; y: number }): number {
@@ -562,21 +577,21 @@ describe("leaving the playing area", () => {
 
 describe("zoom", () => {
   test("a new match starts without zoom", () => {
-    expect(zoomScaleOf(createMatch(70))).toBe(1);
+    expect(zoomOf(createMatch(70))).toEqual(NO_ZOOM);
   });
 
-  test("a missile that has stayed inside the playing area leaves the scale at 1", () => {
+  test("a missile that has stayed inside the playing area leaves the view unzoomed", () => {
     const match = createMatch(71, fixedLayout([]));
     aimAt(match, 0, 100);
     fire(match);
 
     while (isInsidePlayingArea(inFlight(match).missile)) {
-      expect(zoomScaleOf(match)).toBe(1);
+      expect(zoomOf(match)).toEqual(NO_ZOOM);
       step(match);
     }
   });
 
-  test("a missile moving outward sets the scale that just fits it plus padding, in the same step", () => {
+  test("a missile moving outward sets the scale that just fits it and the playing area, in the same step", () => {
     const match = createMatch(72, fixedLayout([]));
     aimAt(match, 0, 100);
     fire(match);
@@ -585,11 +600,11 @@ describe("zoom", () => {
     step(match);
     while (matchView(match).phase.kind === "inFlight") {
       const missile = inFlight(match).missile;
-      const scale = zoomScaleOf(match);
-      expect(scale).toBeCloseTo(fittingZoomScale(missile), 10);
-      expect(scale).toBeGreaterThanOrEqual(MIN_ZOOM_SCALE);
-      expect(300 + (missile.y - 300) * scale).toBeGreaterThanOrEqual(0);
-      if (scale < 1) {
+      const zoom = zoomOf(match);
+      expect(zoom.scale).toBeCloseTo(fittingZoomScale(missile), 10);
+      expectOnScreen(zoom, missile);
+      expectPlayingAreaOnScreen(zoom);
+      if (zoom.scale < 1) {
         zoomedSteps++;
       }
       step(match);
@@ -598,44 +613,63 @@ describe("zoom", () => {
     expect(zoomedSteps).toBeGreaterThan(0);
   });
 
-  test("after a shot leaves the tracking area, the scale eases back to 1 within about a second of aiming", () => {
+  test("a missile above the playing area shows no empty space below it", () => {
+    const match = createMatch(74, fixedLayout([]));
+    aimAt(match, 0, 100);
+    fire(match);
+    while (inFlight(match).missile.y >= -300) {
+      step(match);
+    }
+
+    const zoom = zoomOf(match);
+
+    expect(zoom.scale).toBeLessThan(1);
+    expect(zoom.top + 600 / zoom.scale).toBeCloseTo(600, 9);
+  });
+
+  test("after a shot leaves the tracking area, the view eases back within about a second of aiming", () => {
     const match = createMatch(73, fixedLayout([]));
     aimAt(match, 0, 100);
     fire(match);
     stepUntilShotEnds(match, 1000);
-    let previous = zoomScaleOf(match);
+    let previous = zoomOf(match).scale;
     let stepsToFullScale = 0;
 
     expect(previous).toBeLessThan(1);
-    while (zoomScaleOf(match) < 1) {
+    while (zoomOf(match).scale < 1) {
       step(match);
       stepsToFullScale++;
-      expect(zoomScaleOf(match) - previous).toBeGreaterThan(0);
-      expect(zoomScaleOf(match) - previous).toBeLessThanOrEqual(ZOOM_IN_PER_STEP + 1e-12);
-      previous = zoomScaleOf(match);
+      expect(zoomOf(match).scale - previous).toBeGreaterThan(0);
+      expect(zoomOf(match).scale - previous).toBeLessThanOrEqual(ZOOM_IN_PER_STEP + EPSILON);
+      expectPlayingAreaOnScreen(zoomOf(match));
+      previous = zoomOf(match).scale;
     }
 
     expect(matchView(match).phase.kind).toBe("aiming");
     expect(stepsToFullScale).toBeLessThanOrEqual(31);
-    expect(zoomScaleOf(match)).toBe(1);
+    expect(zoomOf(match)).toEqual(NO_ZOOM);
   });
 
-  test("across seeded matches, the scale drops at once to fit the missile and rises by at most the capped rate", () => {
+  test("across seeded matches, the view keeps missile and playing area in sight and eases in at the capped rate", () => {
     for (const seed of SEEDS.slice(0, 50)) {
       const match = createMatch(seed);
       aimAt(match, (seed * 37) % 360, 50 + (seed % 250));
       fire(match);
       for (let i = 0; i < 400 && matchView(match).phase.kind === "inFlight"; i++) {
-        const before = zoomScaleOf(match);
+        const before = zoomOf(match).scale;
         step(match);
-        const after = zoomScaleOf(match);
+        const zoom = zoomOf(match);
         const phase = matchView(match).phase;
         const fitting = phase.kind === "inFlight" ? fittingZoomScale(phase.missile) : 1;
-        expect(after).toBeLessThanOrEqual(fitting + 1e-12);
-        expect(after - before).toBeLessThanOrEqual(ZOOM_IN_PER_STEP + 1e-12);
-        if (after < before) {
-          expect(after).toBeCloseTo(fitting, 10);
+        expect(zoom.scale).toBeLessThanOrEqual(fitting + EPSILON);
+        expect(zoom.scale - before).toBeLessThanOrEqual(ZOOM_IN_PER_STEP + EPSILON);
+        if (zoom.scale < before) {
+          expect(zoom.scale).toBeCloseTo(fitting, 10);
         }
+        if (phase.kind === "inFlight") {
+          expectOnScreen(zoom, phase.missile);
+        }
+        expectPlayingAreaOnScreen(zoom);
       }
     }
   });
@@ -876,7 +910,7 @@ describe("matchView", () => {
     const view = matchView(match);
 
     expect(view.powerPenalty).toBe(400);
-    expect(view.zoomScale).toBe(1);
+    expect(view.zoom).toEqual(NO_ZOOM);
     expect(view.phase).toEqual({ kind: "aiming" });
   });
 
@@ -891,14 +925,14 @@ describe("matchView", () => {
     }
     expect(inFlight(match).stepsFlown).toBe(3);
     expect(inFlight(match).timedOut).toBe(false);
-    expect(matchView(match).zoomScale).toBe(1);
+    expect(matchView(match).zoom).toEqual(NO_ZOOM);
 
     for (let i = 3; i < 751; i++) {
       step(match);
     }
     expect(inFlight(match).stepsFlown).toBe(751);
     expect(inFlight(match).timedOut).toBe(true);
-    expect(matchView(match).zoomScale).toBe(1);
+    expect(matchView(match).zoom).toEqual(NO_ZOOM);
   });
 
   test("outside the playing area before timeout, zooms out and keeps the shot's power penalty", () => {
@@ -913,7 +947,7 @@ describe("matchView", () => {
 
     expect(inFlight(match).stepsFlown).toBe(steps);
     expect(inFlight(match).timedOut).toBe(false);
-    expect(matchView(match).zoomScale).toBeLessThan(1);
+    expect(matchView(match).zoom.scale).toBeLessThan(1);
     expect(matchView(match).powerPenalty).toBe(500);
   });
 
@@ -927,7 +961,7 @@ describe("matchView", () => {
 
     const view = matchView(match);
     expect(view.phase.kind).toBe("roundOver");
-    expect(view.zoomScale).toBe(1);
+    expect(view.zoom).toEqual(NO_ZOOM);
     expect(view.aimLine).toEqual(aimedLine);
     expect(view.powerPenalty).toBe(600);
   });
