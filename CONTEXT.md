@@ -32,7 +32,7 @@ A series of rounds between two players, started from the main menu and played un
 _Avoid_: Game, session
 
 **Match rules**:
-The settings that shape play (planet count range, timeout), fixed when a match starts and unchanged for its whole life; attract mode always uses the default match rules.
+The settings that shape play (planet count range, timeout, bounce, planet visibility), fixed when a match starts and unchanged for its whole life; attract mode always uses the default match rules.
 _Avoid_: Game options, config
 
 **Round**:
@@ -40,11 +40,19 @@ One planet layout and ship placement, played until a ship is hit.
 _Avoid_: Level, game
 
 **Shot**:
-One firing by a player, from launch until the missile hits a planet or ship, leaves the tracking area, or leaves the playing area after timing out.
+One firing by a player, from launch until the missile hits a planet or ship, leaves the tracking area, leaves the playing area after timing out, or times out under bounce.
 _Avoid_: Turn, attempt
 
 **Timeout**:
-The point after a flight duration set by the match rules from which a missile no longer returns from outside the playing area; the match rules may also disable it.
+The point after a flight duration set by the match rules from which a missile no longer returns from outside the playing area, or, under bounce, at which the shot ends; the match rules may also disable it.
+
+**Bounce**:
+A match rule under which the missile reflects off every edge of the playing area instead of leaving it.
+_Avoid_: Walls, rebound
+
+**Planet visibility**:
+A match rule for when planets and their gravity-well contours are shown during a round: always, only briefly at round start, or hidden; in both latter cases they are revealed when the round ends.
+_Avoid_: Invisible planets, fog
 
 **Attempt**:
 The count of shots a player has fired in the current round; earlier hits earn a quick-hit bonus.
