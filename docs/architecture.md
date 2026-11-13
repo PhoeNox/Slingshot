@@ -24,7 +24,7 @@ Pure, seeded, no DOM, canvas, or clock (ADR-0001).
 | `gameLoop.ts` | Fixed 30 Hz step loop plus render callback |
 | `screenSession.ts` | Current screen and its match or attract mode; steps it and describes its frame |
 | `navigation.ts` | Hash routes, screens, menu focus movement (ADR-0003) |
-| `screens.ts` | HTML menu/settings/credits overlays, button effects, settings controls, route binding (ADR-0002) |
+| `screens.ts` | HTML menu/settings/credits overlays, button effects, settings tabs and controls, route binding (ADR-0002) |
 | `settings.ts` | Settings type, defaults, parse/serialise of the stored form, planet count drag-along, match rules from settings |
 | `settingsStorage.ts` | Reads and writes the stored settings in `localStorage`, tolerating unavailable storage |
 | `input.ts` | Keyboard bindings for aiming, firing, escape |

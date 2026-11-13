@@ -22,41 +22,51 @@
         </section>
         <section id="settings" class="overlay-screen" hidden>
           <h1>Settings</h1>
-          <div class="settings-list">
-            <label class="setting">
-              <input id="contours-checkbox" type="checkbox" />
-              Gravity-well contours
-            </label>
-            <div class="setting setting-group" role="group" aria-labelledby="planets-label">
-              <span id="planets-label">Planets per round</span>
-              <div class="range">
-                <label class="range-end select-box">
-                  <select id="min-planets-select"></select>
-                  <span class="range-caption">min</span>
+          <div class="settings-body">
+            <div class="settings-tabs" role="tablist" aria-label="Settings groups">
+              <button id="rules-tab" type="button" role="tab" aria-selected="true" aria-controls="rules-panel">Match rules</button>
+              <button id="display-tab" type="button" role="tab" aria-selected="false" aria-controls="display-panel" tabindex="-1">Display</button>
+            </div>
+            <div class="settings-panels">
+              <div id="rules-panel" class="settings-list" role="tabpanel" aria-labelledby="rules-tab">
+                <div class="setting setting-group" role="group" aria-labelledby="planets-label">
+                  <span id="planets-label">Planets per round</span>
+                  <div class="range">
+                    <label class="range-end select-box">
+                      <select id="min-planets-select"></select>
+                      <span class="range-caption">min</span>
+                    </label>
+                    <span class="range-span" aria-hidden="true"></span>
+                    <label class="range-end select-box">
+                      <select id="max-planets-select"></select>
+                      <span class="range-caption">max</span>
+                    </label>
+                  </div>
+                </div>
+                <label class="setting">
+                  Planet visibility
+                  <span class="select-box">
+                    <select id="planet-visibility-select"></select>
+                  </span>
                 </label>
-                <span class="range-span" aria-hidden="true"></span>
-                <label class="range-end select-box">
-                  <select id="max-planets-select"></select>
-                  <span class="range-caption">max</span>
+                <label class="setting">
+                  Timeout
+                  <span class="select-box">
+                    <select id="timeout-select"></select>
+                  </span>
+                </label>
+                <label class="setting">
+                  <input id="bounce-checkbox" type="checkbox" />
+                  Bounce
+                </label>
+              </div>
+              <div id="display-panel" class="settings-list" role="tabpanel" aria-labelledby="display-tab" hidden>
+                <label class="setting">
+                  <input id="contours-checkbox" type="checkbox" />
+                  Gravity-well contours
                 </label>
               </div>
             </div>
-            <label class="setting">
-              Planet visibility
-              <span class="select-box">
-                <select id="planet-visibility-select"></select>
-              </span>
-            </label>
-            <label class="setting">
-              Timeout
-              <span class="select-box">
-                <select id="timeout-select"></select>
-              </span>
-            </label>
-            <label class="setting">
-              <input id="bounce-checkbox" type="checkbox" />
-              Bounce
-            </label>
           </div>
           <nav class="menu" aria-label="Settings">
             <button id="settings-back-button" type="button">Back</button>

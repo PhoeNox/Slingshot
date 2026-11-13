@@ -18,6 +18,7 @@ export interface ScreenElements {
   overlay: HTMLElement;
   mainMenu: HTMLElement;
   settings: HTMLElement;
+  settingsTabs: HTMLElement;
   contoursCheckbox: HTMLInputElement;
   minPlanetsSelect: HTMLSelectElement;
   maxPlanetsSelect: HTMLSelectElement;
@@ -35,6 +36,13 @@ const FOCUS_STEPS: Record<string, FocusStep> = {
   KeyW: -1,
   ArrowDown: 1,
   KeyS: 1,
+};
+
+const TAB_STEPS: Record<string, FocusStep> = {
+  ArrowLeft: -1,
+  KeyA: -1,
+  ArrowRight: 1,
+  KeyD: 1,
 };
 
 const PLANET_VISIBILITY_LABELS: Record<PlanetVisibility, string> = {
@@ -144,13 +152,44 @@ export function showScreen(elements: ScreenElements, screen: Screen): void {
     elements.mainMenu.querySelector("button")!.focus();
   }
   if (screen === "settings") {
-    elements.contoursCheckbox.focus();
+    elements.settingsTabs.querySelector<HTMLButtonElement>('[aria-selected="true"]')!.focus();
   }
   if (screen === "credits") {
     elements.creditsBackButton.focus();
   }
   if (screen === "match") {
     elements.canvas.focus();
+  }
+}
+
+export function bindSettingsTabs(tabList: HTMLElement): void {
+  const tabs = [...tabList.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+  for (const tab of tabs) {
+    tab.addEventListener("click", () => {
+      selectTab(tabs, tab);
+    });
+  }
+  tabList.addEventListener("keydown", (event) => {
+    const step = TAB_STEPS[event.code];
+    if (step === undefined) {
+      return;
+    }
+    event.preventDefault();
+    const focusedIndex = tabs.indexOf(document.activeElement as HTMLButtonElement);
+    const nextIndex = moveFocus(focusedIndex, step, tabs.length);
+    const nextTab = tabs[nextIndex];
+    selectTab(tabs, nextTab);
+    nextTab.focus();
+  });
+}
+
+function selectTab(tabs: readonly HTMLButtonElement[], selectedTab: HTMLButtonElement): void {
+  for (const tab of tabs) {
+    const selected = tab === selectedTab;
+    tab.setAttribute("aria-selected", String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+    const panelId = tab.getAttribute("aria-controls")!;
+    document.getElementById(panelId)!.hidden = !selected;
   }
 }
 
