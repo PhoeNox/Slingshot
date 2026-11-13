@@ -196,8 +196,8 @@ function missileOutsidePlayingArea(match: Match): boolean {
   return phase.kind === "inFlight" && !isInsidePlayingArea(phase.missile);
 }
 
-function zoomedMatch(seed: number): Match {
-  const match = emptyMatch(seed);
+function zoomedMatch(seed: number, layout = EMPTY_LAYOUT): Match {
+  const match = createMatch(seed, structuredClone(layout));
   aimAt(match, 0, 250);
   fire(match);
   stepUntil(match, () => missileOutsidePlayingArea(match));
@@ -625,6 +625,19 @@ describe("in-flight frame", () => {
     expect(grid.segments).toHaveLength(19);
     expect(grid.segments[0]).toEqual({ from: { x: 150.5, y: 75.5 }, to: { x: 150.5, y: 524.5 } });
     expect(grid.segments[11]).toEqual({ from: { x: 100.5, y: 125.5 }, to: { x: 699.5, y: 125.5 } });
+  });
+
+  test("the zoom view shows gravity-well contours only while the display setting is on", () => {
+    const farPlanet: Planet = { ...LIGHT_PLANET, x: 700, y: 500 };
+    const match = zoomedMatch(31, { ...EMPTY_LAYOUT, planets: [farPlanet] });
+    const zoomedItemsOf = (display: DisplaySettings) => zoomGroupsOf(frameOf(match, display))[0].items;
+
+    const shown = zoomedItemsOf(CONTOURS_SHOWN);
+    const hidden = zoomedItemsOf(CONTOURS_HIDDEN);
+
+    expect(ringsAround(shown, farPlanet)).toHaveLength(3);
+    expect(ringsAround(hidden, farPlanet)).toHaveLength(0);
+    expect(imagesOf(hidden, "planet1")).toHaveLength(1);
   });
 
   test("shows the power penalty and the timeout but no aim line or aim info", () => {
