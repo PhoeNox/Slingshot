@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { describe, expect, test } from "vitest";
-import { MAIN_MENU_ITEMS, backTargetFor, hashFor, moveFocus, resolveHash, type FocusStep, type Screen } from "./navigation";
+import { MAIN_MENU_ITEMS, backTargetFor, hashFor, moveFocus, playsAttractMode, resolveHash, type FocusStep, type Screen } from "./navigation";
 
 describe("resolveHash", () => {
   test.each<[string, Screen]>([
@@ -34,6 +34,21 @@ describe("backTargetFor", () => {
     ["mainMenu", undefined],
   ])("the back target of %s is %s", (screen, backTarget) => {
     expect(backTargetFor(screen)).toBe(backTarget);
+  });
+});
+
+describe("playsAttractMode", () => {
+  test.each<[Screen, boolean]>([
+    ["mainMenu", true],
+    ["settings", true],
+    ["credits", false],
+    ["match", false],
+  ])("on %s is %s", (screen, plays) => {
+    expect(playsAttractMode(screen, false)).toBe(plays);
+  });
+
+  test.each<Screen>(["mainMenu", "settings"])("pauses on %s under reduced motion", (screen) => {
+    expect(playsAttractMode(screen, true)).toBe(false);
   });
 });
 

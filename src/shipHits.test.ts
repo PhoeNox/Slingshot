@@ -3,9 +3,9 @@
 
 import { describe, expect, test } from "vitest";
 import type { Point } from "./core/flight";
-import { adjustAim, DEFAULT_MATCH_RULES, fire, matchView, type Match } from "./core/match";
+import { DEFAULT_MATCH_RULES, matchView, type Match } from "./core/match";
 import type { Side } from "./core/round";
-import { createScreenSession, enterScreen, stepScreenSession } from "./screenSession";
+import { aimMatch, createScreenSession, enterScreen, fireMatch, stepScreenSession, type ScreenSession } from "./screenSession";
 
 const SEEDS = Array.from({ length: 10 }, (_, i) => i + 1);
 const ANGLES = Array.from({ length: 36 }, (_, i) => i * 10);
@@ -20,12 +20,12 @@ interface ShotOutcome {
 }
 
 function fireThroughScreenSession(seed: number, angle: number, power: number): ShotOutcome {
-  const session = createScreenSession(Math.random);
+  const session = createScreenSession(seed, Math.random);
   enterScreen(session, "match", seed, DEFAULT_MATCH_RULES);
-  const match = session.match!;
+  const match = shownMatch(session);
   const ships = structuredClone(matchView(match).ships);
-  aimAt(match, angle, power);
-  fire(match);
+  aimAt(session, angle, power);
+  fireMatch(session);
   for (let i = 0; i < MAX_FLIGHT_STEPS && matchView(match).phase.kind === "inFlight"; i++) {
     stepScreenSession(session, false);
   }
@@ -36,9 +36,17 @@ function fireThroughScreenSession(seed: number, angle: number, power: number): S
   return { passedThrough, hitShip };
 }
 
-function aimAt(match: Match, angle: number, power: number): void {
-  const aim = matchView(match).ships[matchView(match).activePlayer].aim;
-  adjustAim(match, { angle: angle - aim.angle, power: power - aim.power });
+function shownMatch(session: ScreenSession): Match {
+  if (session.state.screen !== "match") {
+    throw new Error("expected a match");
+  }
+  return session.state.match;
+}
+
+function aimAt(session: ScreenSession, angle: number, power: number): void {
+  const view = matchView(shownMatch(session));
+  const aim = view.ships[view.activePlayer].aim;
+  aimMatch(session, { angle: angle - aim.angle, power: power - aim.power });
 }
 
 function distanceToSegment(point: Point, from: Point, to: Point): number {

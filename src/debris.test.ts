@@ -3,7 +3,9 @@
 
 import { describe, expect, test } from "vitest";
 import type { Planet } from "./core/round";
+import { createMatch, DEFAULT_MATCH_RULES, matchView, type MatchView } from "./core/match";
 import {
+  advanceDebris,
   burstDebris,
   BURST_COUNT,
   PARTICLE_LIFETIME,
@@ -30,6 +32,46 @@ function stepTimes(particles: Particle[], steps: number, bounce = false): Partic
   }
   return current;
 }
+
+function viewWith(impact: MatchView["impact"], bounce = false): MatchView {
+  const view = matchView(createMatch(1));
+  const rules = { ...DEFAULT_MATCH_RULES, bounce };
+  return { ...view, planets: [], impact, rules };
+}
+
+describe("advanceDebris", () => {
+  test("throws a large burst from the view's impact", () => {
+    const debris = advanceDebris([], viewWith(IMPACT), centredRandom);
+
+    expect(debris).toHaveLength(BURST_COUNT.large);
+    expect(debris.every((particle) => particle.size === "large")).toBe(true);
+    expect(debris.every((particle) => particle.x === IMPACT.x && particle.y === IMPACT.y)).toBe(true);
+  });
+
+  test("throws a halved burst under bounce", () => {
+    const debris = advanceDebris([], viewWith(IMPACT, true), centredRandom);
+
+    expect(debris).toHaveLength(BURST_COUNT.large / 2);
+  });
+
+  test("only moves the particles in flight without an impact", () => {
+    const particle = particleAt("large", 100, 100, 1, 0);
+
+    const debris = advanceDebris([particle], viewWith(undefined), centredRandom);
+
+    expect(debris).toHaveLength(1);
+    expect(debris[0].x).toBeGreaterThan(100);
+  });
+
+  test("keeps the particles in flight alongside a new burst", () => {
+    const particle = particleAt("small", 100, 100, 1, 0);
+
+    const debris = advanceDebris([particle], viewWith(IMPACT), centredRandom);
+
+    expect(debris).toHaveLength(1 + BURST_COUNT.large);
+    expect(debris[0]).toBe(particle);
+  });
+});
 
 describe("burstDebris", () => {
   test("throws about thirty large particles from the impact point", () => {

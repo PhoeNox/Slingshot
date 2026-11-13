@@ -23,8 +23,8 @@ Pure, seeded, no DOM, canvas, or clock (ADR-0001).
 | --- | --- |
 | `main.ts` | Boot: loads assets, binds input and screens, starts the loop |
 | `gameLoop.ts` | Fixed 30 Hz step loop plus render callback |
-| `screenSession.ts` | Current screen and its match or attract mode; steps it and describes its frame |
-| `navigation.ts` | Hash routes, screens, menu focus movement (ADR-0003) |
+| `screenSession.ts` | Current screen as a per-screen union of match or attract mode; routes aim and fire, steps it, describes its frame and shake |
+| `navigation.ts` | Hash routes, screens, which screens play attract mode (ADR-0002), menu focus movement (ADR-0003) |
 | `screens.ts` | HTML menu/settings/credits overlays, button effects, settings tabs, one table-driven binder for every settings control (located by `data-setting` in the markup), route binding (ADR-0002) |
 | `settings.ts` | Setting rule table (control kind, choices, labels, default, display vs match rule per setting) and the Settings type, defaults, parse/serialise of the stored form and match rules derived from it; planet count drag-along |
 | `settingsStorage.ts` | Reads and writes the stored settings in `localStorage`, tolerating unavailable storage |
@@ -34,7 +34,7 @@ Pure, seeded, no DOM, canvas, or clock (ADR-0001).
 | `renderer.ts` | Draws `FrameItem`s onto the canvas |
 | `animationCurves.ts` | Afterglow, trail fade, explosion, round banner curves |
 | `screenShake.ts` | Shake offset after hits |
-| `debris.ts` | Cosmetic impact particles: bursts, motion via core `moveBody`, splitting on planets, fade-out; state and unseeded randomness stay outside the core |
+| `debris.ts` | Cosmetic impact particles: advancing from a match view, bursts, motion via core `moveBody`, splitting on planets, fade-out; state and unseeded randomness stay outside the core |
 | `stars.ts` / `starLayer.ts` | Star field generation / drawing |
 | `display.ts` | Fits canvas and overlay to the window |
 | `assets.ts` | Sprite and font loading |

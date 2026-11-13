@@ -24,6 +24,8 @@ const SCREEN_HASHES: Record<Screen, string> = {
   credits: "#/credits",
 };
 
+const ATTRACT_PLAYING_SCREENS: ReadonlySet<Screen> = new Set(["mainMenu", "settings"]);
+
 const BACK_TARGETS: Record<Screen, Screen | undefined> = {
   mainMenu: undefined,
   match: "mainMenu",
@@ -52,6 +54,10 @@ export function hashFor(screen: Screen): string {
 
 export function backTargetFor(screen: Screen): Screen | undefined {
   return BACK_TARGETS[screen];
+}
+
+export function playsAttractMode(screen: Screen, reducedMotion: boolean): boolean {
+  return ATTRACT_PLAYING_SCREENS.has(screen) && !reducedMotion;
 }
 
 export function moveFocus(index: number, step: FocusStep, itemCount: number): number {

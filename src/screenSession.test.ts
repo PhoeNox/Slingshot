@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { describe, expect, test } from "vitest";
+import type { AttractMode } from "./core/attract";
 import {
   adjustAim,
   createMatch,
@@ -16,12 +17,15 @@ import {
 import { burstDebris, BURST_COUNT } from "./debris";
 import { describeFrame, type DisplaySettings } from "./frame";
 import {
+  aimMatch,
   createScreenSession,
   describeScreenSessionFrame,
   enterScreen,
-  screenSessionShake,
+  fireMatch,
+  isMatchActive,
   stepScreenSession,
   type ScreenSession,
+  type ScreenState,
 } from "./screenSession";
 import { NO_SHAKE, screenShakeOffset } from "./screenShake";
 
@@ -42,10 +46,28 @@ function roundOverMatch(): Match {
   return match;
 }
 
-function sessionOn(...screens: ScreenSession["screen"][]): ScreenSession {
-  const session = createScreenSession(centredRandom);
+function sessionOn(...screens: ScreenState["screen"][]): ScreenSession {
+  const session = createScreenSession(1, centredRandom);
   screens.forEach((screen, index) => enterScreen(session, screen, index + 1, DEFAULT_MATCH_RULES));
   return session;
+}
+
+function shownMatch(session: ScreenSession): Match {
+  if (session.state.screen !== "match") {
+    throw new Error("expected a match");
+  }
+  return session.state.match;
+}
+
+function shownAttract(session: ScreenSession): AttractMode {
+  if (session.state.screen === "match") {
+    throw new Error("expected attract mode");
+  }
+  return session.state.attract;
+}
+
+function showMatch(session: ScreenSession, match: Match): void {
+  session.state = { screen: "match", match };
 }
 
 const SIX_PLANET_RULES: MatchRules = { ...DEFAULT_MATCH_RULES, planetCount: { min: 6, max: 6 } };
@@ -56,103 +78,147 @@ const extremeRandom = () => 1;
 const centredRandom = () => 0.5;
 
 describe("entering a screen", () => {
-  test("starts attract mode behind the main menu", () => {
-    const session = sessionOn("mainMenu");
+  test("starts on the main menu with attract mode", () => {
+    const session = createScreenSession(1, centredRandom);
 
-    expect(session.attract).toBeDefined();
-    expect(session.match).toBeUndefined();
+    expect(session.state.screen).toBe("mainMenu");
+    expect(session.state).toHaveProperty("attract");
+  });
+
+  test("keeps the starting attract mode behind the main menu", () => {
+    const session = createScreenSession(1, centredRandom);
+    const attract = shownAttract(session);
+
+    enterScreen(session, "mainMenu", 2, DEFAULT_MATCH_RULES);
+
+    expect(shownAttract(session)).toBe(attract);
   });
 
   test("discards attract mode when a match starts", () => {
     const session = sessionOn("mainMenu", "match");
 
-    expect(session.attract).toBeUndefined();
-    expect(session.match).toBeDefined();
+    expect(session.state.screen).toBe("match");
+    expect(session.state).not.toHaveProperty("attract");
   });
 
   test("starts the match under the given match rules", () => {
-    const session = createScreenSession(centredRandom);
+    const session = createScreenSession(1, centredRandom);
 
     enterScreen(session, "match", 1, SIX_PLANET_RULES);
 
-    expect(session.match!.rules).toEqual(SIX_PLANET_RULES);
-    expect(session.match!.planets).toHaveLength(6);
+    expect(shownMatch(session).rules).toEqual(SIX_PLANET_RULES);
+    expect(shownMatch(session).planets).toHaveLength(6);
   });
 
   test("keeps attract mode on the default match rules", () => {
-    const session = createScreenSession(centredRandom);
+    const session = sessionOn("match");
 
-    enterScreen(session, "mainMenu", 1, SIX_PLANET_RULES);
+    enterScreen(session, "mainMenu", 2, SIX_PLANET_RULES);
 
-    expect(session.attract!.match.rules).toEqual(DEFAULT_MATCH_RULES);
+    expect(shownAttract(session).match.rules).toEqual(DEFAULT_MATCH_RULES);
   });
 
   test("drops the match when leaving it", () => {
     const session = sessionOn("mainMenu", "match", "mainMenu");
 
-    expect(session.match).toBeUndefined();
-    expect(session.attract).toBeDefined();
+    expect(session.state.screen).toBe("mainMenu");
+    expect(session.state).not.toHaveProperty("match");
   });
 
   test("keeps attract mode across a main menu, credits, main menu round trip", () => {
     const session = sessionOn("mainMenu");
-    const attract = session.attract;
+    const attract = shownAttract(session);
 
     enterScreen(session, "credits", 7, DEFAULT_MATCH_RULES);
     enterScreen(session, "mainMenu", 8, DEFAULT_MATCH_RULES);
 
-    expect(session.attract).toBe(attract);
+    expect(shownAttract(session)).toBe(attract);
+  });
+});
+
+describe("aiming and firing", () => {
+  test("reports a match as active only on the match screen", () => {
+    expect(isMatchActive(sessionOn("match"))).toBe(true);
+    expect(isMatchActive(sessionOn("mainMenu"))).toBe(false);
+  });
+
+  test("aims the active match", () => {
+    const session = sessionOn("match");
+    const expected = structuredClone(shownMatch(session));
+    adjustAim(expected, { angle: 15, power: -20 });
+
+    aimMatch(session, { angle: 15, power: -20 });
+
+    expect(shownMatch(session)).toEqual(expected);
+  });
+
+  test("fires the active match", () => {
+    const session = sessionOn("match");
+
+    fireMatch(session);
+
+    expect(matchView(shownMatch(session)).phase.kind).toBe("inFlight");
+  });
+
+  test("ignores aim and fire without a match", () => {
+    const session = sessionOn("mainMenu");
+    const before = structuredClone(session.state);
+
+    aimMatch(session, { angle: 15, power: -20 });
+    fireMatch(session);
+
+    expect(session.state).toEqual(before);
   });
 });
 
 describe("stepping", () => {
   test("plays attract mode behind the main menu", () => {
     const session = sessionOn("mainMenu");
-    const before = structuredClone(session.attract);
+    const before = structuredClone(shownAttract(session));
 
     stepScreenSession(session, false);
 
-    expect(session.attract).not.toEqual(before);
+    expect(shownAttract(session)).not.toEqual(before);
   });
 
   test("plays the main menu's attract mode behind the settings", () => {
     const session = sessionOn("mainMenu");
-    const attract = session.attract;
+    const attract = shownAttract(session);
     enterScreen(session, "settings", 7, DEFAULT_MATCH_RULES);
-    const before = structuredClone(session.attract);
+    const before = structuredClone(attract);
 
     stepScreenSession(session, false);
 
-    expect(session.attract).toBe(attract);
-    expect(session.attract).not.toEqual(before);
+    expect(shownAttract(session)).toBe(attract);
+    expect(shownAttract(session)).not.toEqual(before);
   });
 
   test("pauses attract mode behind the credits", () => {
     const session = sessionOn("mainMenu", "credits");
-    const before = structuredClone(session.attract);
+    const before = structuredClone(shownAttract(session));
 
     stepScreenSession(session, false);
 
-    expect(session.attract).toEqual(before);
+    expect(shownAttract(session)).toEqual(before);
   });
 
   test("pauses attract mode under reduced motion", () => {
     const session = sessionOn("mainMenu");
-    const before = structuredClone(session.attract);
+    const before = structuredClone(shownAttract(session));
 
     stepScreenSession(session, true);
 
-    expect(session.attract).toEqual(before);
+    expect(shownAttract(session)).toEqual(before);
   });
 
   test("steps the active match", () => {
     const session = sessionOn("match");
-    fire(session.match!);
-    const before = structuredClone(session.match);
+    fire(shownMatch(session));
+    const before = structuredClone(shownMatch(session));
 
     stepScreenSession(session, true);
 
-    expect(session.match).not.toEqual(before);
+    expect(shownMatch(session)).not.toEqual(before);
   });
 });
 
@@ -160,42 +226,46 @@ describe("describing the frame", () => {
   test("shows the match while one is active", () => {
     const session = sessionOn("match");
 
-    expect(describeScreenSessionFrame(session, CONTOURS_HIDDEN)).toEqual(
-      describeFrame(matchView(session.match!), CONTOURS_HIDDEN, session.debris, "match"),
+    expect(describeScreenSessionFrame(session, CONTOURS_HIDDEN, false).items).toEqual(
+      describeFrame(matchView(shownMatch(session)), CONTOURS_HIDDEN, session.debris, "match"),
     );
   });
 
   test("shows attract mode otherwise", () => {
     const session = sessionOn("mainMenu", "credits");
 
-    expect(describeScreenSessionFrame(session, CONTOURS_HIDDEN)).toEqual(
-      describeFrame(matchView(session.attract!.match), CONTOURS_HIDDEN, session.debris, "attract"),
+    expect(describeScreenSessionFrame(session, CONTOURS_HIDDEN, false).items).toEqual(
+      describeFrame(matchView(shownAttract(session).match), CONTOURS_HIDDEN, session.debris, "attract"),
     );
   });
 });
 
 describe("screen shake", () => {
+  function roundOverSession(): ScreenSession {
+    const session = createScreenSession(1, extremeRandom);
+    showMatch(session, roundOverMatch());
+    return session;
+  }
+
   test("follows the match right after a hit", () => {
-    const session = sessionOn("match");
-    session.match = roundOverMatch();
+    const session = roundOverSession();
 
-    const shake = screenSessionShake(session, false, extremeRandom);
+    const shake = describeScreenSessionFrame(session, CONTOURS_HIDDEN, false).shake;
 
-    expect(shake).toEqual(screenShakeOffset(matchView(session.match), extremeRandom));
+    expect(shake).toEqual(screenShakeOffset(matchView(shownMatch(session)), extremeRandom));
     expect(shake).not.toEqual(NO_SHAKE);
   });
 
   test("is still under reduced motion", () => {
-    const session = sessionOn("match");
-    session.match = roundOverMatch();
+    const session = roundOverSession();
 
-    expect(screenSessionShake(session, true, extremeRandom)).toBe(NO_SHAKE);
+    expect(describeScreenSessionFrame(session, CONTOURS_HIDDEN, true).shake).toBe(NO_SHAKE);
   });
 
   test("is still without a match", () => {
-    const session = sessionOn("mainMenu");
+    const session = createScreenSession(1, extremeRandom);
 
-    expect(screenSessionShake(session, false, extremeRandom)).toBe(NO_SHAKE);
+    expect(describeScreenSessionFrame(session, CONTOURS_HIDDEN, false).shake).toBe(NO_SHAKE);
   });
 });
 
@@ -204,9 +274,10 @@ describe("debris", () => {
 
   function planetHitSession(reducedMotion: boolean): ScreenSession {
     const session = sessionOn("match");
-    session.match = createMatch(5, structuredClone(PLANET_IN_THE_WAY));
-    fire(session.match);
-    for (let i = 0; i < 1000 && matchView(session.match).impact === undefined; i++) {
+    const match = createMatch(5, structuredClone(PLANET_IN_THE_WAY));
+    showMatch(session, match);
+    fire(match);
+    for (let i = 0; i < 1000 && matchView(match).impact === undefined; i++) {
       stepScreenSession(session, reducedMotion);
     }
     return session;
@@ -214,7 +285,7 @@ describe("debris", () => {
 
   function playSeededMatch(reducedMotion: boolean): Match {
     const session = sessionOn("match");
-    const match = session.match!;
+    const match = shownMatch(session);
     for (let shot = 0; shot < 6; shot++) {
       adjustAim(match, { angle: 25 * shot, power: 20 * shot });
       fire(match);
@@ -227,7 +298,7 @@ describe("debris", () => {
 
   test("a planet hit throws large particles from the impact point", () => {
     const session = planetHitSession(false);
-    const impact = matchView(session.match!).impact!;
+    const impact = matchView(shownMatch(session)).impact!;
 
     expect(session.debris).toHaveLength(BURST_COUNT.large);
     expect(session.debris.every((particle) => particle.size === "large")).toBe(true);
@@ -236,9 +307,10 @@ describe("debris", () => {
 
   test("a ship hit throws large particles", () => {
     const session = sessionOn("match");
-    session.match = createMatch(1, structuredClone(FACING_LAYOUT));
-    fire(session.match);
-    for (let i = 0; i < 1000 && matchView(session.match).phase.kind !== "roundOver"; i++) {
+    const match = createMatch(1, structuredClone(FACING_LAYOUT));
+    showMatch(session, match);
+    fire(match);
+    for (let i = 0; i < 1000 && matchView(match).phase.kind !== "roundOver"; i++) {
       stepScreenSession(session, false);
     }
 
@@ -257,7 +329,7 @@ describe("debris", () => {
   test("no debris is thrown under reduced motion", () => {
     const session = planetHitSession(true);
 
-    expect(matchView(session.match!).impact).toBeDefined();
+    expect(matchView(shownMatch(session)).impact).toBeDefined();
     expect(session.debris).toEqual([]);
   });
 
@@ -296,7 +368,7 @@ describe("debris", () => {
   test("the frame draws the debris", () => {
     const session = planetHitSession(false);
 
-    const dots = describeScreenSessionFrame(session, CONTOURS_HIDDEN).filter((item) => item.kind === "dot");
+    const dots = describeScreenSessionFrame(session, CONTOURS_HIDDEN, false).items.filter((item) => item.kind === "dot");
 
     expect(dots).toHaveLength(BURST_COUNT.large);
   });

@@ -3,7 +3,7 @@
 
 import "./style.css";
 import { loadFonts, loadSprites } from "./assets";
-import { adjustAim, fire, type AimDelta } from "./core/match";
+import type { AimDelta } from "./core/match";
 import { applyFit, applyOverlayFit, fitPlayingArea } from "./display";
 import { describeBackdropFrame } from "./frame";
 import { startGameLoop } from "./gameLoop";
@@ -13,7 +13,7 @@ import { drawFrame, drawShakenFrame } from "./renderer";
 import { bindBracketFlash, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, bindSettingControls, bindSettingsTabs, navigateBack, renderMenuItems, showScreen, traceTitleArc, type ScreenElements } from "./screens";
 import { matchRulesFor, parseSettings, serialiseSettings, type Settings } from "./settings";
 import { readStoredSettings, writeStoredSettings } from "./settingsStorage";
-import { createScreenSession, describeScreenSessionFrame, enterScreen, screenSessionShake, stepScreenSession } from "./screenSession";
+import { aimMatch, createScreenSession, describeScreenSessionFrame, enterScreen, fireMatch, isMatchActive, stepScreenSession } from "./screenSession";
 import { drawStars, renderStarSprites } from "./starLayer";
 import { generateStars } from "./stars";
 
@@ -50,7 +50,7 @@ async function start(): Promise<void> {
   const sprites = await loadSprites();
   await loadFonts();
 
-  const session = createScreenSession(Math.random);
+  const session = createScreenSession(randomSeed(), Math.random);
   const storedSettings = readStoredSettings(window);
   const settings = parseSettings(storedSettings);
 
@@ -62,12 +62,12 @@ async function start(): Promise<void> {
   window.addEventListener("resize", fitStage);
   fitStage();
 
-  const isMatchActive = () => session.match !== undefined;
-  const adjustMatchAim = (delta: AimDelta) => adjustAim(session.match!, delta);
-  const fireMatch = () => fire(session.match!);
-  bindControls(window, isMatchActive, adjustMatchAim, fireMatch);
+  const isSessionMatchActive = () => isMatchActive(session);
+  const aimSessionMatch = (delta: AimDelta) => aimMatch(session, delta);
+  const fireSessionMatch = () => fireMatch(session);
+  bindControls(window, isSessionMatchActive, aimSessionMatch, fireSessionMatch);
 
-  const navigateBackFromCurrentScreen = () => navigateBack(window, session.screen);
+  const navigateBackFromCurrentScreen = () => navigateBack(window, session.state.screen);
   bindEscape(window, navigateBackFromCurrentScreen);
 
   renderMenuItems(menu, MAIN_MENU_ITEMS);
@@ -98,11 +98,10 @@ async function start(): Promise<void> {
   const starSprites = renderStarSprites();
   const render = (timeMs: number) => {
     const starTimeMs = reducedMotion.matches ? STATIC_STAR_TIME_MS : timeMs;
-    const frame = describeScreenSessionFrame(session, settings);
-    const shake = screenSessionShake(session, reducedMotion.matches, Math.random);
+    const frame = describeScreenSessionFrame(session, settings, reducedMotion.matches);
     drawFrame(context, sprites, backdropFrame);
     drawStars(context, starSprites, stars, starTimeMs);
-    drawShakenFrame(context, sprites, frame, shake);
+    drawShakenFrame(context, sprites, frame.items, frame.shake);
   };
   startGameLoop(stepSimulation, render);
 }

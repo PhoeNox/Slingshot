@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { moveBody, type Body, type BodyStep, type Point } from "./core/flight";
+import type { MatchView } from "./core/match";
 import type { Planet } from "./core/round";
 
 export type ParticleSize = "large" | "small";
@@ -49,6 +50,12 @@ function launchParticle(centre: Readonly<Point>, size: ParticleSize, random: () 
     size,
     stepsLeft: PARTICLE_LIFETIME[size],
   };
+}
+
+export function advanceDebris(particles: readonly Particle[], view: MatchView, random: () => number): Particle[] {
+  const stepped = stepDebris(particles, view.planets, view.rules.bounce, random);
+  const burst = view.impact === undefined ? [] : burstDebris(view.impact, "large", view.rules.bounce, random);
+  return [...stepped, ...burst];
 }
 
 export function stepDebris(
