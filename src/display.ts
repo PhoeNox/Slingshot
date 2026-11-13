@@ -31,3 +31,8 @@ export function applyFit(canvas: HTMLCanvasElement, context: CanvasRenderingCont
   const scaleY = fit.backingHeight / PLAYING_AREA_HEIGHT;
   context.setTransform(scaleX, 0, 0, scaleY, 0, 0);
 }
+
+export function applyOverlayFit(overlay: HTMLElement, fit: CanvasFit): void {
+  overlay.style.width = `${fit.cssWidth}px`;
+  overlay.style.height = `${fit.cssHeight}px`;
+}

@@ -17,6 +17,7 @@ body {
 }
 
 #stage {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow: hidden;
@@ -28,6 +29,58 @@ body {
 #game {
   display: block;
   outline: none;
+}
+
+#overlay {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  container-type: size;
+  color: #fff;
+}
+
+.overlay-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6cqh;
+  height: 100%;
+}
+
+.overlay-screen[hidden] {
+  display: none;
+}
+
+.overlay-screen h1 {
+  margin: 0;
+  font-size: 12cqh;
+  font-weight: normal;
+}
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2cqh;
+}
+
+.menu button {
+  min-width: 30cqw;
+  padding: 1.5cqh 4cqw;
+  border: 1px solid rgb(150, 150, 150);
+  background: rgba(0, 0, 0, 0.69);
+  color: #fff;
+  font: inherit;
+  font-size: 5cqh;
+  cursor: pointer;
+}
+
+.menu button:hover,
+.menu button:focus {
+  outline: none;
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .key-hint,

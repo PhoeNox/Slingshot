@@ -5,7 +5,7 @@ import { describe, expect, test } from "vitest";
 import { isInsidePlayingArea } from "./core/flight";
 import { adjustAim, aimLine, createMatch, fire, matchView, step, type Match, type RoundLayout } from "./core/match";
 import type { Side } from "./core/round";
-import { describeFrame, type FrameItem, type GroupItem, type ImageItem, type SpriteFrameItem } from "./frame";
+import { describeBackdropFrame, describeFrame, type FrameItem, type GroupItem, type ImageItem, type SpriteFrameItem } from "./frame";
 import { angleInfoText, powerInfoText, roundOverTitle, ZOOM_SCALE } from "./presentation";
 
 const EMPTY_LAYOUT: RoundLayout = {
@@ -200,5 +200,19 @@ describe("round banner", () => {
     const frame = frameOf(match);
 
     expect(textsOf(frame).some((text) => text.startsWith("Round"))).toBe(false);
+  });
+});
+
+describe("backdrop-only frame", () => {
+  test("shows the backdrop covering the playing area and nothing else", () => {
+    const frame = flatten(describeBackdropFrame());
+
+    expect(imagesOf(frame, "backdrop")).toEqual([
+      expect.objectContaining({ target: { left: 0, top: 0, width: 800, height: 600 } }),
+    ]);
+    expect(shipSpritesOf(frame).size).toBe(0);
+    expect(imagesOf(frame, "missile")).toHaveLength(0);
+    expect(frame.some((item) => item.kind === "image" && item.sprite.startsWith("planet"))).toBe(false);
+    expect(textsOf(frame)).toHaveLength(0);
   });
 });

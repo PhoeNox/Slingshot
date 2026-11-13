@@ -29,7 +29,12 @@ const AIM_DIRECTIONS: Record<string, AimDelta> = {
 
 const FIRE_KEYS = new Set(["Space", "Enter"]);
 
-export function bindControls(target: Window, adjustAim: (delta: AimDelta) => void, fire: () => void): void {
+export function bindControls(
+  target: Window,
+  isMatchActive: () => boolean,
+  adjustAim: (delta: AimDelta) => void,
+  fire: () => void,
+): void {
   const repeat: KeyRepeat = { heldCode: undefined, shiftHeld: false, timer: undefined };
 
   const applyHeldKey = () => {
@@ -37,6 +42,10 @@ export function bindControls(target: Window, adjustAim: (delta: AimDelta) => voi
     adjustAim(delta);
   };
   const repeatHeldKey = () => {
+    if (!isMatchActive()) {
+      releaseHeldKey();
+      return;
+    }
     applyHeldKey();
     repeat.timer = target.setTimeout(repeatHeldKey, REPEAT_INTERVAL_MS);
   };
@@ -47,7 +56,7 @@ export function bindControls(target: Window, adjustAim: (delta: AimDelta) => voi
 
   target.addEventListener("keydown", (event) => {
     repeat.shiftHeld = event.shiftKey;
-    if (!isHandledKey(event.code)) {
+    if (!isMatchActive() || !isHandledKey(event.code)) {
       return;
     }
     event.preventDefault();

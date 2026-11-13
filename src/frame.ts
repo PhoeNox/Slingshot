@@ -151,6 +151,11 @@ export function describeFrame(view: MatchView): FrameItem[] {
   return [backdrop, ...planets, ...trails, ...phase, ...scores, ...banner];
 }
 
+export function describeBackdropFrame(): FrameItem[] {
+  const backdrop = imageItem("backdrop", PLAYING_AREA);
+  return [backdrop];
+}
+
 function phaseItems(view: MatchView): FrameItem[] {
   switch (view.phase.kind) {
     case "aiming":
