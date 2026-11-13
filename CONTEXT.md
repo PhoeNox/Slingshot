@@ -83,9 +83,9 @@ _Avoid_: Screen, board
 A larger rectangle around the playing area within which a missile stays in flight even when not visible.
 _Avoid_: Range
 
-**Zoom view**:
-A shrunken overview of the tracking area, shown while the missile is outside the playing area.
-_Avoid_: Minimap
+**Zoom**:
+How far the view is shrunk around the centred playing area: none while the missile is inside, just enough to keep the missile in sight while it is outside, easing back as it returns.
+_Avoid_: Zoom view, minimap, camera
 
 ### Bodies
 
