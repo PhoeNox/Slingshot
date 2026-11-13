@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import "./style.css";
-import { loadFont, loadSprites } from "./assets";
+import { loadFonts, loadSprites } from "./assets";
 import { adjustAim, createMatch, fire, matchView, step, type AimDelta, type Match } from "./core/match";
 import { applyFit, applyOverlayFit, fitPlayingArea } from "./display";
 import { describeBackdropFrame, describeFrame } from "./frame";
@@ -10,7 +10,7 @@ import { startGameLoop } from "./gameLoop";
 import { bindControls, bindEscape } from "./input";
 import { MAIN_MENU_ITEMS, type Screen } from "./navigation";
 import { drawFrame } from "./renderer";
-import { bindMainMenuButton, bindMenuFocusKeys, bindScreenRoutes, navigateBack, renderMenuItems, showScreen, type ScreenElements } from "./screens";
+import { bindBracketFlash, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, navigateBack, renderMenuItems, showScreen, type ScreenElements } from "./screens";
 
 interface MatchSession {
   screen: Screen;
@@ -38,7 +38,7 @@ async function start(): Promise<void> {
   const matchMenuButton = document.querySelector<HTMLButtonElement>("#match-menu-button")!;
 
   const sprites = await loadSprites();
-  await loadFont();
+  await loadFonts();
 
   const session: MatchSession = { screen: "mainMenu", match: undefined };
 
@@ -60,6 +60,12 @@ async function start(): Promise<void> {
 
   renderMenuItems(menu, MAIN_MENU_ITEMS);
   bindMenuFocusKeys(menu);
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const menuButtons = elements.overlay.querySelectorAll<HTMLButtonElement>(".menu button");
+  for (const button of menuButtons) {
+    bindMenuButtonEffects(button, reducedMotion);
+  }
+  bindBracketFlash(matchMenuButton);
   bindMainMenuButton(matchMenuButton);
   bindMainMenuButton(elements.creditsBackButton);
   const enterScreen = (screen: Screen) => {

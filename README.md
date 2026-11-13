@@ -19,12 +19,12 @@ A push to `main` builds the site and deploys it to GitHub Pages.
 
 ## Credits
 
-Slingshot was created by Jonathan Musther and Bart Mak, with later contributions by Marcus Dreier and Ryan Kavanagh. The original Python/pygame game lives at <https://github.com/ryanakca/slingshot>. The sprites and the FreeSansBold font in `public/data/` are taken from it.
+Slingshot was created by Jonathan Musther and Bart Mak, with later contributions by Marcus Dreier and Ryan Kavanagh. The original Python/pygame game lives at <https://github.com/ryanakca/slingshot>. The sprites in `public/data/` are taken from it. The Michroma (Vernon Adams) and Barlow Semi Condensed (Jeremy Tribby) fonts in `public/data/` are released under the SIL Open Font License 1.1.
 
 ## Licence
 
 This port is licensed under the GNU General Public License, version 3 or (at your option) any later version (GPL-3.0-or-later); see [LICENSE](LICENSE). The original game is released under GPL-2.0-or-later.
 
-Original game: Copyright (C) 2007 Jonathan Musther, Copyright (C) 2007 Bart Mak, Copyright (C) 2009 Marcus Dreier, Copyright (C) 2010 Ryan Kavanagh. FreeSansBold font: Copyright (C) 2002, 2003, 2005, 2008 Free Software Foundation. Browser port: Copyright (C) 2026 Thomas Eggerling.
+Original game: Copyright (C) 2007 Jonathan Musther, Copyright (C) 2007 Bart Mak, Copyright (C) 2009 Marcus Dreier, Copyright (C) 2010 Ryan Kavanagh. Michroma font: Copyright 2011 The Michroma Project Authors. Barlow Semi Condensed font: Copyright 2017 The Barlow Project Authors. Browser port: Copyright (C) 2026 Thomas Eggerling.
 
 Licensing follows the [REUSE](https://reuse.software) specification: each file carries SPDX copyright and licence tags, either in its header or in [REUSE.toml](REUSE.toml), and the licence texts live in [LICENSES/](LICENSES/).

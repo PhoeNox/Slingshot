@@ -5,7 +5,7 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { FONT_FAMILY } from "./assets";
+import { TEXT_FONT_FAMILY } from "./assets";
 import type {
   FillRectItem,
   FrameItem,
@@ -112,7 +112,7 @@ function drawText(context: CanvasRenderingContext2D, item: TextItem): void {
   context.save();
   context.globalAlpha = item.alpha;
   context.fillStyle = item.colour;
-  context.font = `${item.fontSize}px ${FONT_FAMILY}`;
+  context.font = `${item.fontSize}px "${TEXT_FONT_FAMILY}"`;
   context.textAlign = item.align;
   context.textBaseline = item.baseline;
   context.fillText(item.text, item.x, item.y);

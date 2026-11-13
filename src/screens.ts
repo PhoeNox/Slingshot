@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import { COLOURS } from "./colours";
 import { backTargetFor, hashFor, moveFocus, resolveHash, type FocusStep, type MenuItem, type Screen } from "./navigation";
+import { scrambleLabel } from "./scramble";
 
 export interface ScreenElements {
   overlay: HTMLElement;
@@ -18,6 +20,10 @@ const FOCUS_STEPS: Record<string, FocusStep> = {
   ArrowDown: 1,
   KeyS: 1,
 };
+
+const SCRAMBLE_DURATION_MS = 200;
+const BRACKET_FLASH_KEYFRAMES: Keyframe[] = [{ color: COLOURS.lock }, { color: COLOURS.phosphor }];
+const BRACKET_FLASH_OPTIONS: KeyframeAnimationOptions = { duration: 180, pseudoElement: "::before" };
 
 export function renderMenuItems(menu: HTMLElement, items: readonly MenuItem[]): void {
   const buttons = items.map(menuButton);
@@ -49,7 +55,49 @@ export function bindMenuFocusKeys(menu: HTMLElement): void {
   });
 }
 
+export function bindMenuButtonEffects(button: HTMLButtonElement, reducedMotion: MediaQueryList): void {
+  const label = button.textContent!;
+  button.setAttribute("aria-label", label);
+  button.addEventListener("pointerenter", () => {
+    button.focus();
+  });
+  button.addEventListener("focus", () => {
+    if (reducedMotion.matches || button.dataset.decoded !== undefined) {
+      return;
+    }
+    button.dataset.decoded = "";
+    playScramble(button, label);
+  });
+  bindBracketFlash(button);
+}
+
+export function bindBracketFlash(button: HTMLButtonElement): void {
+  button.addEventListener("click", () => {
+    button.animate(BRACKET_FLASH_KEYFRAMES, BRACKET_FLASH_OPTIONS);
+  });
+}
+
+function playScramble(button: HTMLButtonElement, label: string): void {
+  const startTime = performance.now();
+  const showScrambleFrame = (now: number) => {
+    const progress = Math.min((now - startTime) / SCRAMBLE_DURATION_MS, 1);
+    button.textContent = scrambleLabel(label, progress, Math.random);
+    if (progress < 1) {
+      requestAnimationFrame(showScrambleFrame);
+    }
+  };
+  requestAnimationFrame(showScrambleFrame);
+}
+
+function resetScrambles(overlay: HTMLElement): void {
+  const buttons = overlay.querySelectorAll("button");
+  for (const button of buttons) {
+    delete button.dataset.decoded;
+  }
+}
+
 export function showScreen(elements: ScreenElements, screen: Screen): void {
+  resetScrambles(elements.overlay);
   elements.overlay.hidden = screen === "match";
   elements.mainMenu.hidden = screen !== "mainMenu";
   elements.credits.hidden = screen !== "credits";

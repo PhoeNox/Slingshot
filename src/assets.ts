@@ -4,8 +4,11 @@
 import type { SpriteName } from "./frame";
 import type { Sprites } from "./renderer";
 
-export const FONT_FAMILY = "FreeSansBold";
-const FONT_SOURCE = "url(data/FreeSansBold.ttf)";
+export const TEXT_FONT_FAMILY = "Barlow Semi Condensed";
+const TEXT_FONT_SOURCE = "url(data/BarlowSemiCondensed-Medium.ttf)";
+const TEXT_FONT_DESCRIPTORS: FontFaceDescriptors = { weight: "500" };
+const TITLE_FONT_FAMILY = "Michroma";
+const TITLE_FONT_SOURCE = "url(data/Michroma-Regular.ttf)";
 const PLANET_SPRITES = [1, 2, 3, 4, 5, 6, 7, 8];
 
 async function loadImage(url: string): Promise<HTMLImageElement> {
@@ -39,8 +42,14 @@ export async function loadSprites(): Promise<Sprites> {
   };
 }
 
-export async function loadFont(): Promise<void> {
-  const font = new FontFace(FONT_FAMILY, FONT_SOURCE);
+async function loadFontFace(family: string, source: string, descriptors?: FontFaceDescriptors): Promise<void> {
+  const font = new FontFace(family, source, descriptors);
   await font.load();
   document.fonts.add(font);
+}
+
+export async function loadFonts(): Promise<void> {
+  const textLoad = loadFontFace(TEXT_FONT_FAMILY, TEXT_FONT_SOURCE, TEXT_FONT_DESCRIPTORS);
+  const titleLoad = loadFontFace(TITLE_FONT_FAMILY, TITLE_FONT_SOURCE);
+  await Promise.all([textLoad, titleLoad]);
 }
