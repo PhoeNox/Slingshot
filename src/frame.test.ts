@@ -112,7 +112,7 @@ function linesOf(frame: FrameItem[]): LinesItem[] {
 }
 
 function afterglowOf(frame: FrameItem[]): LinesItem[] {
-  return linesOf(frame).filter((item) => item.colour === COLOURS.phosphor && item.glow && item.segments.length === 1);
+  return linesOf(frame).filter((item) => item.glow && item.dash.length === 0 && item.segments.length === 1);
 }
 
 function bloomsOf(frame: FrameItem[]): BloomItem[] {

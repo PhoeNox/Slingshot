@@ -404,7 +404,7 @@ function flightItems(view: MatchView, flight: InFlightView): FrameItem[] {
 
 function afterglowItems(roundTrails: MatchView["trails"], flight: InFlightView): LinesItem[] {
   const fading = afterglowSegments(roundTrails, flight.stepsFlown);
-  return fading.map(({ segment, alpha }) => glowLinesItem(COLOURS.phosphor, [segment], alpha, SOLID));
+  return fading.map(({ segment, alpha }) => glowLinesItem(PLAYER_COLOURS[segment.shooter], [segment], alpha, SOLID));
 }
 
 function missileItem(flyingMissile: Readonly<Missile>): ImageItem {

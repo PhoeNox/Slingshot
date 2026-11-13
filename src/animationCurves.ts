@@ -13,8 +13,8 @@ interface RoundBanner {
   alpha: number;
 }
 
-interface FadingSegment {
-  segment: Readonly<Segment>;
+interface FadingSegment<S extends Segment> {
+  segment: Readonly<S>;
   alpha: number;
 }
 
@@ -41,7 +41,7 @@ const BANNER_DECAY_PER_STEP = 1.04;
 const BANNER_FONT_SIZE = 100;
 const BANNER_GROWTH_DIVISOR = 25;
 
-export function afterglowSegments(trail: readonly Readonly<Segment>[], stepsFlown: number): FadingSegment[] {
+export function afterglowSegments<S extends Segment>(trail: readonly Readonly<S>[], stepsFlown: number): FadingSegment<S>[] {
   const count = Math.min(stepsFlown, AFTERGLOW_STEPS);
   const recent = trail.slice(trail.length - count);
   return recent.map((segment, index) => ({
