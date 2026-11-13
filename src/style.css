@@ -52,6 +52,41 @@ body {
   display: none;
 }
 
+#credits {
+  box-sizing: border-box;
+  justify-content: safe center;
+  gap: 4cqh;
+  padding: 4cqh 4cqw;
+  overflow-y: auto;
+}
+
+#credits h1 {
+  font-size: 8cqh;
+}
+
+.credits-text {
+  max-width: 80cqw;
+  font-size: max(14px, 3cqh);
+}
+
+.credits-text p {
+  margin: 0 0 1em;
+}
+
+.credits-text .copyright {
+  color: #aaa;
+  font-size: 0.75em;
+}
+
+.credits-text a {
+  color: #fff;
+}
+
+.credits-text a:hover,
+.credits-text a:focus-visible {
+  color: #aaa;
+}
+
 .overlay-screen h1 {
   margin: 0;
   font-size: 12cqh;
@@ -101,18 +136,7 @@ body {
   color: #fff;
 }
 
-.key-hint,
-footer {
+.key-hint {
   margin: 0;
   padding: 4px 16px;
-}
-
-footer {
-  padding-bottom: 8px;
-  font-size: 12px;
-  color: #777;
-}
-
-footer a {
-  color: #aaa;
 }

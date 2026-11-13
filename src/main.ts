@@ -10,7 +10,7 @@ import { startGameLoop } from "./gameLoop";
 import { bindControls, bindEscape } from "./input";
 import { MAIN_MENU_ITEMS, type Screen } from "./navigation";
 import { drawFrame } from "./renderer";
-import { bindMatchMenuButton, bindScreenRoutes, navigateBack, renderMenuItems, showScreen, type ScreenElements } from "./screens";
+import { bindMainMenuButton, bindScreenRoutes, navigateBack, renderMenuItems, showScreen, type ScreenElements } from "./screens";
 
 interface MatchSession {
   screen: Screen;
@@ -29,6 +29,8 @@ async function start(): Promise<void> {
   const elements: ScreenElements = {
     overlay: document.querySelector<HTMLElement>("#overlay")!,
     mainMenu: document.querySelector<HTMLElement>("#main-menu")!,
+    credits: document.querySelector<HTMLElement>("#credits")!,
+    creditsBackButton: document.querySelector<HTMLButtonElement>("#credits-back-button")!,
     keyHint: document.querySelector<HTMLElement>(".key-hint")!,
     canvas,
   };
@@ -57,7 +59,8 @@ async function start(): Promise<void> {
   bindEscape(window, navigateBackFromCurrentScreen);
 
   renderMenuItems(menu, MAIN_MENU_ITEMS);
-  bindMatchMenuButton(matchMenuButton);
+  bindMainMenuButton(matchMenuButton);
+  bindMainMenuButton(elements.creditsBackButton);
   const enterScreen = (screen: Screen) => {
     session.screen = screen;
     session.match = screen === "match" ? createRandomMatch() : undefined;

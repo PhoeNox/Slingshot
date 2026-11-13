@@ -6,6 +6,8 @@ import { backTargetFor, hashFor, resolveHash, type MenuItem, type Screen } from 
 export interface ScreenElements {
   overlay: HTMLElement;
   mainMenu: HTMLElement;
+  credits: HTMLElement;
+  creditsBackButton: HTMLButtonElement;
   keyHint: HTMLElement;
   canvas: HTMLCanvasElement;
 }
@@ -29,16 +31,20 @@ function menuButton(item: MenuItem): HTMLButtonElement {
 export function showScreen(elements: ScreenElements, screen: Screen): void {
   elements.overlay.hidden = screen === "match";
   elements.mainMenu.hidden = screen !== "mainMenu";
+  elements.credits.hidden = screen !== "credits";
   elements.keyHint.style.visibility = screen === "match" ? "visible" : "hidden";
   if (screen === "mainMenu") {
     elements.mainMenu.querySelector("button")!.focus();
+  }
+  if (screen === "credits") {
+    elements.creditsBackButton.focus();
   }
   if (screen === "match") {
     elements.canvas.focus();
   }
 }
 
-export function bindMatchMenuButton(button: HTMLButtonElement): void {
+export function bindMainMenuButton(button: HTMLButtonElement): void {
   const mainMenuHash = hashFor("mainMenu");
   button.addEventListener("click", () => {
     location.hash = mainMenuHash;

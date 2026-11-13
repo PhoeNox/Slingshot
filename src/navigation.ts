@@ -27,7 +27,10 @@ const BACK_TARGETS: Record<Screen, Screen | undefined> = {
   credits: "mainMenu",
 };
 
-export const MAIN_MENU_ITEMS: readonly MenuItem[] = [{ label: "Play", screen: "match" }];
+export const MAIN_MENU_ITEMS: readonly MenuItem[] = [
+  { label: "Play", screen: "match" },
+  { label: "Credits", screen: "credits" },
+];
 
 export function resolveHash(hash: string): Route {
   const canonicalHash = hash === "" ? SCREEN_HASHES.mainMenu : hash;
