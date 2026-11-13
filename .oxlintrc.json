@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error"
+  },
+  "rules": {
+    "import/no-unassigned-import": ["error", { "allow": ["**/*.css"] }]
+  },
+  "overrides": [
+    {
+      "files": ["**/*.test.ts"],
+      "rules": {
+        "unicorn/consistent-function-scoping": "off",
+        "unicorn/no-array-sort": "off"
+      }
+    }
+  ],
+  "ignorePatterns": ["dist"]
+}

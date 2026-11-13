@@ -9,9 +9,14 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc",
+    "lint": "oxlint --deny-warnings",
+    "check": "npm run typecheck && npm run lint && npm test",
+    "prepare": "git config core.hooksPath .githooks"
   },
   "devDependencies": {
+    "oxlint": "^1.93.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
     "vitest": "^5.1.0"

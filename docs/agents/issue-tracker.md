@@ -8,7 +8,16 @@ Issues and specs (you may know a spec as a PRD) for this repo live as markdown f
 - The spec is `.scratch/<feature-slug>/spec.md`
 - Implementation issues are one file per ticket at `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` — never a single combined tickets file
 - Triage state is recorded as a `Status:` line near the top of each issue file (see `triage-labels.md` for the role strings)
+- A `Touches:` line under `Status:` lists the modules the ticket changes (names from `docs/architecture.md`), so implementation reads those first
 - Comments and conversation history append to the bottom of the file under a `## Comments` heading
+
+## Closing a ticket
+
+On the commit that completes a ticket, set its `Status:` to `done`, tick its checkboxes, and stage the issue file in that same commit. Scope dropped on the user's request goes under `## Comments` with a one-line reason.
+
+## Bugs found along the way
+
+A bug the user reports that the current session does not fix becomes its own issue file in the current feature directory with `Status: needs-triage`, holding the user's words and what was ruled out.
 
 ## When a skill says "publish to the issue tracker"
 
