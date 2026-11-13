@@ -30,17 +30,23 @@
             <div class="setting setting-group" role="group" aria-labelledby="planets-label">
               <span id="planets-label">Planets per round</span>
               <div class="range">
-                <label class="range-end">
+                <label class="range-end select-box">
                   <select id="min-planets-select"></select>
                   <span class="range-caption">min</span>
                 </label>
                 <span class="range-span" aria-hidden="true"></span>
-                <label class="range-end">
+                <label class="range-end select-box">
                   <select id="max-planets-select"></select>
                   <span class="range-caption">max</span>
                 </label>
               </div>
             </div>
+            <label class="setting">
+              Timeout
+              <span class="select-box">
+                <select id="timeout-select"></select>
+              </span>
+            </label>
           </div>
           <nav class="menu" aria-label="Settings">
             <button id="settings-back-button" type="button">Back</button>

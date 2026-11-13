@@ -9,20 +9,26 @@ import {
   parseSettings,
   PLANET_COUNT_CHOICES,
   serialiseSettings,
+  TIMEOUT_CHOICES,
   withMaxPlanets,
   withMinPlanets,
   type Settings,
 } from "./settings";
 
 describe("parseSettings", () => {
-  test("shows gravity-well contours and plays with 2 to 4 planets by default", () => {
-    expect(DEFAULT_SETTINGS).toEqual({ gravityWellContours: true, planetCount: { min: 2, max: 4 } });
+  test("shows gravity-well contours and plays with 2 to 4 planets and a 25 s timeout by default", () => {
+    expect(DEFAULT_SETTINGS).toEqual({
+      gravityWellContours: true,
+      planetCount: { min: 2, max: 4 },
+      timeoutSeconds: 25,
+    });
   });
 
   test.each<Settings>([
-    { gravityWellContours: true, planetCount: { min: 2, max: 4 } },
-    { gravityWellContours: false, planetCount: { min: 1, max: 6 } },
-    { gravityWellContours: true, planetCount: { min: 3, max: 3 } },
+    { gravityWellContours: true, planetCount: { min: 2, max: 4 }, timeoutSeconds: 25 },
+    { gravityWellContours: false, planetCount: { min: 1, max: 6 }, timeoutSeconds: 10 },
+    { gravityWellContours: true, planetCount: { min: 3, max: 3 }, timeoutSeconds: 50 },
+    { gravityWellContours: true, planetCount: { min: 2, max: 4 }, timeoutSeconds: undefined },
   ])("reads back serialised settings %j", (settings) => {
     expect(parseSettings(serialiseSettings(settings))).toEqual(settings);
   });
@@ -51,13 +57,37 @@ describe("parseSettings", () => {
   ])("falls back to the default planet count range for %s", (_, planetCount) => {
     const stored = JSON.stringify({ gravityWellContours: false, planetCount });
 
-    expect(parseSettings(stored)).toEqual({ gravityWellContours: false, planetCount: { min: 2, max: 4 } });
+    expect(parseSettings(stored)).toEqual({
+      gravityWellContours: false,
+      planetCount: { min: 2, max: 4 },
+      timeoutSeconds: 25,
+    });
+  });
+
+  test.each([
+    ["an unoffered duration", 30],
+    ["a non-numeric duration", "25"],
+    ["a missing duration", undefined],
+    ["an object", { seconds: 10 }],
+  ])("falls back to the 25 s timeout for %s", (_, timeoutSeconds) => {
+    const stored = JSON.stringify({ gravityWellContours: false, planetCount: { min: 1, max: 3 }, timeoutSeconds });
+
+    expect(parseSettings(stored)).toEqual({
+      gravityWellContours: false,
+      planetCount: { min: 1, max: 3 },
+      timeoutSeconds: 25,
+    });
   });
 
   test("ignores unknown fields", () => {
-    const stored = '{"gravityWellContours":false,"planetCount":{"min":1,"max":5,"mean":3},"volume":3}';
+    const stored =
+      '{"gravityWellContours":false,"planetCount":{"min":1,"max":5,"mean":3},"timeoutSeconds":null,"volume":3}';
 
-    expect(parseSettings(stored)).toEqual({ gravityWellContours: false, planetCount: { min: 1, max: 5 } });
+    expect(parseSettings(stored)).toEqual({
+      gravityWellContours: false,
+      planetCount: { min: 1, max: 5 },
+      timeoutSeconds: undefined,
+    });
   });
 });
 
@@ -83,10 +113,32 @@ describe("planet count choices", () => {
   });
 });
 
-describe("matchRulesFor", () => {
-  test("takes the planet count range from the settings and keeps the other default rules", () => {
-    const settings: Settings = { gravityWellContours: true, planetCount: { min: 5, max: 6 } };
+describe("timeout choices", () => {
+  test("offer 10 s, 25 s, 50 s and never", () => {
+    expect(TIMEOUT_CHOICES).toEqual([10, 25, 50, undefined]);
+  });
 
-    expect(matchRulesFor(settings)).toEqual({ ...DEFAULT_MATCH_RULES, planetCount: { min: 5, max: 6 } });
+  test("store never as null so it survives serialisation", () => {
+    const settings: Settings = { ...DEFAULT_SETTINGS, timeoutSeconds: undefined };
+
+    expect(JSON.parse(serialiseSettings(settings))).toHaveProperty("timeoutSeconds", null);
+  });
+});
+
+describe("matchRulesFor", () => {
+  test("takes the planet count range and the timeout from the settings", () => {
+    const settings: Settings = { gravityWellContours: true, planetCount: { min: 5, max: 6 }, timeoutSeconds: 10 };
+
+    expect(matchRulesFor(settings)).toEqual({ planetCount: { min: 5, max: 6 }, timeoutSeconds: 10 });
+  });
+
+  test("lets missiles never time out", () => {
+    const settings: Settings = { ...DEFAULT_SETTINGS, timeoutSeconds: undefined };
+
+    expect(matchRulesFor(settings).timeoutSeconds).toBeUndefined();
+  });
+
+  test("reproduces the default match rules from the default settings", () => {
+    expect(matchRulesFor(DEFAULT_SETTINGS)).toEqual(DEFAULT_MATCH_RULES);
   });
 });

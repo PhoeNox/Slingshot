@@ -205,12 +205,12 @@ body {
   align-items: center;
 }
 
-.range-end {
+.select-box {
   position: relative;
   display: flex;
 }
 
-.range-end select {
+.select-box select {
   appearance: none;
   margin: 0;
   padding: 0.15em 1.5em 0.15em 0.6em;
@@ -223,14 +223,14 @@ body {
   cursor: pointer;
 }
 
-.range-end select:focus {
+.select-box select:focus {
   outline: 1px solid var(--phosphor);
   outline-offset: 3px;
   border-color: var(--phosphor);
   text-shadow: var(--phosphor-glow-strong);
 }
 
-.range-end::after {
+.select-box::after {
   content: "";
   position: absolute;
   top: 50%;
@@ -243,11 +243,11 @@ body {
   pointer-events: none;
 }
 
-.range-end:focus-within::after {
+.select-box:focus-within::after {
   background: var(--phosphor);
 }
 
-.range-end option {
+.select-box option {
   background: var(--void);
 }
 

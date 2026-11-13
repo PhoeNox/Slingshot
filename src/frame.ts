@@ -396,14 +396,23 @@ function flightItems(view: MatchView, flight: InFlightView, display: Readonly<Di
   const afterglow = afterglowItems(view.trails, flight);
   const missile = view.zoomViewShown ? zoomViewItems(view, flight, display) : [missileItem(flight.missile)];
   const penaltyText = powerPenaltyText(view.powerPenalty);
-  const timeout = timeoutText(flight.missile.flightStepsLeft, flight.timedOut);
+  const timeout = timeoutItems(flight);
   return [
     ...ships,
     ...afterglow,
     ...missile,
     hudText(penaltyText, COLOURS.instrumentDim, SCREEN_CENTRE_X, HUD_TOP, "center", "top"),
-    hudText(timeout, COLOURS.instrumentDim, SCREEN_CENTRE_X, TIMEOUT_INFO_BOTTOM, "center", "bottom"),
+    ...timeout,
   ];
+}
+
+function timeoutItems(flight: InFlightView): TextItem[] {
+  const stepsLeft = flight.missile.flightStepsLeft;
+  if (stepsLeft === undefined) {
+    return [];
+  }
+  const text = timeoutText(stepsLeft, flight.timedOut);
+  return [hudText(text, COLOURS.instrumentDim, SCREEN_CENTRE_X, TIMEOUT_INFO_BOTTOM, "center", "bottom")];
 }
 
 function afterglowItems(roundTrails: MatchView["trails"], flight: InFlightView): LinesItem[] {
@@ -697,10 +706,7 @@ function powerPenaltyText(penalty: number): string {
   return `Power penalty: ${Math.trunc(penalty)}`;
 }
 
-function timeoutText(flightStepsLeft: number | undefined, timedOut: boolean): string {
-  if (flightStepsLeft === undefined) {
-    return "";
-  }
+function timeoutText(flightStepsLeft: number, timedOut: boolean): string {
   return timedOut ? "Shot timed out..." : `Timeout in ${flightStepsLeft}`;
 }
 

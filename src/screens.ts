@@ -4,7 +4,7 @@
 import { COLOURS } from "./colours";
 import { backTargetFor, hashFor, moveFocus, resolveHash, type FocusStep, type MenuItem, type Screen } from "./navigation";
 import { scrambleLabel } from "./scramble";
-import { PLANET_COUNT_CHOICES, withMaxPlanets, withMinPlanets, type Settings } from "./settings";
+import { PLANET_COUNT_CHOICES, TIMEOUT_CHOICES, withMaxPlanets, withMinPlanets, type Settings } from "./settings";
 
 export interface ScreenElements {
   overlay: HTMLElement;
@@ -13,6 +13,7 @@ export interface ScreenElements {
   contoursCheckbox: HTMLInputElement;
   minPlanetsSelect: HTMLSelectElement;
   maxPlanetsSelect: HTMLSelectElement;
+  timeoutSelect: HTMLSelectElement;
   credits: HTMLElement;
   creditsBackButton: HTMLButtonElement;
   keyHint: HTMLElement;
@@ -182,6 +183,30 @@ function renderPlanetCountOptions(select: HTMLSelectElement): void {
 function planetCountOption(count: number): HTMLOptionElement {
   const label = String(count);
   return new Option(label, label);
+}
+
+export function bindTimeoutSelect(
+  select: HTMLSelectElement,
+  settings: Settings,
+  saveSettings: (settings: Readonly<Settings>) => void,
+): void {
+  const options = TIMEOUT_CHOICES.map(timeoutOption);
+  select.replaceChildren(...options);
+  select.value = timeoutOptionValue(settings.timeoutSeconds);
+  select.addEventListener("change", () => {
+    settings.timeoutSeconds = TIMEOUT_CHOICES.find((seconds) => timeoutOptionValue(seconds) === select.value);
+    saveSettings(settings);
+  });
+}
+
+function timeoutOption(seconds: number | undefined): HTMLOptionElement {
+  const label = seconds === undefined ? "Never" : `${seconds} s`;
+  const value = timeoutOptionValue(seconds);
+  return new Option(label, value);
+}
+
+function timeoutOptionValue(seconds: number | undefined): string {
+  return seconds === undefined ? "never" : String(seconds);
 }
 
 export function bindMainMenuButton(button: HTMLButtonElement): void {

@@ -7,6 +7,7 @@ import { isInsidePlayingArea, type Segment } from "./core/flight";
 import {
   adjustAim,
   createMatch,
+  DEFAULT_MATCH_RULES,
   fire,
   matchView,
   step,
@@ -329,6 +330,24 @@ describe("HUD", () => {
 
     expect(textsOf(frameOfView(view))).toContain("Timeout in 750");
     expect(textsOf(frameOfView(timedOutView))).toContain("Shot timed out...");
+  });
+
+  test("draws no timeout readout when missiles never time out", () => {
+    const rules = { ...DEFAULT_MATCH_RULES, timeoutSeconds: undefined };
+    const match = createMatch(56, structuredClone(EMPTY_LAYOUT), rules);
+    fire(match);
+    const view = matchView(match);
+    if (view.phase.kind !== "inFlight") {
+      throw new Error("expected the missile to be in flight");
+    }
+    const timedOutView: MatchView = { ...view, phase: { ...view.phase, timedOut: true } };
+
+    for (const frame of [frameOfView(view), frameOfView(timedOutView)]) {
+      const texts = textsOf(frame);
+      expect(texts.some((text) => text.startsWith("Timeout in"))).toBe(false);
+      expect(texts).not.toContain("Shot timed out...");
+      expect(texts).not.toContain("");
+    }
   });
 
   test("shows the flight readouts in Instrument dim", () => {
