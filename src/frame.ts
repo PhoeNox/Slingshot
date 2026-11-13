@@ -195,10 +195,19 @@ const PLAYING_AREA: Readonly<Rect> = { left: 0, top: 0, width: PLAYING_AREA_WIDT
 export function describeFrame(view: MatchView, display: Readonly<DisplaySettings>): FrameItem[] {
   const scene = sceneItems(view, display);
   const zoomedScene = zoomedSceneItems(scene, view.zoom);
+  const border = bounceBorderItems(view.bounce);
   const hud = phaseHudItems(view);
   const scores = scoreItems(view.scores);
   const banner = roundBannerItems(view.roundNumber, view.roundStepCount);
-  return [...zoomedScene, ...hud, ...scores, ...banner];
+  return [...zoomedScene, ...border, ...hud, ...scores, ...banner];
+}
+
+function bounceBorderItems(bounce: boolean): StrokeRectItem[] {
+  if (!bounce) {
+    return [];
+  }
+  const outline = strokeOutline(PLAYING_AREA);
+  return [{ kind: "strokeRect", colour: COLOURS.instrumentDim, rect: outline }];
 }
 
 function sceneItems(view: MatchView, display: Readonly<DisplaySettings>): FrameItem[] {

@@ -7,12 +7,14 @@ export interface Settings {
   gravityWellContours: boolean;
   planetCount: Readonly<PlanetCountRange>;
   timeoutSeconds: number | undefined;
+  bounce: boolean;
 }
 
 export const DEFAULT_SETTINGS: Readonly<Settings> = {
   gravityWellContours: true,
   planetCount: DEFAULT_MATCH_RULES.planetCount,
   timeoutSeconds: DEFAULT_MATCH_RULES.timeoutSeconds,
+  bounce: DEFAULT_MATCH_RULES.bounce,
 };
 
 const FEWEST_PLANETS = 1;
@@ -37,7 +39,8 @@ export function parseSettings(stored: string | null): Settings {
     typeof fields.gravityWellContours === "boolean" ? fields.gravityWellContours : DEFAULT_SETTINGS.gravityWellContours;
   const planetCount = parsePlanetCount(fields.planetCount);
   const timeoutSeconds = parseTimeoutSeconds(fields.timeoutSeconds);
-  return { gravityWellContours, planetCount, timeoutSeconds };
+  const bounce = typeof fields.bounce === "boolean" ? fields.bounce : DEFAULT_SETTINGS.bounce;
+  return { gravityWellContours, planetCount, timeoutSeconds, bounce };
 }
 
 function parsePlanetCount(value: unknown): Readonly<PlanetCountRange> {
@@ -80,5 +83,5 @@ export function withMaxPlanets(range: Readonly<PlanetCountRange>, max: number): 
 }
 
 export function matchRulesFor(settings: Readonly<Settings>): MatchRules {
-  return { planetCount: settings.planetCount, timeoutSeconds: settings.timeoutSeconds };
+  return { planetCount: settings.planetCount, timeoutSeconds: settings.timeoutSeconds, bounce: settings.bounce };
 }

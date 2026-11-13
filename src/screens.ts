@@ -14,6 +14,7 @@ export interface ScreenElements {
   minPlanetsSelect: HTMLSelectElement;
   maxPlanetsSelect: HTMLSelectElement;
   timeoutSelect: HTMLSelectElement;
+  bounceCheckbox: HTMLInputElement;
   credits: HTMLElement;
   creditsBackButton: HTMLButtonElement;
   keyHint: HTMLElement;
@@ -146,6 +147,18 @@ export function bindContoursCheckbox(
   checkbox.checked = settings.gravityWellContours;
   checkbox.addEventListener("change", () => {
     settings.gravityWellContours = checkbox.checked;
+    saveSettings(settings);
+  });
+}
+
+export function bindBounceCheckbox(
+  checkbox: HTMLInputElement,
+  settings: Settings,
+  saveSettings: (settings: Readonly<Settings>) => void,
+): void {
+  checkbox.checked = settings.bounce;
+  checkbox.addEventListener("change", () => {
+    settings.bounce = checkbox.checked;
     saveSettings(settings);
   });
 }

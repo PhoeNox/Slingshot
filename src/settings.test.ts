@@ -16,19 +16,20 @@ import {
 } from "./settings";
 
 describe("parseSettings", () => {
-  test("shows gravity-well contours and plays with 2 to 4 planets and a 25 s timeout by default", () => {
+  test("shows gravity-well contours and plays with 2 to 4 planets, a 25 s timeout and no bounce by default", () => {
     expect(DEFAULT_SETTINGS).toEqual({
       gravityWellContours: true,
       planetCount: { min: 2, max: 4 },
       timeoutSeconds: 25,
+      bounce: false,
     });
   });
 
   test.each<Settings>([
-    { gravityWellContours: true, planetCount: { min: 2, max: 4 }, timeoutSeconds: 25 },
-    { gravityWellContours: false, planetCount: { min: 1, max: 6 }, timeoutSeconds: 10 },
-    { gravityWellContours: true, planetCount: { min: 3, max: 3 }, timeoutSeconds: 50 },
-    { gravityWellContours: true, planetCount: { min: 2, max: 4 }, timeoutSeconds: undefined },
+    { gravityWellContours: true, planetCount: { min: 2, max: 4 }, timeoutSeconds: 25, bounce: false },
+    { gravityWellContours: false, planetCount: { min: 1, max: 6 }, timeoutSeconds: 10, bounce: true },
+    { gravityWellContours: true, planetCount: { min: 3, max: 3 }, timeoutSeconds: 50, bounce: false },
+    { gravityWellContours: true, planetCount: { min: 2, max: 4 }, timeoutSeconds: undefined, bounce: true },
   ])("reads back serialised settings %j", (settings) => {
     expect(parseSettings(serialiseSettings(settings))).toEqual(settings);
   });
@@ -61,6 +62,7 @@ describe("parseSettings", () => {
       gravityWellContours: false,
       planetCount: { min: 2, max: 4 },
       timeoutSeconds: 25,
+      bounce: false,
     });
   });
 
@@ -76,17 +78,36 @@ describe("parseSettings", () => {
       gravityWellContours: false,
       planetCount: { min: 1, max: 3 },
       timeoutSeconds: 25,
+      bounce: false,
+    });
+  });
+
+  test.each([
+    ["a non-boolean value", "yes"],
+    ["a number", 1],
+    ["null", null],
+    ["a missing value", undefined],
+  ])("falls back to no bounce for %s", (_, bounce) => {
+    const fields = { gravityWellContours: false, planetCount: { min: 1, max: 3 }, timeoutSeconds: 10, bounce };
+    const stored = JSON.stringify(fields);
+
+    expect(parseSettings(stored)).toEqual({
+      gravityWellContours: false,
+      planetCount: { min: 1, max: 3 },
+      timeoutSeconds: 10,
+      bounce: false,
     });
   });
 
   test("ignores unknown fields", () => {
     const stored =
-      '{"gravityWellContours":false,"planetCount":{"min":1,"max":5,"mean":3},"timeoutSeconds":null,"volume":3}';
+      '{"gravityWellContours":false,"planetCount":{"min":1,"max":5,"mean":3},"timeoutSeconds":null,"bounce":true,"volume":3}';
 
     expect(parseSettings(stored)).toEqual({
       gravityWellContours: false,
       planetCount: { min: 1, max: 5 },
       timeoutSeconds: undefined,
+      bounce: true,
     });
   });
 });
@@ -126,10 +147,15 @@ describe("timeout choices", () => {
 });
 
 describe("matchRulesFor", () => {
-  test("takes the planet count range and the timeout from the settings", () => {
-    const settings: Settings = { gravityWellContours: true, planetCount: { min: 5, max: 6 }, timeoutSeconds: 10 };
+  test("takes the planet count range, the timeout and bounce from the settings", () => {
+    const settings: Settings = {
+      gravityWellContours: true,
+      planetCount: { min: 5, max: 6 },
+      timeoutSeconds: 10,
+      bounce: true,
+    };
 
-    expect(matchRulesFor(settings)).toEqual({ planetCount: { min: 5, max: 6 }, timeoutSeconds: 10 });
+    expect(matchRulesFor(settings)).toEqual({ planetCount: { min: 5, max: 6 }, timeoutSeconds: 10, bounce: true });
   });
 
   test("lets missiles never time out", () => {

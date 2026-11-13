@@ -30,6 +30,7 @@ export interface ShotRecord {
 export interface Missile extends ShotRecord {
   stepsFlown: number;
   flightStepsLeft: number | undefined;
+  bounces: boolean;
 }
 
 export interface Segment {
@@ -80,8 +81,8 @@ function offsetAlong(origin: Readonly<Point>, direction: Readonly<Point>, distan
   };
 }
 
-export function launchMissile(shot: ShotRecord, timeoutSteps: number | undefined): Missile {
-  return { ...shot, stepsFlown: 0, flightStepsLeft: timeoutSteps };
+export function launchMissile(shot: ShotRecord, timeoutSteps: number | undefined, bounces: boolean): Missile {
+  return { ...shot, stepsFlown: 0, flightStepsLeft: timeoutSteps, bounces };
 }
 
 export function flyMissile(
@@ -91,13 +92,16 @@ export function flyMissile(
 ): FlightStep {
   const from = { x: missile.x, y: missile.y };
   advanceMissile(missile, planets);
-  const leftTrackingArea = !isInsideTrackingArea(missile);
+  const leftTrackingArea = !missile.bounces && !isInsideTrackingArea(missile);
   const hitPlanet = !leftTrackingArea && stopAtPlanetSurface(missile, from, planets);
   const hitShip = leftTrackingArea ? undefined : stopAtShip(missile, from, ships);
+  const hitSomething = hitPlanet || hitShip !== undefined;
+  if (missile.bounces && !hitSomething) {
+    reflectOffEdges(missile, from);
+  }
   const shotEnded = leftTrackingArea
-    || hitPlanet
-    || hitShip !== undefined
-    || isLostAfterTimeout(missile);
+    || hitSomething
+    || isEndedByTimeout(missile);
   const to = { x: missile.x, y: missile.y };
   return { segment: { from, to }, shotEnded, hitShip };
 }
@@ -137,8 +141,35 @@ export function hasTimedOut(missile: Readonly<Missile>): boolean {
   return missile.flightStepsLeft !== undefined && missile.flightStepsLeft < 0;
 }
 
-function isLostAfterTimeout(missile: Readonly<Missile>): boolean {
-  return hasTimedOut(missile) && !isInsidePlayingArea(missile);
+function isEndedByTimeout(missile: Readonly<Missile>): boolean {
+  return hasTimedOut(missile) && (missile.bounces || !isInsidePlayingArea(missile));
+}
+
+function reflectOffEdges(missile: Missile, from: Readonly<Point>): void {
+  const crossingX = edgeCrossingFraction(from.x, missile.x, PLAYING_AREA_WIDTH);
+  const crossingY = edgeCrossingFraction(from.y, missile.y, PLAYING_AREA_HEIGHT);
+  const crossing = Math.min(crossingX, crossingY);
+  if (crossing === Infinity) {
+    return;
+  }
+  missile.x = from.x + crossing * (missile.x - from.x);
+  missile.y = from.y + crossing * (missile.y - from.y);
+  if (crossingX === crossing) {
+    missile.vx = -missile.vx;
+  }
+  if (crossingY === crossing) {
+    missile.vy = -missile.vy;
+  }
+}
+
+function edgeCrossingFraction(from: number, to: number, extent: number): number {
+  if (to < 0) {
+    return from / (from - to);
+  }
+  if (to > extent) {
+    return (extent - from) / (to - from);
+  }
+  return Infinity;
 }
 
 function stopAtPlanetSurface(missile: Missile, from: Readonly<Point>, planets: readonly Readonly<Planet>[]): boolean {

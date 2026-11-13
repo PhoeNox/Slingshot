@@ -1023,12 +1023,12 @@ describe("previewShot", () => {
 });
 
 describe("match rules", () => {
-  const FIVE_TO_SIX_PLANETS: MatchRules = { planetCount: { min: 5, max: 6 }, timeoutSeconds: 25 };
-  const TEN_SECOND_TIMEOUT: MatchRules = { planetCount: { min: 2, max: 4 }, timeoutSeconds: 10 };
-  const NO_TIMEOUT: MatchRules = { planetCount: { min: 2, max: 4 }, timeoutSeconds: undefined };
+  const FIVE_TO_SIX_PLANETS: MatchRules = { planetCount: { min: 5, max: 6 }, timeoutSeconds: 25, bounce: false };
+  const TEN_SECOND_TIMEOUT: MatchRules = { planetCount: { min: 2, max: 4 }, timeoutSeconds: 10, bounce: false };
+  const NO_TIMEOUT: MatchRules = { planetCount: { min: 2, max: 4 }, timeoutSeconds: undefined, bounce: false };
 
-  test("default match rules are two to four planets and a 25 second timeout", () => {
-    expect(DEFAULT_MATCH_RULES).toEqual({ planetCount: { min: 2, max: 4 }, timeoutSeconds: 25 });
+  test("default match rules are two to four planets, a 25 second timeout and no bounce", () => {
+    expect(DEFAULT_MATCH_RULES).toEqual({ planetCount: { min: 2, max: 4 }, timeoutSeconds: 25, bounce: false });
   });
 
   test("omitted match rules play exactly like the default match rules", () => {
@@ -1116,5 +1116,138 @@ describe("match rules", () => {
 
     expect(isInsidePlayingArea(inFlight(match).missile)).toBe(false);
     expect(matchView(match).phase.kind).toBe("inFlight");
+  });
+});
+
+describe("bounce", () => {
+  const BOUNCE_TEN_SECOND_TIMEOUT: MatchRules = { planetCount: { min: 2, max: 4 }, timeoutSeconds: 10, bounce: true };
+  const BOUNCE_NO_TIMEOUT: MatchRules = { planetCount: { min: 2, max: 4 }, timeoutSeconds: undefined, bounce: true };
+
+  function bounceMatch(seed: number, rules = BOUNCE_NO_TIMEOUT): Match {
+    return createMatch(seed, fixedLayout([]), rules);
+  }
+
+  function stepUntilReflected(match: Match): void {
+    const launched = { ...inFlight(match).missile };
+    for (let i = 0; i < 1000; i++) {
+      step(match);
+      const flying = inFlight(match).missile;
+      if (Math.sign(flying.vx) !== Math.sign(launched.vx) || Math.sign(flying.vy) !== Math.sign(launched.vy)) {
+        return;
+      }
+    }
+    throw new Error("missile not reflected after 1000 steps");
+  }
+
+  test.each([
+    ["top", 0, "y", 0],
+    ["bottom", 180, "y", 600],
+  ] as const)("a missile crossing the %s edge is placed on it with its vertical velocity reversed", (
+    _,
+    angle,
+    axis,
+    edge,
+  ) => {
+    const match = bounceMatch(81);
+    aimAt(match, angle, 100);
+    fire(match);
+    const launched = { ...inFlight(match).missile };
+
+    stepUntilReflected(match);
+
+    const flying = inFlight(match).missile;
+    expect(flying[axis]).toBeCloseTo(edge, 9);
+    expect(flying.vx).toBe(launched.vx);
+    expect(flying.vy).toBe(-launched.vy);
+  });
+
+  test("a missile crossing its own ship's side edge is placed on it with its horizontal velocity reversed", () => {
+    const match = bounceMatch(82);
+    const shooter = matchView(match).activePlayer;
+    aimAt(match, shooter === "left" ? 270 : 90, 100);
+    fire(match);
+    const launched = { ...inFlight(match).missile };
+
+    stepUntilReflected(match);
+
+    const flying = inFlight(match).missile;
+    expect(flying.x).toBeCloseTo(shooter === "left" ? 0 : 800, 9);
+    expect(flying.vx).toBe(-launched.vx);
+    expect(flying.vy).toBe(launched.vy);
+  });
+
+  test("the reflection happens where the step crosses the edge, not at the step's end point", () => {
+    const match = bounceMatch(83);
+    aimAt(match, matchView(match).activePlayer === "left" ? 30 : 330, 250);
+    fire(match);
+    const launched = { ...inFlight(match).missile };
+
+    stepUntilReflected(match);
+
+    const crossing = matchView(match).trails.at(-1)!;
+    const crossingSlope = (crossing.to.x - crossing.from.x) / (crossing.to.y - crossing.from.y);
+    expect(crossing.to.y).toBeCloseTo(0, 9);
+    expect(crossingSlope).toBeCloseTo(launched.vx / launched.vy, 9);
+    expect(inFlight(match).missile).toMatchObject(crossing.to);
+  });
+
+  test("a missile never leaves the playing area, so the view never zooms", () => {
+    const match = bounceMatch(84);
+    aimAt(match, 30, 350);
+    fire(match);
+
+    for (let i = 0; i < 2000 && matchView(match).phase.kind === "inFlight"; i++) {
+      step(match);
+      const position = shotEndPoint(match);
+      expect(position.x).toBeGreaterThanOrEqual(0);
+      expect(position.x).toBeLessThanOrEqual(800);
+      expect(position.y).toBeGreaterThanOrEqual(0);
+      expect(position.y).toBeLessThanOrEqual(600);
+      expect(zoomOf(match)).toEqual(NO_ZOOM);
+    }
+  });
+
+  test("the shot ends on the step the timeout is reached, never showing a timed-out missile in flight", () => {
+    const match = bounceMatch(85, BOUNCE_TEN_SECOND_TIMEOUT);
+    const shooter = matchView(match).activePlayer;
+    aimAt(match, 0, 0);
+    fire(match);
+
+    for (let i = 0; i < 300; i++) {
+      step(match);
+      expect(inFlight(match).timedOut).toBe(false);
+    }
+    step(match);
+
+    expect(matchView(match).phase.kind).toBe("aiming");
+    expect(matchView(match).activePlayer).not.toBe(shooter);
+  });
+
+  test("without a timeout a missile keeps flying until it hits something", () => {
+    const match = bounceMatch(86);
+    aimAt(match, 0, 0);
+    fire(match);
+
+    for (let i = 0; i < 2000; i++) {
+      step(match);
+    }
+
+    expect(matchView(match).phase.kind).toBe("inFlight");
+  });
+
+  test("a missile reflected back onto its own ship ends the round", () => {
+    const match = bounceMatch(87);
+    const shooter = matchView(match).activePlayer;
+    aimAt(match, 180, 100);
+    fire(match);
+
+    stepUntilShotEnds(match, 1000);
+
+    expect(roundOver(match).result.hitShip).toBe(shooter);
+  });
+
+  test("the match view reports whether the match bounces", () => {
+    expect(matchView(bounceMatch(88)).bounce).toBe(true);
+    expect(matchView(createMatch(88)).bounce).toBe(false);
   });
 });

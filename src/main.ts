@@ -10,7 +10,7 @@ import { startGameLoop } from "./gameLoop";
 import { bindControls, bindEscape } from "./input";
 import { MAIN_MENU_ITEMS, type Screen } from "./navigation";
 import { drawFrame, drawShakenFrame } from "./renderer";
-import { bindBracketFlash, bindContoursCheckbox, bindMainMenuButton, bindPlanetCountSelects, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, bindTimeoutSelect, navigateBack, renderMenuItems, showScreen, traceTitleArc, type ScreenElements } from "./screens";
+import { bindBounceCheckbox, bindBracketFlash, bindContoursCheckbox, bindMainMenuButton, bindPlanetCountSelects, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, bindTimeoutSelect, navigateBack, renderMenuItems, showScreen, traceTitleArc, type ScreenElements } from "./screens";
 import { matchRulesFor, parseSettings, serialiseSettings, type Settings } from "./settings";
 import { readStoredSettings, writeStoredSettings } from "./settingsStorage";
 import { createScreenSession, describeScreenSessionFrame, enterScreen, screenSessionShake, stepScreenSession } from "./screenSession";
@@ -40,6 +40,7 @@ async function start(): Promise<void> {
     minPlanetsSelect: document.querySelector<HTMLSelectElement>("#min-planets-select")!,
     maxPlanetsSelect: document.querySelector<HTMLSelectElement>("#max-planets-select")!,
     timeoutSelect: document.querySelector<HTMLSelectElement>("#timeout-select")!,
+    bounceCheckbox: document.querySelector<HTMLInputElement>("#bounce-checkbox")!,
     credits: document.querySelector<HTMLElement>("#credits")!,
     creditsBackButton: document.querySelector<HTMLButtonElement>("#credits-back-button")!,
     keyHint: document.querySelector<HTMLElement>(".key-hint")!,
@@ -87,6 +88,7 @@ async function start(): Promise<void> {
   bindContoursCheckbox(elements.contoursCheckbox, settings, saveSettings);
   bindPlanetCountSelects(elements.minPlanetsSelect, elements.maxPlanetsSelect, settings, saveSettings);
   bindTimeoutSelect(elements.timeoutSelect, settings, saveSettings);
+  bindBounceCheckbox(elements.bounceCheckbox, settings, saveSettings);
   const enterAndShowScreen = (screen: Screen) => {
     const seed = randomSeed();
     const matchRules = matchRulesFor(settings);

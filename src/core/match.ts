@@ -71,11 +71,13 @@ interface TrailSegment {
 export interface MatchRules {
   planetCount: PlanetCountRange;
   timeoutSeconds: number | undefined;
+  bounce: boolean;
 }
 
 export const DEFAULT_MATCH_RULES: DeepReadonly<MatchRules> = {
   planetCount: { min: 2, max: 4 },
   timeoutSeconds: 25,
+  bounce: false,
 };
 
 const STEPS_PER_SECOND = 30;
@@ -133,6 +135,7 @@ interface MatchViewState extends Omit<MatchState, "phase"> {
   phase: PhaseView;
   aimLine: Segment;
   powerPenalty: number;
+  bounce: boolean;
 }
 
 export type MatchView = DeepReadonly<MatchViewState>;
@@ -296,7 +299,7 @@ export function previewShot(match: Readonly<Match>, aim: Readonly<Aim>, stepLimi
 
 function launchMissileUnderRules(shot: ShotRecord, rules: DeepReadonly<MatchRules>): Missile {
   const timeoutSteps = rules.timeoutSeconds === undefined ? undefined : rules.timeoutSeconds * STEPS_PER_SECOND;
-  return launchMissile(shot, timeoutSteps);
+  return launchMissile(shot, timeoutSteps, rules.bounce);
 }
 
 function previewFlight(missile: Missile, match: Readonly<Match>, stepLimit: number): ShotPreview {
@@ -336,6 +339,7 @@ export function matchView(match: Match): MatchView {
     aimLine,
     powerPenalty,
     zoom: match.zoom,
+    bounce: match.rules.bounce,
   };
 }
 

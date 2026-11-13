@@ -376,6 +376,40 @@ describe("HUD", () => {
   });
 });
 
+describe("bounce border", () => {
+  const BOUNCE_RULES = { ...DEFAULT_MATCH_RULES, bounce: true };
+  const BORDER: StrokeRectItem = {
+    kind: "strokeRect",
+    colour: COLOURS.instrumentDim,
+    rect: { left: 0.5, top: 0.5, width: 799, height: 599 },
+  };
+
+  test("a steady playing-area border is drawn in every match phase while bounce is on", () => {
+    const match = createMatch(90, structuredClone(EMPTY_LAYOUT), BOUNCE_RULES);
+    const aimingFrame = frameOf(match);
+    fire(match);
+    step(match);
+    const flightFrame = frameOf(match);
+    stepUntil(match, () => matchView(match).phase.kind === "roundOver");
+    const roundOverFrame = frameOf(match);
+
+    for (const frame of [aimingFrame, flightFrame, roundOverFrame]) {
+      expect(strokeRectsOf(frame)).toContainEqual(BORDER);
+    }
+  });
+
+  test("no border is drawn without bounce", () => {
+    const match = emptyMatch(91);
+    const aimingFrame = frameOf(match);
+    fire(match);
+    step(match);
+
+    for (const frame of [aimingFrame, frameOf(match)]) {
+      expect(strokeRectsOf(frame)).toHaveLength(0);
+    }
+  });
+});
+
 describe("missile trail", () => {
   test("a finished shot leaves a solid trail in the shooter's colour", () => {
     const match = emptyMatch(20);
