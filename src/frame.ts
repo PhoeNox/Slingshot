@@ -5,51 +5,26 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import { afterglowSegments, explosionBloom, explosionSize, roundBanner, trailAlpha } from "./animationCurves";
 import { COLOURS } from "./colours";
 import type { Missile, Point, Segment } from "./core/flight";
-import type { InFlightView, MatchView, RoundOverView, RoundResult } from "./core/match";
-import { PLAYING_AREA_HEIGHT, PLAYING_AREA_WIDTH } from "./core/playingArea";
-import type { Aim, Planet, Ship, Side } from "./core/round";
+import type { InFlightView, MatchView, RoundOutcome, RoundOverView, RoundResult } from "./core/match";
 import {
-  afterglowSegments,
-  angleInfoText,
-  centredBox,
-  cornerBrackets,
-  explosionBloom,
-  explosionSize,
-  gravityWellContourRadii,
-  gridLines,
-  insetRect,
-  MESSAGE_LABEL_LEFT,
-  MESSAGE_PROMPT_TEXT,
-  MESSAGE_TEXT_CENTRE_X,
-  MESSAGE_VALUE_RIGHT,
-  planetBox,
-  powerInfoText,
-  powerPenaltyText,
-  roundBanner,
-  roundOverMessageBox,
-  roundOverTextTops,
-  roundOverTitle,
-  scoreBreakdownRows,
-  scoreChangeText,
-  scoreTexts,
-  SHIP_FRAME_HEIGHT,
-  SHIP_FRAME_OFFSET_LEFT,
-  SHIP_FRAME_OFFSET_TOP,
-  SHIP_FRAME_WIDTH,
-  shipPose,
-  strokeOutline,
-  timeoutText,
-  trailAlpha,
-  ZOOM_SCALE,
-  ZOOM_VIEW,
-  ZOOMED_PLAYING_AREA,
-  zoomedMissileSize,
-  zoomViewPoint,
-  zoomViewSegment,
-  type Rect,
-} from "./presentation";
+  PLAYING_AREA_HEIGHT,
+  PLAYING_AREA_WIDTH,
+  TRACKING_AREA_BOTTOM,
+  TRACKING_AREA_LEFT,
+  TRACKING_AREA_RIGHT,
+  TRACKING_AREA_TOP,
+} from "./core/playingArea";
+import type { Aim, Planet, Ship, Side } from "./core/round";
+
+export interface Rect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
 
 export type SpriteName = "backdrop" | "missile" | "explosion" | `${Side}Ship` | `planet${number}`;
 
@@ -141,16 +116,50 @@ export type FrameItem =
   | TextItem
   | GroupItem;
 
+interface ShipPose {
+  rotation: number;
+  frameLeft: number;
+  nextFrameLeft: number;
+  nextFrameWeight: number;
+}
+
+interface BreakdownRow {
+  label: string;
+  value: string;
+  top: number;
+}
+
+interface RoundOverTextTops {
+  title: number;
+  scoreChange: number;
+  prompt: number;
+}
+
 const SIDES: readonly Side[] = ["left", "right"];
 
+const PLAYER_NAMES: Record<Side, string> = { left: "Player 1", right: "Player 2" };
 const PLAYER_COLOURS: Record<Side, string> = { left: COLOURS.leftPlayer, right: COLOURS.rightPlayer };
 const SOLID: number[] = [];
+
+const SCREEN_CENTRE_X = 399;
+const SCREEN_CENTRE_Y = 299;
+
+const SHIP_FRAME_WIDTH = 40;
+const SHIP_FRAME_HEIGHT = 33;
+const SHIP_FRAME_OFFSET_LEFT = -SHIP_FRAME_WIDTH / 2;
+const SHIP_FRAME_OFFSET_TOP = -Math.floor(SHIP_FRAME_HEIGHT / 2);
+const SHIP_FRAME_COUNT = 8;
+const SHIP_FRAME_ANGLE = 360 / SHIP_FRAME_COUNT;
+const SHIP_SHEET_FACING_ANGLE: Record<Side, number> = { left: 90, right: 270 };
 
 const AIM_DASH = [8, 6];
 const AIM_TIP_RADIUS = 5;
 
 const BRACKET_LENGTH = 14;
 
+const PLANET_SPRITE_FILL = 0.96;
+const GRAVITY_WELL_CONTOUR_COUNT = 3;
+const GRAVITY_WELL_CONTOUR_SPACING_PER_SQRT_MASS = 1.5;
 const GRAVITY_WELL_CONTOUR_ALPHA = 0.45;
 
 const MISSILE_SPRITE_SIZE = 25;
@@ -159,8 +168,6 @@ const HUD_FONT_SIZE = 14;
 const HUD_TOP = 5;
 const ANGLE_INFO_LEFT = 290;
 const POWER_INFO_LEFT = 403;
-const POWER_PENALTY_CENTRE_X = 399;
-const TIMEOUT_INFO_CENTRE_X = 399;
 const TIMEOUT_INFO_BOTTOM = 594;
 const LEFT_SCORE_LEFT = 5;
 const RIGHT_SCORE_RIGHT = 794;
@@ -169,14 +176,45 @@ const GLASS_COLOUR = "rgba(4, 8, 21, 0.78)";
 const PANEL_OUTLINE_GAP = 4;
 const PANEL_TITLE_FONT_SIZE = 16;
 
+const MESSAGE_WIDTH = 450;
+const MESSAGE_BASE_HEIGHT = 190;
+const MESSAGE_HIT_EXTRA_HEIGHT = 40;
+const MESSAGE_TEXT_CENTRE_X = 224;
+const MESSAGE_LABEL_LEFT = 50;
+const MESSAGE_VALUE_RIGHT = 399;
+const MESSAGE_TITLE_TOP = 28;
+const MESSAGE_FIRST_ROW_TOP = 65;
+const MESSAGE_ROW_HEIGHT = 20;
+const MESSAGE_SCORE_CHANGE_TOP = 100;
+const MESSAGE_PROMPT_TOP = 140;
+const MESSAGE_PROMPT_TEXT = "Press Space or Enter for the next round";
+
 const ZOOM_DIM_COLOUR = "rgba(4, 8, 21, 0.75)";
 const ZOOM_GRID_SPACING = 50;
 const ZOOM_GRID_ALPHA = 0.3;
+const ZOOM_SCALE = 0.25;
+const ZOOM_MISSILE_SCALE = 1 / 3;
+const ZOOMED_MISSILE_SIZE = MISSILE_SPRITE_SIZE * ZOOM_MISSILE_SCALE;
+const ZOOM_VIEW_WIDTH = (TRACKING_AREA_RIGHT - TRACKING_AREA_LEFT) * ZOOM_SCALE;
+const ZOOM_VIEW_HEIGHT = (TRACKING_AREA_BOTTOM - TRACKING_AREA_TOP) * ZOOM_SCALE;
+const ZOOM_VIEW_LEFT = (PLAYING_AREA_WIDTH - ZOOM_VIEW_WIDTH) / 2;
+const ZOOM_VIEW_TOP = (PLAYING_AREA_HEIGHT - ZOOM_VIEW_HEIGHT) / 2;
+
+const ZOOM_VIEW: Readonly<Rect> = {
+  left: ZOOM_VIEW_LEFT,
+  top: ZOOM_VIEW_TOP,
+  width: ZOOM_VIEW_WIDTH,
+  height: ZOOM_VIEW_HEIGHT,
+};
+
+const ZOOMED_PLAYING_AREA: Readonly<Rect> = {
+  left: ZOOM_VIEW_LEFT - TRACKING_AREA_LEFT * ZOOM_SCALE,
+  top: ZOOM_VIEW_TOP - TRACKING_AREA_TOP * ZOOM_SCALE,
+  width: PLAYING_AREA_WIDTH * ZOOM_SCALE,
+  height: PLAYING_AREA_HEIGHT * ZOOM_SCALE,
+};
 
 const ATTRACT_DIM_COLOUR = "rgba(4, 8, 21, 0.55)";
-
-const BANNER_CENTRE_X = 399;
-const BANNER_CENTRE_Y = 299;
 
 const PLAYING_AREA: Readonly<Rect> = { left: 0, top: 0, width: PLAYING_AREA_WIDTH, height: PLAYING_AREA_HEIGHT };
 
@@ -359,8 +397,8 @@ function flightItems(view: MatchView, flight: InFlightView): FrameItem[] {
     ...ships,
     ...afterglow,
     ...missile,
-    hudText(penaltyText, COLOURS.instrumentDim, POWER_PENALTY_CENTRE_X, HUD_TOP, "center", "top"),
-    hudText(timeout, COLOURS.instrumentDim, TIMEOUT_INFO_CENTRE_X, TIMEOUT_INFO_BOTTOM, "center", "bottom"),
+    hudText(penaltyText, COLOURS.instrumentDim, SCREEN_CENTRE_X, HUD_TOP, "center", "top"),
+    hudText(timeout, COLOURS.instrumentDim, SCREEN_CENTRE_X, TIMEOUT_INFO_BOTTOM, "center", "bottom"),
   ];
 }
 
@@ -414,8 +452,7 @@ function zoomedLinesItem(item: LinesItem): LinesItem {
 
 function zoomedMissileItem(flyingMissile: Readonly<Missile>): ImageItem {
   const centre = zoomViewPoint(flyingMissile);
-  const size = zoomedMissileSize(MISSILE_SPRITE_SIZE, MISSILE_SPRITE_SIZE);
-  const box = centredBox(centre, size.width, size.height);
+  const box = centredBox(centre, ZOOMED_MISSILE_SIZE, ZOOMED_MISSILE_SIZE);
   return imageItem("missile", box);
 }
 
@@ -447,8 +484,8 @@ function roundBannerItems(round: number, stepsIntoRound: number): TextItem[] {
     {
       kind: "text",
       text: banner.text,
-      x: BANNER_CENTRE_X,
-      y: BANNER_CENTRE_Y,
+      x: SCREEN_CENTRE_X,
+      y: SCREEN_CENTRE_Y,
       colour: COLOURS.phosphor,
       font: "title",
       fontSize: banner.fontSize,
@@ -554,4 +591,160 @@ function roundOverTitleItem(result: Readonly<RoundResult>, top: number): TextIte
     baseline: "top",
     alpha: 1,
   };
+}
+
+function shipPose(aimAngle: number, side: Side): ShipPose {
+  const rotationDegrees = (aimAngle - SHIP_SHEET_FACING_ANGLE[side] + 360) % 360;
+  const frame = Math.floor(rotationDegrees / SHIP_FRAME_ANGLE);
+  const nextFrame = (frame + 1) % SHIP_FRAME_COUNT;
+  return {
+    rotation: (rotationDegrees * Math.PI) / 180,
+    frameLeft: frame * SHIP_FRAME_WIDTH,
+    nextFrameLeft: nextFrame * SHIP_FRAME_WIDTH,
+    nextFrameWeight: (rotationDegrees - frame * SHIP_FRAME_ANGLE) / SHIP_FRAME_ANGLE,
+  };
+}
+
+function gravityWellContourRadii(planet: Readonly<Planet>): number[] {
+  const spacing = Math.sqrt(planet.mass) * GRAVITY_WELL_CONTOUR_SPACING_PER_SQRT_MASS;
+  return Array.from({ length: GRAVITY_WELL_CONTOUR_COUNT }, (_, index) => planet.radius + (index + 1) * spacing);
+}
+
+function planetBox(planet: Readonly<Planet>): Rect {
+  const size = Math.round((2 * planet.radius) / PLANET_SPRITE_FILL);
+  return {
+    left: planet.x - Math.floor(size / 2),
+    top: planet.y - Math.floor(size / 2),
+    width: size,
+    height: size,
+  };
+}
+
+function centredBox(centre: Readonly<Point>, width: number, height: number): Rect {
+  return { left: centre.x - width / 2, top: centre.y - height / 2, width, height };
+}
+
+function strokeOutline(rect: Readonly<Rect>): Rect {
+  return { left: rect.left + 0.5, top: rect.top + 0.5, width: rect.width - 1, height: rect.height - 1 };
+}
+
+function insetRect(rect: Readonly<Rect>, inset: number): Rect {
+  return {
+    left: rect.left + inset,
+    top: rect.top + inset,
+    width: rect.width - 2 * inset,
+    height: rect.height - 2 * inset,
+  };
+}
+
+function cornerBrackets(rect: Readonly<Rect>, length: number): Segment[] {
+  const right = rect.left + rect.width;
+  const bottom = rect.top + rect.height;
+  const corners = [
+    { x: rect.left, y: rect.top, dx: 1, dy: 1 },
+    { x: right, y: rect.top, dx: -1, dy: 1 },
+    { x: rect.left, y: bottom, dx: 1, dy: -1 },
+    { x: right, y: bottom, dx: -1, dy: -1 },
+  ];
+  return corners.flatMap(({ x, y, dx, dy }) => [
+    { from: { x, y }, to: { x: x + dx * length, y } },
+    { from: { x, y }, to: { x, y: y + dy * length } },
+  ]);
+}
+
+function gridLines(rect: Readonly<Rect>, spacing: number): Segment[] {
+  const right = rect.left + rect.width;
+  const bottom = rect.top + rect.height;
+  const columnCount = Math.ceil(rect.width / spacing) - 1;
+  const rowCount = Math.ceil(rect.height / spacing) - 1;
+  const columns = Array.from({ length: columnCount }, (_, index) => {
+    const x = rect.left + (index + 1) * spacing;
+    return { from: { x, y: rect.top }, to: { x, y: bottom } };
+  });
+  const rows = Array.from({ length: rowCount }, (_, index) => {
+    const y = rect.top + (index + 1) * spacing;
+    return { from: { x: rect.left, y }, to: { x: right, y } };
+  });
+  return [...columns, ...rows];
+}
+
+function zoomViewPoint(point: Readonly<Point>): Point {
+  return {
+    x: ZOOMED_PLAYING_AREA.left + point.x * ZOOM_SCALE,
+    y: ZOOMED_PLAYING_AREA.top + point.y * ZOOM_SCALE,
+  };
+}
+
+function zoomViewSegment(segment: Readonly<Segment>): Segment {
+  const from = zoomViewPoint(segment.from);
+  const to = zoomViewPoint(segment.to);
+  return { from, to };
+}
+
+function angleInfoText(aim: Readonly<Aim>): string {
+  return `Angle: ${aim.angle.toFixed(2)}`;
+}
+
+function powerInfoText(aim: Readonly<Aim>): string {
+  return `Power: ${aim.power.toFixed(1)}`;
+}
+
+function powerPenaltyText(penalty: number): string {
+  return `Power penalty: ${Math.trunc(penalty)}`;
+}
+
+function timeoutText(flightStepsLeft: number, timedOut: boolean): string {
+  return timedOut ? "Shot timed out..." : `Timeout in ${flightStepsLeft}`;
+}
+
+function scoreTexts(scores: Readonly<Record<Side, number>>): Record<Side, string> {
+  return {
+    left: `${PLAYER_NAMES.left}  --  ${scores.left}`,
+    right: `${scores.right}  --  ${PLAYER_NAMES.right}`,
+  };
+}
+
+function roundOverMessageBox(outcome: RoundOutcome): Rect {
+  const height = MESSAGE_BASE_HEIGHT + (outcome === "hit" ? MESSAGE_HIT_EXTRA_HEIGHT : 0);
+  return {
+    left: SCREEN_CENTRE_X - MESSAGE_WIDTH / 2,
+    top: SCREEN_CENTRE_Y - Math.floor(height / 2),
+    width: MESSAGE_WIDTH,
+    height,
+  };
+}
+
+function roundOverTextTops(outcome: RoundOutcome): RoundOverTextTops {
+  const rowsOffset = outcome === "hit" ? MESSAGE_HIT_EXTRA_HEIGHT : 0;
+  return {
+    title: MESSAGE_TITLE_TOP,
+    scoreChange: MESSAGE_SCORE_CHANGE_TOP + rowsOffset,
+    prompt: MESSAGE_PROMPT_TOP + rowsOffset,
+  };
+}
+
+function roundOverTitle(result: Readonly<RoundResult>): string {
+  const shooterName = PLAYER_NAMES[result.shooter];
+  return result.outcome === "hit"
+    ? `${shooterName} hit ${PLAYER_NAMES[result.hitShip].toLowerCase()}`
+    : `${shooterName} hit their own ship`;
+}
+
+function scoreBreakdownRows(result: Readonly<RoundResult>): BreakdownRow[] {
+  const entries: [string, number][] = result.outcome === "selfHit"
+    ? [["Hit self:", result.baseScore]]
+    : [
+        ["Hit opponent:", result.baseScore],
+        ["Quick-hit bonus:", result.quickHitBonus],
+        ["Power penalty:", -result.powerPenalty],
+      ];
+  return entries.map(([label, value], index) => ({
+    label,
+    value: `${value}`,
+    top: MESSAGE_FIRST_ROW_TOP + index * MESSAGE_ROW_HEIGHT,
+  }));
+}
+
+function scoreChangeText(scoreChange: number): string {
+  return scoreChange >= 0 ? `${scoreChange} added to score` : `${-scoreChange} deducted from score`;
 }
