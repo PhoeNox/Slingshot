@@ -88,38 +88,55 @@ export function launchMissile(shot: ShotRecord, timeoutSteps: number | undefined
   return { ...shot, stepsFlown: 0, flightStepsLeft: timeoutSteps, bounces };
 }
 
+export interface BodyStep {
+  from: Point;
+  velocity: Point;
+  planetContact: Point | undefined;
+  tracked: boolean;
+}
+
 export function flyMissile(
   missile: Missile,
   planets: readonly Readonly<Planet>[],
   ships: Readonly<Record<Side, Readonly<Ship>>>,
 ): FlightStep {
-  const from = { x: missile.x, y: missile.y };
-  advanceMissile(missile, planets);
-  const leftTrackingArea = !missile.bounces && !isInsideTrackingArea(missile);
-  const hitPlanet = !leftTrackingArea && stopAtPlanetSurface(missile, from, planets);
-  const hitShip = leftTrackingArea ? undefined : stopAtShip(missile, from, ships);
-  const hitSomething = hitPlanet || hitShip !== undefined;
-  if (missile.bounces && !hitSomething) {
-    reflectOffEdges(missile, from);
-  }
-  const shotEnded = leftTrackingArea
-    || hitSomething
+  countFlightStep(missile);
+  const bodyStep = moveBody(missile, planets, missile.bounces);
+  const hitPlanet = bodyStep.planetContact !== undefined;
+  const hitShip = bodyStep.tracked ? stopAtShip(missile, bodyStep, ships) : undefined;
+  const shotEnded = !bodyStep.tracked
+    || hitPlanet
+    || hitShip !== undefined
     || isEndedByTimeout(missile);
   const to = { x: missile.x, y: missile.y };
-  return { segment: { from, to }, shotEnded, hitPlanet, hitShip };
+  return { segment: { from: bodyStep.from, to }, shotEnded, hitPlanet, hitShip };
 }
 
-function advanceMissile(missile: Missile, planets: readonly Readonly<Planet>[]): void {
+function countFlightStep(missile: Missile): void {
   missile.stepsFlown++;
   if (missile.flightStepsLeft !== undefined) {
     missile.flightStepsLeft--;
   }
-  applyGravity(missile, planets);
-  missile.x += missile.vx;
-  missile.y += missile.vy;
 }
 
-export function applyGravity(body: Body, planets: readonly Readonly<Planet>[]): void {
+export function moveBody(body: Body, planets: readonly Readonly<Planet>[], bounces: boolean): BodyStep {
+  const from = { x: body.x, y: body.y };
+  applyGravity(body, planets);
+  const velocity = { x: body.vx, y: body.vy };
+  body.x += body.vx;
+  body.y += body.vy;
+  const tracked = bounces || isInsideTrackingArea(body);
+  const planetContact = planetEntryPoint(from, body, planets);
+  if (planetContact !== undefined) {
+    body.x = planetContact.x;
+    body.y = planetContact.y;
+  } else if (bounces) {
+    reflectOffEdges(body, from);
+  }
+  return { from, velocity, planetContact, tracked };
+}
+
+function applyGravity(body: Body, planets: readonly Readonly<Planet>[]): void {
   for (const planet of planets) {
     const dx = body.x - planet.x;
     const dy = body.y - planet.y;
@@ -130,7 +147,7 @@ export function applyGravity(body: Body, planets: readonly Readonly<Planet>[]): 
   }
 }
 
-export function isInsideTrackingArea(point: Readonly<Point>): boolean {
+function isInsideTrackingArea(point: Readonly<Point>): boolean {
   return point.x >= TRACKING_AREA_LEFT
     && point.x < TRACKING_AREA_RIGHT
     && point.y >= TRACKING_AREA_TOP
@@ -152,7 +169,7 @@ function isEndedByTimeout(missile: Readonly<Missile>): boolean {
   return hasTimedOut(missile) && (missile.bounces || !isInsidePlayingArea(missile));
 }
 
-export function reflectOffEdges(body: Body, from: Readonly<Point>): void {
+function reflectOffEdges(body: Body, from: Readonly<Point>): void {
   const crossingX = edgeCrossingFraction(from.x, body.x, PLAYING_AREA_WIDTH);
   const crossingY = edgeCrossingFraction(from.y, body.y, PLAYING_AREA_HEIGHT);
   const crossing = Math.min(crossingX, crossingY);
@@ -179,17 +196,7 @@ function edgeCrossingFraction(from: number, to: number, extent: number): number 
   return Infinity;
 }
 
-function stopAtPlanetSurface(missile: Missile, from: Readonly<Point>, planets: readonly Readonly<Planet>[]): boolean {
-  const entry = planetEntryPoint(from, missile, planets);
-  if (entry === undefined) {
-    return false;
-  }
-  missile.x = entry.x;
-  missile.y = entry.y;
-  return true;
-}
-
-export function planetEntryPoint(
+function planetEntryPoint(
   from: Readonly<Point>,
   to: Readonly<Point>,
   planets: readonly Readonly<Planet>[],
@@ -216,13 +223,13 @@ export function planetEntryPoint(
 
 function stopAtShip(
   missile: Missile,
-  from: Readonly<Point>,
+  bodyStep: Readonly<BodyStep>,
   ships: Readonly<Record<Side, Readonly<Ship>>>,
 ): Side | undefined {
   const radiusSquared = SHIP_HIT_RADIUS * SHIP_HIT_RADIUS;
   for (let i = 0; i < SHIP_HIT_SAMPLES; i++) {
-    const sampleX = from.x + i * SHIP_HIT_SAMPLE_SPACING * missile.vx;
-    const sampleY = from.y + i * SHIP_HIT_SAMPLE_SPACING * missile.vy;
+    const sampleX = bodyStep.from.x + i * SHIP_HIT_SAMPLE_SPACING * bodyStep.velocity.x;
+    const sampleY = bodyStep.from.y + i * SHIP_HIT_SAMPLE_SPACING * bodyStep.velocity.y;
     for (const side of ["left", "right"] as const) {
       const dx = sampleX - ships[side].x;
       const dy = sampleY - ships[side].y;

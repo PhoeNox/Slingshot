@@ -1,14 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import {
-  applyGravity,
-  isInsideTrackingArea,
-  planetEntryPoint,
-  reflectOffEdges,
-  type Body,
-  type Point,
-} from "./core/flight";
+import { moveBody, type Body, type BodyStep, type Point } from "./core/flight";
 import type { Planet } from "./core/round";
 
 export type ParticleSize = "large" | "small";
@@ -66,31 +59,22 @@ export function stepDebris(
 ): Particle[] {
   const next: Particle[] = [];
   for (const particle of particles) {
-    const contact = moveParticle(particle, planets, bounce);
-    if (contact === undefined) {
-      next.push(...survivors(particle, bounce));
+    const { planetContact, tracked } = moveParticle(particle, planets, bounce);
+    if (planetContact === undefined) {
+      next.push(...survivors(particle, tracked));
     } else if (particle.size === "large") {
-      next.push(...burstDebris(contact, "small", bounce, random));
+      next.push(...burstDebris(planetContact, "small", bounce, random));
     }
   }
   return next;
 }
 
-function moveParticle(particle: Particle, planets: readonly Readonly<Planet>[], bounce: boolean): Point | undefined {
-  const from = { x: particle.x, y: particle.y };
-  applyGravity(particle, planets);
-  particle.x += particle.vx;
-  particle.y += particle.vy;
+function moveParticle(particle: Particle, planets: readonly Readonly<Planet>[], bounce: boolean): BodyStep {
   particle.stepsLeft--;
-  const contact = planetEntryPoint(from, particle, planets);
-  if (contact === undefined && bounce) {
-    reflectOffEdges(particle, from);
-  }
-  return contact;
+  return moveBody(particle, planets, bounce);
 }
 
-function survivors(particle: Particle, bounce: boolean): Particle[] {
-  const tracked = bounce || isInsideTrackingArea(particle);
+function survivors(particle: Particle, tracked: boolean): Particle[] {
   return tracked && particle.stepsLeft > 0 ? [particle] : [];
 }
 

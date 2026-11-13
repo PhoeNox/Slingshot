@@ -10,7 +10,7 @@ Pure, seeded, no DOM, canvas, or clock (ADR-0001).
 | --- | --- |
 | `match.ts` | Match state machine: `createMatch`, `step`, `adjustAim`, `fire`, `previewShot`, read-only `matchView` |
 | `round.ts` | Round layout generation (ships, planets), `Ship`/`Planet`/`Aim` types, `BARREL_DISTANCE` |
-| `flight.ts` | Missile physics: launch, gravity step, planet/ship collision (`flyMissile`), timeout, `STEPS_PER_SECOND` |
+| `flight.ts` | Body and missile physics: `moveBody` (gravity, planet contact, edge reflection under bounce, tracking) shared by missiles and debris; launch, ship collision (`flyMissile`), timeout, `STEPS_PER_SECOND` |
 | `scoring.ts` | Round results, power penalty, next-round shooter |
 | `zoom.ts` | View zoom per step: `nextZoom(previous, missile)` fits an out-of-area missile, leans toward its side, eases back |
 | `attract.ts` | Self-playing demo match behind the main menu |
@@ -34,7 +34,7 @@ Pure, seeded, no DOM, canvas, or clock (ADR-0001).
 | `renderer.ts` | Draws `FrameItem`s onto the canvas |
 | `animationCurves.ts` | Afterglow, trail fade, explosion, round banner curves |
 | `screenShake.ts` | Shake offset after hits |
-| `debris.ts` | Cosmetic impact particles: bursts, gravity, splitting on planets, fade-out |
+| `debris.ts` | Cosmetic impact particles: bursts, motion via core `moveBody`, splitting on planets, fade-out; state and unseeded randomness stay outside the core |
 | `stars.ts` / `starLayer.ts` | Star field generation / drawing |
 | `display.ts` | Fits canvas and overlay to the window |
 | `assets.ts` | Sprite and font loading |
