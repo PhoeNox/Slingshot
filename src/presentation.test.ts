@@ -3,8 +3,10 @@
 
 import { describe, expect, test } from "vitest";
 import type { RoundResult } from "./core/match";
+import type { Planet } from "./core/round";
 import {
   explosionSize,
+  gravityWellContourRadii,
   roundBanner,
   roundOverMessageBox,
   roundOverTitle,
@@ -76,6 +78,29 @@ describe("shipPose", () => {
     expect(pose.nextFrameLeft).toBe(0);
     expect(pose.nextFrameWeight).toBeCloseTo(0.5);
     expect(pose.rotation).toBeCloseTo((337.5 * Math.PI) / 180);
+  });
+});
+
+describe("gravityWellContourRadii", () => {
+  const light: Planet = { sprite: 1, mass: 8, radius: 25, x: 400, y: 300 };
+  const heavy: Planet = { sprite: 2, mass: 512, radius: 100, x: 400, y: 300 };
+
+  test("rings lie outside the planet in increasing order", () => {
+    const radii = gravityWellContourRadii(light);
+
+    expect(radii).toHaveLength(3);
+    expect(radii[0]).toBeGreaterThan(light.radius);
+    expect(radii[1]).toBeGreaterThan(radii[0]);
+    expect(radii[2]).toBeGreaterThan(radii[1]);
+  });
+
+  test("a heavier planet has a wider contour set", () => {
+    const lightRadii = gravityWellContourRadii(light);
+    const heavyRadii = gravityWellContourRadii(heavy);
+
+    const lightWidth = lightRadii[2] - light.radius;
+    const heavyWidth = heavyRadii[2] - heavy.radius;
+    expect(heavyWidth).toBeGreaterThan(lightWidth);
   });
 });
 

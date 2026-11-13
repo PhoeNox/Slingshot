@@ -12,6 +12,7 @@ import type {
   GroupItem,
   ImageItem,
   LinesItem,
+  RingItem,
   SpriteFrameItem,
   SpriteName,
   StrokeRectItem,
@@ -35,6 +36,9 @@ function drawItem(context: CanvasRenderingContext2D, sprites: Sprites, item: Fra
       break;
     case "spriteFrame":
       drawSpriteFrame(context, sprites, item);
+      break;
+    case "ring":
+      drawRing(context, item);
       break;
     case "lines":
       drawLines(context, item);
@@ -75,6 +79,17 @@ function drawSpriteFrame(context: CanvasRenderingContext2D, sprites: Sprites, it
     target.width,
     target.height,
   );
+  context.restore();
+}
+
+function drawRing(context: CanvasRenderingContext2D, item: RingItem): void {
+  context.save();
+  context.globalAlpha = item.alpha;
+  context.strokeStyle = item.colour;
+  context.lineWidth = LINE_WIDTH;
+  context.beginPath();
+  context.arc(item.centre.x, item.centre.y, item.radius, 0, 2 * Math.PI);
+  context.stroke();
   context.restore();
 }
 

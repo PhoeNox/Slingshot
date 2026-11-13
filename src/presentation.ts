@@ -58,6 +58,8 @@ const SHIP_FRAME_ANGLE = 360 / SHIP_FRAME_COUNT;
 const SHIP_SHEET_FACING_ANGLE: Record<Side, number> = { left: 90, right: 270 };
 
 const PLANET_SPRITE_FILL = 0.96;
+const GRAVITY_WELL_CONTOUR_COUNT = 3;
+const GRAVITY_WELL_CONTOUR_SPACING_PER_SQRT_MASS = 1.5;
 
 const PLAYER_NAMES: Record<Side, string> = { left: "Player 1", right: "Player 2" };
 
@@ -117,6 +119,11 @@ export function shipPose(aimAngle: number, side: Side): ShipPose {
     nextFrameLeft: nextFrame * SHIP_FRAME_WIDTH,
     nextFrameWeight: (rotationDegrees - frame * SHIP_FRAME_ANGLE) / SHIP_FRAME_ANGLE,
   };
+}
+
+export function gravityWellContourRadii(planet: Readonly<Planet>): number[] {
+  const spacing = Math.sqrt(planet.mass) * GRAVITY_WELL_CONTOUR_SPACING_PER_SQRT_MASS;
+  return Array.from({ length: GRAVITY_WELL_CONTOUR_COUNT }, (_, index) => planet.radius + (index + 1) * spacing);
 }
 
 export function planetBox(planet: Readonly<Planet>): Rect {

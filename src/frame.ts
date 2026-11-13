@@ -5,7 +5,8 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import type { Missile, Segment } from "./core/flight";
+import { COLOURS } from "./colours";
+import type { Missile, Point, Segment } from "./core/flight";
 import {
   aimLine,
   isTimedOut,
@@ -17,11 +18,12 @@ import {
   type RoundResult,
 } from "./core/match";
 import { PLAYING_AREA_HEIGHT, PLAYING_AREA_WIDTH } from "./core/playingArea";
-import type { Aim, Ship, Side } from "./core/round";
+import type { Aim, Planet, Ship, Side } from "./core/round";
 import {
   angleInfoText,
   centredBox,
   explosionSize,
+  gravityWellContourRadii,
   MESSAGE_LABEL_LEFT,
   MESSAGE_PROMPT_TEXT,
   MESSAGE_TEXT_CENTRE_X,
@@ -74,6 +76,14 @@ export interface SpriteFrameItem {
   alpha: number;
 }
 
+export interface RingItem {
+  kind: "ring";
+  colour: string;
+  centre: Point;
+  radius: number;
+  alpha: number;
+}
+
 export interface LinesItem {
   kind: "lines";
   colour: string;
@@ -110,12 +120,22 @@ export interface GroupItem {
   items: FrameItem[];
 }
 
-export type FrameItem = ImageItem | SpriteFrameItem | LinesItem | FillRectItem | StrokeRectItem | TextItem | GroupItem;
+export type FrameItem =
+  | ImageItem
+  | SpriteFrameItem
+  | RingItem
+  | LinesItem
+  | FillRectItem
+  | StrokeRectItem
+  | TextItem
+  | GroupItem;
 
 const SIDES: readonly Side[] = ["left", "right"];
 
 const SHIP_COLOURS: Record<Side, string> = { left: "rgb(209, 170, 133)", right: "rgb(132, 152, 192)" };
 const TEXT_COLOUR = "#fff";
+
+const GRAVITY_WELL_CONTOUR_ALPHA = 0.45;
 
 const MISSILE_SPRITE_SIZE = 25;
 
@@ -181,12 +201,27 @@ function hudText(
   return { kind: "text", text, x, y, colour, fontSize: HUD_FONT_SIZE, align, baseline, alpha: 1 };
 }
 
-function planetItems(roundPlanets: MatchView["planets"]): ImageItem[] {
-  return roundPlanets.map((planet) => {
-    const sprite: SpriteName = `planet${planet.sprite}`;
-    const box = planetBox(planet);
-    return imageItem(sprite, box);
-  });
+function planetItems(roundPlanets: MatchView["planets"]): FrameItem[] {
+  const contours = roundPlanets.flatMap(gravityWellContourItems);
+  const sprites = roundPlanets.map(planetSpriteItem);
+  return [...contours, ...sprites];
+}
+
+function gravityWellContourItems(planet: Readonly<Planet>): RingItem[] {
+  const radii = gravityWellContourRadii(planet);
+  return radii.map((radius) => ({
+    kind: "ring",
+    colour: COLOURS.instrumentDim,
+    centre: { x: planet.x, y: planet.y },
+    radius,
+    alpha: GRAVITY_WELL_CONTOUR_ALPHA,
+  }));
+}
+
+function planetSpriteItem(planet: Readonly<Planet>): ImageItem {
+  const sprite: SpriteName = `planet${planet.sprite}`;
+  const box = planetBox(planet);
+  return imageItem(sprite, box);
 }
 
 function trailItems(roundTrails: MatchView["trails"]): LinesItem[] {

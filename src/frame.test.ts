@@ -2,11 +2,23 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { describe, expect, test } from "vitest";
+import { COLOURS } from "./colours";
 import { isInsidePlayingArea } from "./core/flight";
 import { adjustAim, aimLine, createMatch, fire, matchView, step, type Match, type RoundLayout } from "./core/match";
-import type { Side } from "./core/round";
-import { describeBackdropFrame, describeFrame, type FrameItem, type GroupItem, type ImageItem, type SpriteFrameItem } from "./frame";
-import { angleInfoText, powerInfoText, roundOverTitle, ZOOM_SCALE } from "./presentation";
+import type { Planet, Side } from "./core/round";
+import {
+  describeBackdropFrame,
+  describeFrame,
+  type FrameItem,
+  type GroupItem,
+  type ImageItem,
+  type RingItem,
+  type SpriteFrameItem,
+} from "./frame";
+import { angleInfoText, gravityWellContourRadii, powerInfoText, roundOverTitle, ZOOM_SCALE } from "./presentation";
+
+const LIGHT_PLANET: Planet = { sprite: 1, mass: 8, radius: 25, x: 300, y: 200 };
+const HEAVY_PLANET: Planet = { sprite: 2, mass: 512, radius: 100, x: 500, y: 400 };
 
 const EMPTY_LAYOUT: RoundLayout = {
   ships: {
@@ -18,6 +30,17 @@ const EMPTY_LAYOUT: RoundLayout = {
 
 function emptyMatch(seed: number): Match {
   return createMatch(seed, structuredClone(EMPTY_LAYOUT));
+}
+
+function planetMatch(seed: number): Match {
+  const layout = { ...structuredClone(EMPTY_LAYOUT), planets: [{ ...LIGHT_PLANET }, { ...HEAVY_PLANET }] };
+  return createMatch(seed, layout);
+}
+
+function ringsAround(frame: FrameItem[], planet: Planet): RingItem[] {
+  return frame.filter(
+    (item): item is RingItem => item.kind === "ring" && item.centre.x === planet.x && item.centre.y === planet.y,
+  );
 }
 
 function frameOf(match: Match): FrameItem[] {
@@ -96,6 +119,36 @@ describe("aiming frame", () => {
 
     expect(imagesOf(frame, "missile")).toHaveLength(0);
     expect(textsOf(frame).some((text) => text.startsWith("Power penalty"))).toBe(false);
+  });
+});
+
+describe("gravity-well contours", () => {
+  test("surround each planet with faint rings at its contour radii", () => {
+    const frame = frameOf(planetMatch(11));
+
+    for (const planet of [LIGHT_PLANET, HEAVY_PLANET]) {
+      const rings = ringsAround(frame, planet);
+      expect(rings.map((ring) => ring.radius)).toEqual(gravityWellContourRadii(planet));
+      expect(rings.every((ring) => ring.colour === COLOURS.instrumentDim && ring.alpha < 1)).toBe(true);
+    }
+  });
+
+  test("are drawn beneath the planet sprites", () => {
+    const frame = frameOf(planetMatch(12));
+
+    const kinds = frame.map((item) => (item.kind === "image" ? item.sprite : item.kind));
+    const lastRing = kinds.lastIndexOf("ring");
+    const firstPlanet = kinds.findIndex((kind) => kind.startsWith("planet"));
+    expect(lastRing).toBeGreaterThanOrEqual(0);
+    expect(lastRing).toBeLessThan(firstPlanet);
+  });
+
+  test("a heavier planet has a wider contour set", () => {
+    const frame = frameOf(planetMatch(13));
+
+    const lightOuter = Math.max(...ringsAround(frame, LIGHT_PLANET).map((ring) => ring.radius));
+    const heavyOuter = Math.max(...ringsAround(frame, HEAVY_PLANET).map((ring) => ring.radius));
+    expect(heavyOuter - HEAVY_PLANET.radius).toBeGreaterThan(lightOuter - LIGHT_PLANET.radius);
   });
 });
 
@@ -211,6 +264,7 @@ describe("backdrop-only frame", () => {
       expect.objectContaining({ target: { left: 0, top: 0, width: 800, height: 600 } }),
     ]);
     expect(shipSpritesOf(frame).size).toBe(0);
+    expect(frame.some((item) => item.kind === "ring")).toBe(false);
     expect(imagesOf(frame, "missile")).toHaveLength(0);
     expect(frame.some((item) => item.kind === "image" && item.sprite.startsWith("planet"))).toBe(false);
     expect(textsOf(frame)).toHaveLength(0);
