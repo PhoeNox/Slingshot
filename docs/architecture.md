@@ -10,8 +10,9 @@ Pure, seeded, no DOM, canvas, or clock (ADR-0001).
 | --- | --- |
 | `match.ts` | Match state machine: `createMatch`, `step`, `adjustAim`, `fire`, `previewShot`, read-only `matchView` |
 | `round.ts` | Round layout generation (ships, planets), `Ship`/`Planet`/`Aim` types, `BARREL_DISTANCE` |
-| `flight.ts` | Missile physics: launch, gravity step, planet/ship collision (`flyMissile`), timeout |
+| `flight.ts` | Missile physics: launch, gravity step, planet/ship collision (`flyMissile`), timeout, `STEPS_PER_SECOND` |
 | `scoring.ts` | Round results, power penalty, next-round shooter |
+| `zoom.ts` | View zoom per step: `nextZoom(previous, missile)` fits an out-of-area missile, leans toward its side, eases back |
 | `attract.ts` | Self-playing demo match behind the main menu |
 | `playingArea.ts` | Playing and tracking area bounds |
 | `random.ts` | Seeded PRNG |

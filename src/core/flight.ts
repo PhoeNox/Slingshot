@@ -15,6 +15,8 @@ import {
 } from "./playingArea";
 import type { Aim, Planet, Ship, Side } from "./round";
 
+export const STEPS_PER_SECOND = 30;
+
 export interface Point {
   x: number;
   y: number;

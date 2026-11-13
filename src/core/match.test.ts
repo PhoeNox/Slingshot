@@ -580,53 +580,6 @@ describe("zoom", () => {
     expect(zoomOf(createMatch(70))).toEqual(NO_ZOOM);
   });
 
-  test("a missile that has stayed inside the playing area leaves the view unzoomed", () => {
-    const match = createMatch(71, fixedLayout([]));
-    aimAt(match, 0, 100);
-    fire(match);
-
-    while (isInsidePlayingArea(inFlight(match).missile)) {
-      expect(zoomOf(match)).toEqual(NO_ZOOM);
-      step(match);
-    }
-  });
-
-  test("a missile moving outward sets the scale that just fits it and the playing area, in the same step", () => {
-    const match = createMatch(72, fixedLayout([]));
-    aimAt(match, 0, 100);
-    fire(match);
-    let zoomedSteps = 0;
-
-    step(match);
-    while (matchView(match).phase.kind === "inFlight") {
-      const missile = inFlight(match).missile;
-      const zoom = zoomOf(match);
-      expect(zoom.scale).toBeCloseTo(fittingZoomScale(missile), 10);
-      expectOnScreen(zoom, missile);
-      expectPlayingAreaOnScreen(zoom);
-      if (zoom.scale < 1) {
-        zoomedSteps++;
-      }
-      step(match);
-    }
-
-    expect(zoomedSteps).toBeGreaterThan(0);
-  });
-
-  test("a missile above the playing area shows no empty space below it", () => {
-    const match = createMatch(74, fixedLayout([]));
-    aimAt(match, 0, 100);
-    fire(match);
-    while (inFlight(match).missile.y >= -300) {
-      step(match);
-    }
-
-    const zoom = zoomOf(match);
-
-    expect(zoom.scale).toBeLessThan(1);
-    expect(zoom.top + 600 / zoom.scale).toBeCloseTo(600, 9);
-  });
-
   test("after a shot leaves the tracking area, the view eases back within about a second of aiming", () => {
     const match = createMatch(73, fixedLayout([]));
     aimAt(match, 0, 100);
