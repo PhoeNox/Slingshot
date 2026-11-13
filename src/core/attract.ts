@@ -1,9 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { isInsidePlayingArea } from "./flight";
-import { createMatch, fire, step, type Match } from "./match";
-import { randomInt, type Rng } from "./random";
+import { adjustAim, createMatch, drawRandomInt, fire, matchView, previewShot, step, type Match } from "./match";
 import type { Aim, Side } from "./round";
 
 export interface AttractMode {
@@ -20,7 +18,7 @@ const CANDIDATE_COUNT = 20;
 const CANDIDATE_ANGLES: Record<Side, AngleRange> = { left: { min: 10, max: 170 }, right: { min: 190, max: 350 } };
 const MIN_CANDIDATE_POWER = 80;
 const MAX_CANDIDATE_POWER = 300;
-const MAX_CANDIDATE_FLIGHT_STEPS = 360;
+export const MAX_CANDIDATE_FLIGHT_STEPS = 360;
 
 export const SHOT_DELAY_STEPS = 30;
 export const NEXT_ROUND_DELAY_STEPS = 45;
@@ -53,34 +51,28 @@ function playAimingStep(attract: AttractMode): void {
 
 function aimLongestFlight(match: Match): void {
   const side = match.activePlayer;
-  const candidates = Array.from({ length: CANDIDATE_COUNT }, () => drawCandidateAim(match.rng, side));
-  const flightLengths = candidates.map((aim) => inAreaFlightSteps(match, aim));
+  const candidates = Array.from({ length: CANDIDATE_COUNT }, () => drawCandidateAim(match, side));
+  const flightLengths = candidates.map((aim) => candidateFlightLength(match, aim));
   const longest = Math.max(...flightLengths);
   const bestIndex = flightLengths.indexOf(longest);
-  match.ships[side].aim = candidates[bestIndex];
+  aimAt(match, candidates[bestIndex]);
 }
 
-function drawCandidateAim(rng: Rng, side: Side): Aim {
+function drawCandidateAim(match: Match, side: Side): Aim {
   const angles = CANDIDATE_ANGLES[side];
-  const angle = randomInt(rng, angles.min, angles.max);
-  const power = randomInt(rng, MIN_CANDIDATE_POWER, MAX_CANDIDATE_POWER);
+  const angle = drawRandomInt(match, angles.min, angles.max);
+  const power = drawRandomInt(match, MIN_CANDIDATE_POWER, MAX_CANDIDATE_POWER);
   return { angle, power };
 }
 
-export function inAreaFlightSteps(match: Match, aim: Readonly<Aim>): number {
-  const trial = structuredClone({ ...match, trails: [] });
-  trial.ships[trial.activePlayer].aim = { ...aim };
-  fire(trial);
-  let inAreaSteps = 0;
-  for (let flightStep = 0; flightStep < MAX_CANDIDATE_FLIGHT_STEPS; flightStep++) {
-    step(trial);
-    const phase = trial.phase;
-    if (phase.kind !== "inFlight") {
-      return inAreaSteps;
-    }
-    if (isInsidePlayingArea(phase.missile)) {
-      inAreaSteps++;
-    }
-  }
-  return 0;
+function candidateFlightLength(match: Match, aim: Readonly<Aim>): number {
+  const preview = previewShot(match, aim, MAX_CANDIDATE_FLIGHT_STEPS);
+  return preview.endedWithinLimit ? preview.inAreaSteps : 0;
+}
+
+function aimAt(match: Match, aim: Readonly<Aim>): void {
+  const view = matchView(match);
+  const current = view.ships[view.activePlayer].aim;
+  const delta = { angle: aim.angle - current.angle, power: aim.power - current.power };
+  adjustAim(match, delta);
 }

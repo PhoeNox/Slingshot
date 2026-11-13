@@ -4,13 +4,13 @@
 import { describe, expect, test } from "vitest";
 import {
   createAttractMode,
-  inAreaFlightSteps,
+  MAX_CANDIDATE_FLIGHT_STEPS,
   NEXT_ROUND_DELAY_STEPS,
   SHOT_DELAY_STEPS,
   stepAttractMode,
   type AttractMode,
 } from "./attract";
-import { matchView } from "./match";
+import { matchView, previewShot } from "./match";
 
 function stepUntil(attract: AttractMode, done: () => boolean): void {
   for (let i = 0; i < 100_000; i++) {
@@ -61,10 +61,12 @@ describe("attract mode", () => {
     const chosenAim = view.ships[view.activePlayer].aim;
     const offScreenAim = { angle: 0, power: 300 };
 
-    const chosenFlight = inAreaFlightSteps(attract.match, chosenAim);
+    const chosenFlight = previewShot(attract.match, chosenAim, MAX_CANDIDATE_FLIGHT_STEPS);
+    const offScreenFlight = previewShot(attract.match, offScreenAim, MAX_CANDIDATE_FLIGHT_STEPS);
 
-    expect(chosenFlight).toBeGreaterThan(0);
-    expect(chosenFlight).toBeGreaterThanOrEqual(inAreaFlightSteps(attract.match, offScreenAim));
+    expect(chosenFlight.endedWithinLimit).toBe(true);
+    expect(chosenFlight.inAreaSteps).toBeGreaterThan(0);
+    expect(chosenFlight.inAreaSteps).toBeGreaterThanOrEqual(offScreenFlight.inAreaSteps);
   });
 
   test("a hit plays out, then a fresh round starts", () => {

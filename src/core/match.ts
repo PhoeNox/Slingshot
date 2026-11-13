@@ -18,7 +18,15 @@ import {
   type Segment,
 } from "./flight";
 import { createRng, randomInt, type Rng } from "./random";
-import { BARREL_DISTANCE, createRoundLayout, type Planet, type RoundLayout, type Ship, type Side } from "./round";
+import {
+  BARREL_DISTANCE,
+  createRoundLayout,
+  type Aim,
+  type Planet,
+  type RoundLayout,
+  type Ship,
+  type Side,
+} from "./round";
 import { nextRoundShooter, powerPenaltyFor, roundResultFor, type RoundResult } from "./scoring";
 
 export type { RoundLayout } from "./round";
@@ -44,6 +52,11 @@ type Phase = AimingPhase | InFlightPhase | RoundOverPhase;
 export interface AimDelta {
   angle: number;
   power: number;
+}
+
+export interface ShotPreview {
+  inAreaSteps: number;
+  endedWithinLimit: boolean;
 }
 
 interface TrailSegment {
@@ -187,6 +200,32 @@ function launchShot(match: Match): void {
   const missile = launchMissile(shot);
   match.attempts[side]++;
   match.phase = { kind: "inFlight", missile };
+}
+
+export function previewShot(match: Readonly<Match>, aim: Readonly<Aim>, stepLimit: number): ShotPreview {
+  const side = match.activePlayer;
+  const ship = { ...match.ships[side], aim };
+  const shot = shotRecordFor(ship, BARREL_DISTANCE[side]);
+  const missile = launchMissile(shot);
+  return previewFlight(missile, match, stepLimit);
+}
+
+function previewFlight(missile: Missile, match: Readonly<Match>, stepLimit: number): ShotPreview {
+  let inAreaSteps = 0;
+  for (let flightStep = 0; flightStep < stepLimit; flightStep++) {
+    const { shotEnded } = flyMissile(missile, match.planets, match.ships);
+    if (shotEnded) {
+      return { inAreaSteps, endedWithinLimit: true };
+    }
+    if (isInsidePlayingArea(missile)) {
+      inAreaSteps++;
+    }
+  }
+  return { inAreaSteps, endedWithinLimit: false };
+}
+
+export function drawRandomInt(match: Match, min: number, max: number): number {
+  return randomInt(match.rng, min, max);
 }
 
 export function matchView(match: Match): MatchView {

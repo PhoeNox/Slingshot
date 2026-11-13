@@ -7,6 +7,7 @@ import {
   createMatch,
   fire,
   matchView,
+  previewShot,
   step,
   type InFlightView,
   type Match,
@@ -862,5 +863,43 @@ describe("matchView", () => {
     expectUnchangedByView();
     stepUntilShotEnds(match, 1000);
     expectUnchangedByView();
+  });
+});
+
+describe("previewShot", () => {
+  test("leaves the match unchanged, including its random draws", () => {
+    const match = createMatch(71);
+    const before = structuredClone(match);
+
+    previewShot(match, { angle: 45, power: 200 }, 360);
+
+    expect(match).toEqual(before);
+  });
+
+  test("reports no in-area steps for a shot that never enters the playing area", () => {
+    const match = createMatch(72, fixedLayout([], 5, 5));
+
+    const preview = previewShot(match, { angle: 0, power: 350 }, 100);
+
+    expect(preview).toEqual({ inAreaSteps: 0, endedWithinLimit: true });
+  });
+
+  test("reports every step up to the limit for a shot that stays inside the playing area", () => {
+    const match = createMatch(73, fixedLayout([]));
+
+    const preview = previewShot(match, { angle: opponentAngle(match), power: 10 }, 100);
+
+    expect(preview).toEqual({ inAreaSteps: 100, endedWithinLimit: false });
+  });
+
+  test("stops at the step the shot ends, without counting it", () => {
+    const match = createMatch(74, fixedLayout([planetAt(400, 300, 100, 30)]));
+    const preview = previewShot(match, { angle: opponentAngle(match), power: 100 }, 360);
+
+    aimAt(match, opponentAngle(match), 100);
+    fire(match);
+    const flightSteps = stepUntilShotEnds(match, 360);
+
+    expect(preview).toEqual({ inAreaSteps: flightSteps - 1, endedWithinLimit: true });
   });
 });
