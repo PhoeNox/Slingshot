@@ -41,8 +41,17 @@ const FONT_FAMILIES: Record<TextItem["font"], string> = { title: TITLE_FONT_FAMI
 const BLOOM_EDGE_COLOUR = "rgba(0, 0, 0, 0)";
 
 export function drawFrame(context: CanvasRenderingContext2D, sprites: Sprites, frame: readonly FrameItem[]): void {
-  for (const item of frame) {
-    drawItem(context, sprites, item);
+  drawItems(context, sprites, frame, 1);
+}
+
+function drawItems(
+  context: CanvasRenderingContext2D,
+  sprites: Sprites,
+  items: readonly FrameItem[],
+  groupScale: number,
+): void {
+  for (const item of items) {
+    drawItem(context, sprites, item, groupScale);
   }
 }
 
@@ -58,7 +67,7 @@ export function drawShakenFrame(
   context.restore();
 }
 
-function drawItem(context: CanvasRenderingContext2D, sprites: Sprites, item: FrameItem): void {
+function drawItem(context: CanvasRenderingContext2D, sprites: Sprites, item: FrameItem, groupScale: number): void {
   switch (item.kind) {
     case "image":
       drawImage(context, sprites, item);
@@ -67,10 +76,10 @@ function drawItem(context: CanvasRenderingContext2D, sprites: Sprites, item: Fra
       drawSpriteFrame(context, sprites, item);
       break;
     case "ring":
-      drawRing(context, item);
+      drawRing(context, item, groupScale);
       break;
     case "lines":
-      drawLines(context, item);
+      drawLines(context, item, groupScale);
       break;
     case "bloom":
       drawBloom(context, item);
@@ -79,13 +88,13 @@ function drawItem(context: CanvasRenderingContext2D, sprites: Sprites, item: Fra
       fillRect(context, item);
       break;
     case "strokeRect":
-      strokeRect(context, item);
+      strokeRect(context, item, groupScale);
       break;
     case "text":
       drawText(context, item);
       break;
     case "group":
-      drawGroup(context, sprites, item);
+      drawGroup(context, sprites, item, groupScale);
       break;
   }
 }
@@ -114,18 +123,18 @@ function drawSpriteFrame(context: CanvasRenderingContext2D, sprites: Sprites, it
   context.restore();
 }
 
-function drawRing(context: CanvasRenderingContext2D, item: RingItem): void {
+function drawRing(context: CanvasRenderingContext2D, item: RingItem, groupScale: number): void {
   context.save();
   context.globalAlpha = item.alpha;
   context.strokeStyle = item.colour;
-  context.lineWidth = LINE_WIDTH;
+  context.lineWidth = LINE_WIDTH / groupScale;
   context.beginPath();
   context.arc(item.centre.x, item.centre.y, item.radius, 0, 2 * Math.PI);
   context.stroke();
   context.restore();
 }
 
-function drawLines(context: CanvasRenderingContext2D, item: LinesItem): void {
+function drawLines(context: CanvasRenderingContext2D, item: LinesItem, groupScale: number): void {
   context.save();
   context.strokeStyle = item.colour;
   context.setLineDash(item.dash);
@@ -138,11 +147,11 @@ function drawLines(context: CanvasRenderingContext2D, item: LinesItem): void {
   const glowLayers = item.glow ? LINE_GLOW_LAYERS : [];
   for (const layer of glowLayers) {
     context.globalAlpha = item.alpha * layer.alpha;
-    context.lineWidth = layer.width;
+    context.lineWidth = layer.width / groupScale;
     context.stroke();
   }
   context.globalAlpha = item.alpha;
-  context.lineWidth = LINE_WIDTH;
+  context.lineWidth = LINE_WIDTH / groupScale;
   context.stroke();
   context.restore();
 }
@@ -169,11 +178,11 @@ function fillRect(context: CanvasRenderingContext2D, item: FillRectItem): void {
   context.restore();
 }
 
-function strokeRect(context: CanvasRenderingContext2D, item: StrokeRectItem): void {
+function strokeRect(context: CanvasRenderingContext2D, item: StrokeRectItem, groupScale: number): void {
   const rect = item.rect;
   context.save();
   context.strokeStyle = item.colour;
-  context.lineWidth = LINE_WIDTH;
+  context.lineWidth = LINE_WIDTH / groupScale;
   context.strokeRect(rect.left, rect.top, rect.width, rect.height);
   context.restore();
 }
@@ -196,12 +205,12 @@ function drawText(context: CanvasRenderingContext2D, item: TextItem): void {
   context.restore();
 }
 
-function drawGroup(context: CanvasRenderingContext2D, sprites: Sprites, item: GroupItem): void {
+function drawGroup(context: CanvasRenderingContext2D, sprites: Sprites, item: GroupItem, groupScale: number): void {
   const transform = item.transform;
   context.save();
   context.translate(transform.x, transform.y);
   context.rotate(transform.rotation);
   context.scale(transform.scale, transform.scale);
-  drawFrame(context, sprites, item.items);
+  drawItems(context, sprites, item.items, groupScale * transform.scale);
   context.restore();
 }

@@ -17,6 +17,7 @@ import {
   type Segment,
   type ShotRecord,
 } from "./flight";
+import { PLAYING_AREA_HEIGHT, PLAYING_AREA_WIDTH } from "./playingArea";
 import { createRng, randomInt, type Rng } from "./random";
 import {
   BARREL_DISTANCE,
@@ -81,6 +82,11 @@ const STEPS_PER_SECOND = 30;
 const MAX_POWER = 350;
 const FULL_TURN = 360;
 
+const MIN_ZOOM_SCALE = 1 / 3;
+const ZOOM_PADDING = 40;
+const ZOOM_IN_SECONDS = 1;
+const ZOOM_IN_PER_STEP = (1 - MIN_ZOOM_SCALE) / (ZOOM_IN_SECONDS * STEPS_PER_SECOND);
+
 interface MatchState {
   phase: Phase;
   activePlayer: Side;
@@ -91,6 +97,7 @@ interface MatchState {
   planets: Planet[];
   trails: TrailSegment[];
   attempts: Record<Side, number>;
+  zoomScale: number;
 }
 
 type DeepReadonly<T> = { readonly [K in keyof T]: DeepReadonly<T[K]> };
@@ -111,7 +118,6 @@ interface MatchViewState extends Omit<MatchState, "phase"> {
   phase: PhaseView;
   aimLine: Segment;
   powerPenalty: number;
-  zoomViewShown: boolean;
 }
 
 export type MatchView = DeepReadonly<MatchViewState>;
@@ -139,6 +145,7 @@ export function createMatch(
     planets: layout.planets,
     trails: [],
     attempts: { left: 0, right: 0 },
+    zoomScale: 1,
   };
 }
 
@@ -153,6 +160,23 @@ export function step(match: Match): void {
   } else if (match.phase.kind === "roundOver") {
     match.phase.stepsSinceRoundOver++;
   }
+  const fittingScale = fittingZoomScale(match.phase);
+  match.zoomScale = Math.min(fittingScale, match.zoomScale + ZOOM_IN_PER_STEP);
+}
+
+function fittingZoomScale(phase: Phase): number {
+  if (phase.kind !== "inFlight") {
+    return 1;
+  }
+  const missile = phase.missile;
+  const horizontal = axisZoomScale(missile.x - PLAYING_AREA_WIDTH / 2, PLAYING_AREA_WIDTH / 2);
+  const vertical = axisZoomScale(missile.y - PLAYING_AREA_HEIGHT / 2, PLAYING_AREA_HEIGHT / 2);
+  return Math.max(Math.min(horizontal, vertical), MIN_ZOOM_SCALE);
+}
+
+function axisZoomScale(offsetFromCentre: number, halfExtent: number): number {
+  const distance = Math.abs(offsetFromCentre);
+  return distance <= halfExtent ? 1 : (halfExtent - ZOOM_PADDING) / (distance - ZOOM_PADDING);
 }
 
 function advanceShot(match: Match, missile: Missile): void {
@@ -257,7 +281,6 @@ export function matchView(match: Match): MatchView {
   const phase = phaseView(match.phase);
   const aimLine = aimLineFor(ship, BARREL_DISTANCE[side]);
   const powerPenalty = powerPenaltyFor(ship.aim.power);
-  const zoomViewShown = isZoomViewShown(match.phase);
   return {
     phase,
     activePlayer: side,
@@ -270,7 +293,7 @@ export function matchView(match: Match): MatchView {
     attempts: match.attempts,
     aimLine,
     powerPenalty,
-    zoomViewShown,
+    zoomScale: match.zoomScale,
   };
 }
 
@@ -281,8 +304,4 @@ function phaseView(phase: Phase): PhaseView {
 function inFlightView(flight: InFlightPhase): InFlightPhaseView {
   const timedOut = hasTimedOut(flight.missile);
   return { ...flight, stepsFlown: flight.missile.stepsFlown, timedOut };
-}
-
-function isZoomViewShown(phase: Phase): boolean {
-  return phase.kind === "inFlight" && !isInsidePlayingArea(phase.missile);
 }

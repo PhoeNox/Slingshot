@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from "vitest";
 import { COLOURS } from "./colours";
-import { isInsidePlayingArea, type Segment } from "./core/flight";
+import { isInsidePlayingArea } from "./core/flight";
 import {
   adjustAim,
   createMatch,
@@ -37,7 +37,6 @@ import {
 const PLAYER_COLOURS: Record<Side, string> = { left: COLOURS.leftPlayer, right: COLOURS.rightPlayer };
 const SHEET_FACING: Record<Side, number> = { left: 90, right: 270 };
 const HIT_TITLES: Record<Side, string> = { left: "Player 1 hit player 2", right: "Player 2 hit player 1" };
-const PLAYING_AREA = { left: 0, top: 0, width: 800, height: 600 };
 
 const CONTOURS_SHOWN: DisplaySettings = { gravityWellContours: true };
 const CONTOURS_HIDDEN: DisplaySettings = { gravityWellContours: false };
@@ -142,7 +141,11 @@ function shipSpritesOf(frame: FrameItem[]): Set<string> {
 }
 
 function zoomGroupsOf(frame: FrameItem[]): GroupItem[] {
-  return frame.filter((item): item is GroupItem => item.kind === "group" && item.transform.scale === 0.25);
+  return frame.filter((item): item is GroupItem => item.kind === "group" && item.transform.scale < 1);
+}
+
+function zoomOutlinesOf(frame: FrameItem[]): LinesItem[] {
+  return linesOf(frame).filter((item) => item.colour === COLOURS.instrumentDim);
 }
 
 function shipGroupOf(frame: FrameItem[], side: Side): GroupItem {
@@ -152,18 +155,6 @@ function shipGroupOf(frame: FrameItem[], side: Side): GroupItem {
 
 function shipFramesOf(group: GroupItem): { left: number; alpha: number }[] {
   return (group.items as SpriteFrameItem[]).map((item) => ({ left: item.source.left, alpha: item.alpha }));
-}
-
-function toZoomView(point: { x: number; y: number }): { x: number; y: number } {
-  return { x: 300 + point.x / 4, y: 225 + point.y / 4 };
-}
-
-function zoomedSegment(segment: Segment): Segment {
-  return { from: toZoomView(segment.from), to: toZoomView(segment.to) };
-}
-
-function isSameSegment(a: Segment, b: Segment): boolean {
-  return a.from.x === b.from.x && a.from.y === b.from.y && a.to.x === b.to.x && a.to.y === b.to.y;
 }
 
 function opponentOf(side: Side): Side {
@@ -197,12 +188,25 @@ function missileOutsidePlayingArea(match: Match): boolean {
   return phase.kind === "inFlight" && !isInsidePlayingArea(phase.missile);
 }
 
-function zoomedMatch(seed: number, layout = EMPTY_LAYOUT): Match {
+function outsideMatch(seed: number, layout = EMPTY_LAYOUT): Match {
   const match = createMatch(seed, structuredClone(layout));
   aimAt(match, 0, 250);
   fire(match);
   stepUntil(match, () => missileOutsidePlayingArea(match));
   return match;
+}
+
+function zoomedFlightView(seed: number, zoomScale: number, layout = EMPTY_LAYOUT): MatchView {
+  const match = createMatch(seed, structuredClone(layout));
+  fire(match);
+  for (let i = 0; i < 5; i++) {
+    step(match);
+  }
+  return { ...matchView(match), zoomScale };
+}
+
+function inFlightMissile(view: MatchView): { x: number; y: number } {
+  return view.phase.kind === "inFlight" ? view.phase.missile : { x: NaN, y: NaN };
 }
 
 function roundOverFrameOf(result: RoundResult): FrameItem[] {
@@ -554,7 +558,7 @@ describe("ships", () => {
 });
 
 describe("in-flight frame", () => {
-  test("a missile inside the playing area is drawn at its position without the zoom view", () => {
+  test("a missile inside the playing area is drawn at its position without zoom", () => {
     const match = emptyMatch(3);
     fire(match);
     step(match);
@@ -562,35 +566,50 @@ describe("in-flight frame", () => {
     const frame = frameOf(match);
 
     const missiles = imagesOf(frame, "missile");
-    const phase = matchView(match).phase;
-    const missile = phase.kind === "inFlight" ? phase.missile : { x: NaN, y: NaN };
+    const missile = inFlightMissile(matchView(match));
     expect(missiles).toEqual([
       expect.objectContaining({ target: { left: missile.x - 12.5, top: missile.y - 12.5, width: 25, height: 25 } }),
     ]);
     expect(zoomGroupsOf(frame)).toHaveLength(0);
+    expect(zoomOutlinesOf(frame)).toHaveLength(0);
     expect(frame.some((item) => item.kind === "fillRect")).toBe(false);
   });
 
-  test("a missile outside the playing area is shown at a third of its size in the zoom view", () => {
-    const match = zoomedMatch(4);
-    const phase = matchView(match).phase;
-    const zoomedMissile = toZoomView(phase.kind === "inFlight" ? phase.missile : { x: NaN, y: NaN });
+  test("a missile outside the playing area zooms the scene out, without the old inset view", () => {
+    const match = outsideMatch(4);
 
     const frame = frameOf(match);
 
-    const missiles = imagesOf(frame, "missile");
-    const zoomGroups = zoomGroupsOf(frame);
-    expect(missiles).toHaveLength(1);
-    expect(missiles[0].target.width).toBeCloseTo(25 / 3);
-    expect(missiles[0].target.height).toBeCloseTo(25 / 3);
-    expect(missiles[0].target.left + missiles[0].target.width / 2).toBeCloseTo(zoomedMissile.x);
-    expect(missiles[0].target.top + missiles[0].target.height / 2).toBeCloseTo(zoomedMissile.y);
-    expect(zoomGroups).toHaveLength(1);
-    expect(flatten(zoomGroups[0].items).some((item) => item.kind === "spriteFrame")).toBe(true);
-    expect(frame.some((item) => item.kind === "fillRect")).toBe(true);
+    expect(matchView(match).zoomScale).toBeLessThan(1);
+    expect(zoomGroupsOf(frame)).toHaveLength(1);
+    expect(imagesOf(frame, "missile")).toHaveLength(1);
+    expect(imagesOf(frame, "backdrop")).toHaveLength(0);
+    expect(frame.some((item) => item.kind === "fillRect")).toBe(false);
   });
 
-  test("the zoom view shows the trails of earlier shots and the current one, mapped into it", () => {
+  test("the zoomed scene is one group scaled around the centre of the playing area", () => {
+    const view = zoomedFlightView(24, 0.5);
+
+    const zoomGroups = describeFrame(view, CONTOURS_SHOWN).filter((item): item is GroupItem => item.kind === "group");
+
+    expect(zoomGroups.map((item) => item.transform)).toEqual([{ x: 200, y: 150, rotation: 0, scale: 0.5 }]);
+  });
+
+  test("planets, contours, ships, trails, afterglow and the missile are drawn inside the zoom group", () => {
+    const layout = { ...EMPTY_LAYOUT, planets: [{ ...LIGHT_PLANET }] };
+    const view = zoomedFlightView(25, 0.5, layout);
+
+    const zoomed = flatten(zoomGroupsOf(describeFrame(view, CONTOURS_SHOWN))[0].items);
+
+    expect(imagesOf(zoomed, "planet1")).toHaveLength(1);
+    expect(ringsAround(zoomed, LIGHT_PLANET)).toHaveLength(3);
+    expect(shipSpritesOf(zoomed)).toEqual(new Set(["leftShip", "rightShip"]));
+    expect(linesOf(zoomed).some((item) => !item.glow)).toBe(true);
+    expect(afterglowOf(zoomed).length).toBeGreaterThan(0);
+    expect(imagesOf(zoomed, "missile")).toHaveLength(1);
+  });
+
+  test("the trails of earlier shots stay at their playing-area positions inside the zoom group", () => {
     const match = emptyMatch(27);
     const firstShooter = matchView(match).activePlayer;
     aimAt(match, 0, 250);
@@ -600,55 +619,53 @@ describe("in-flight frame", () => {
     aimAt(match, 0, 250);
     fire(match);
     stepUntil(match, () => missileOutsidePlayingArea(match));
-    const currentSegment = matchView(match).trails.at(-1)!;
 
-    const lines = linesOf(frameOf(match));
+    const zoomed = flatten(zoomGroupsOf(frameOf(match))[0].items);
 
-    const earlierTrail = lines.filter((item) => item.colour === PLAYER_COLOURS[firstShooter]);
-    const currentTrail = lines.filter((item) => item.colour === PLAYER_COLOURS[opponentOf(firstShooter)]);
-    const zoomedEarlier = zoomedSegment(earlierSegment);
-    const zoomedCurrent = zoomedSegment(currentSegment);
-    expect(earlierTrail.some((item) => item.segments.some((segment) => isSameSegment(segment, zoomedEarlier)))).toBe(true);
-    expect(currentTrail.some((item) => item.segments.some((segment) => isSameSegment(segment, zoomedCurrent)))).toBe(true);
+    const earlierTrail = linesOf(zoomed).filter((item) => item.colour === PLAYER_COLOURS[firstShooter]);
+    expect(earlierTrail.some((item) => item.segments.includes(earlierSegment))).toBe(true);
   });
 
-  test("the zoom view is a radar inset with a faint grid and Instrument-dim outlines", () => {
-    const frame = frameOf(zoomedMatch(24));
+  test("the missile keeps its on-screen size at any scale", () => {
+    const view = zoomedFlightView(26, 0.5);
+    const missile = inFlightMissile(view);
 
-    const grid = linesOf(frame).find((item) => item.colour === COLOURS.instrumentDim)!;
-    expect(grid.segments.length).toBeGreaterThan(0);
-    expect(grid.alpha).toBeLessThan(1);
-    expect(strokeRectsOf(frame).map((item) => item.colour)).toEqual([COLOURS.instrumentDim, COLOURS.instrumentDim]);
-  });
+    const missiles = imagesOf(frameOfView(view), "missile");
 
-  test("the zoom view is centred on screen, with the playing area shrunk to a quarter in its middle", () => {
-    const frame = frameOf(zoomedMatch(28));
-
-    expect(frame.filter((item) => item.kind === "fillRect")).toEqual([
-      expect.objectContaining({ rect: PLAYING_AREA }),
-    ]);
-    expect(imagesOf(frame, "backdrop")).toEqual([
-      expect.objectContaining({ target: { left: 100, top: 75, width: 600, height: 450 } }),
-    ]);
-    expect(zoomGroupsOf(frame).map((item) => item.transform)).toEqual([{ x: 300, y: 225, rotation: 0, scale: 0.25 }]);
-    expect(strokeRectsOf(frame).map((item) => item.rect)).toEqual([
-      { left: 100.5, top: 75.5, width: 599, height: 449 },
-      { left: 300.5, top: 225.5, width: 199, height: 149 },
+    expect(missiles).toEqual([
+      expect.objectContaining({ target: { left: missile.x - 25, top: missile.y - 25, width: 50, height: 50 } }),
     ]);
   });
 
-  test("the zoom view grid has a line every 50 pixels inside its outline", () => {
-    const frame = frameOf(zoomedMatch(29));
+  test("the HUD is drawn outside the zoom group", () => {
+    const view = zoomedFlightView(28, 0.5);
 
-    const grid = linesOf(frame).find((item) => item.colour === COLOURS.instrumentDim)!;
-    expect(grid.segments).toHaveLength(19);
-    expect(grid.segments[0]).toEqual({ from: { x: 150.5, y: 75.5 }, to: { x: 150.5, y: 524.5 } });
-    expect(grid.segments[11]).toEqual({ from: { x: 100.5, y: 125.5 }, to: { x: 699.5, y: 125.5 } });
+    const frame = describeFrame(view, CONTOURS_SHOWN);
+
+    const zoomed = flatten(zoomGroupsOf(frame)[0].items);
+    expect(textsOf(zoomed)).toHaveLength(0);
+    const hudTexts = ["Player 1  --  0", "0  --  Player 2", "Power penalty: 500"];
+    expect(textsOf(frame)).toEqual(expect.arrayContaining(hudTexts));
   });
 
-  test("the zoom view shows gravity-well contours only while the display setting is on", () => {
+  test("a faint playing-area outline is drawn on screen while zoomed", () => {
+    const view = zoomedFlightView(29, 0.5);
+
+    const outlines = zoomOutlinesOf(describeFrame(view, CONTOURS_SHOWN));
+
+    expect(outlines).toHaveLength(1);
+    expect(outlines[0].alpha).toBeLessThan(1);
+    expect(outlines[0].segments).toEqual([
+      { from: { x: 200.5, y: 150.5 }, to: { x: 599.5, y: 150.5 } },
+      { from: { x: 599.5, y: 150.5 }, to: { x: 599.5, y: 449.5 } },
+      { from: { x: 599.5, y: 449.5 }, to: { x: 200.5, y: 449.5 } },
+      { from: { x: 200.5, y: 449.5 }, to: { x: 200.5, y: 150.5 } },
+    ]);
+  });
+
+  test("the zoomed scene shows gravity-well contours only while the display setting is on", () => {
     const farPlanet: Planet = { ...LIGHT_PLANET, x: 700, y: 500 };
-    const match = zoomedMatch(31, { ...EMPTY_LAYOUT, planets: [farPlanet] });
+    const match = outsideMatch(31, { ...EMPTY_LAYOUT, planets: [farPlanet] });
     const zoomedItemsOf = (display: DisplaySettings) => zoomGroupsOf(frameOf(match, display))[0].items;
 
     const shown = zoomedItemsOf(CONTOURS_SHOWN);
@@ -890,7 +907,7 @@ describe("attract frame", () => {
     );
   });
 
-  test("shows the missile and its afterglow in flight, without zoom view or flight HUD", () => {
+  test("shows the missile and its afterglow in flight, without flight HUD", () => {
     const match = emptyMatch(41);
     fire(match);
     for (let i = 0; i < 5; i++) {
@@ -901,8 +918,18 @@ describe("attract frame", () => {
 
     expect(imagesOf(frame, "missile")).toHaveLength(1);
     expect(afterglowOf(frame).length).toBeGreaterThan(0);
-    expect(zoomGroupsOf(frame)).toHaveLength(0);
     expect(textsOf(frame)).toHaveLength(0);
+  });
+
+  test("never zooms, even while the demo missile is outside the playing area", () => {
+    const match = outsideMatch(43);
+
+    const frame = attractFrameOf(match);
+
+    expect(matchView(match).zoomScale).toBeLessThan(1);
+    expect(zoomGroupsOf(frame)).toHaveLength(0);
+    expect(zoomOutlinesOf(frame)).toHaveLength(0);
+    expect(imagesOf(frame, "missile").map((item) => item.target.width)).toEqual([25]);
   });
 
   test("a hit shows the explosion without the round-over panel", () => {

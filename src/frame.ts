@@ -9,14 +9,7 @@ import { afterglowSegments, explosionBloom, explosionSize, roundBanner, trailAlp
 import { COLOURS } from "./colours";
 import type { Missile, Point, Segment } from "./core/flight";
 import type { InFlightView, MatchView, RoundOutcome, RoundOverView, RoundResult } from "./core/match";
-import {
-  PLAYING_AREA_HEIGHT,
-  PLAYING_AREA_WIDTH,
-  TRACKING_AREA_BOTTOM,
-  TRACKING_AREA_LEFT,
-  TRACKING_AREA_RIGHT,
-  TRACKING_AREA_TOP,
-} from "./core/playingArea";
+import { PLAYING_AREA_HEIGHT, PLAYING_AREA_WIDTH } from "./core/playingArea";
 import type { Aim, Planet, Ship, Side } from "./core/round";
 
 export interface Rect {
@@ -193,42 +186,61 @@ const MESSAGE_SCORE_CHANGE_TOP = 100;
 const MESSAGE_PROMPT_TOP = 140;
 const MESSAGE_PROMPT_TEXT = "Press Space or Enter for the next round";
 
-const ZOOM_DIM_COLOUR = "rgba(4, 8, 21, 0.75)";
-const ZOOM_GRID_SPACING = 50;
-const ZOOM_GRID_ALPHA = 0.3;
-const ZOOM_SCALE = 0.25;
-const ZOOM_MISSILE_SCALE = 1 / 3;
-const ZOOMED_MISSILE_SIZE = MISSILE_SPRITE_SIZE * ZOOM_MISSILE_SCALE;
-const ZOOM_VIEW_WIDTH = (TRACKING_AREA_RIGHT - TRACKING_AREA_LEFT) * ZOOM_SCALE;
-const ZOOM_VIEW_HEIGHT = (TRACKING_AREA_BOTTOM - TRACKING_AREA_TOP) * ZOOM_SCALE;
-const ZOOM_VIEW_LEFT = (PLAYING_AREA_WIDTH - ZOOM_VIEW_WIDTH) / 2;
-const ZOOM_VIEW_TOP = (PLAYING_AREA_HEIGHT - ZOOM_VIEW_HEIGHT) / 2;
-
-const ZOOM_VIEW: Readonly<Rect> = {
-  left: ZOOM_VIEW_LEFT,
-  top: ZOOM_VIEW_TOP,
-  width: ZOOM_VIEW_WIDTH,
-  height: ZOOM_VIEW_HEIGHT,
-};
-
-const ZOOMED_PLAYING_AREA: Readonly<Rect> = {
-  left: ZOOM_VIEW_LEFT - TRACKING_AREA_LEFT * ZOOM_SCALE,
-  top: ZOOM_VIEW_TOP - TRACKING_AREA_TOP * ZOOM_SCALE,
-  width: PLAYING_AREA_WIDTH * ZOOM_SCALE,
-  height: PLAYING_AREA_HEIGHT * ZOOM_SCALE,
-};
+const ZOOM_CENTRE_X = PLAYING_AREA_WIDTH / 2;
+const ZOOM_CENTRE_Y = PLAYING_AREA_HEIGHT / 2;
+const ZOOM_OUTLINE_ALPHA = 0.5;
 
 const ATTRACT_DIM_COLOUR = "rgba(4, 8, 21, 0.55)";
 
 const PLAYING_AREA: Readonly<Rect> = { left: 0, top: 0, width: PLAYING_AREA_WIDTH, height: PLAYING_AREA_HEIGHT };
 
 export function describeFrame(view: MatchView, display: Readonly<DisplaySettings>): FrameItem[] {
-  const planets = planetItems(view.planets, display);
-  const trails = trailItems(view.trails);
-  const phase = phaseItems(view, display);
+  const scene = sceneItems(view, display);
+  const zoomedScene = zoomedSceneItems(scene, view.zoomScale);
+  const hud = phaseHudItems(view);
   const scores = scoreItems(view.scores);
   const banner = roundBannerItems(view.roundNumber, view.roundStepCount);
-  return [...planets, ...trails, ...phase, ...scores, ...banner];
+  return [...zoomedScene, ...hud, ...scores, ...banner];
+}
+
+function sceneItems(view: MatchView, display: Readonly<DisplaySettings>): FrameItem[] {
+  const planets = planetItems(view.planets, display);
+  const trails = trailItems(view.trails);
+  const phase = phaseSceneItems(view);
+  return [...planets, ...trails, ...phase];
+}
+
+function zoomedSceneItems(scene: FrameItem[], scale: number): FrameItem[] {
+  if (scale === 1) {
+    return scene;
+  }
+  const outline = playingAreaOutlineItem(scale);
+  const zoomGroup: GroupItem = { kind: "group", transform: zoomTransform(scale), items: scene };
+  return [outline, zoomGroup];
+}
+
+function zoomTransform(scale: number): Transform {
+  return { x: ZOOM_CENTRE_X * (1 - scale), y: ZOOM_CENTRE_Y * (1 - scale), rotation: 0, scale };
+}
+
+function playingAreaOutlineItem(scale: number): LinesItem {
+  const transform = zoomTransform(scale);
+  const zoomedArea = {
+    left: transform.x,
+    top: transform.y,
+    width: PLAYING_AREA_WIDTH * scale,
+    height: PLAYING_AREA_HEIGHT * scale,
+  };
+  const outline = strokeOutline(zoomedArea);
+  const segments = rectSegments(outline);
+  return {
+    kind: "lines",
+    colour: COLOURS.instrumentDim,
+    segments,
+    alpha: ZOOM_OUTLINE_ALPHA,
+    dash: SOLID,
+    glow: false,
+  };
 }
 
 export function describeAttractFrame(view: MatchView, display: Readonly<DisplaySettings>): FrameItem[] {
@@ -251,10 +263,7 @@ function attractPhaseItems(view: MatchView): FrameItem[] {
 }
 
 function attractFlightItems(view: MatchView, flight: InFlightView): FrameItem[] {
-  const ships = shipItems(view.ships, SIDES);
-  const afterglow = afterglowItems(view.trails, flight);
-  const missile = missileItem(flight.missile);
-  return [...ships, ...afterglow, missile];
+  return flightSceneItems(view, flight, MISSILE_SPRITE_SIZE);
 }
 
 export function describeBackdropFrame(): FrameItem[] {
@@ -262,14 +271,25 @@ export function describeBackdropFrame(): FrameItem[] {
   return [backdrop];
 }
 
-function phaseItems(view: MatchView, display: Readonly<DisplaySettings>): FrameItem[] {
+function phaseSceneItems(view: MatchView): FrameItem[] {
   switch (view.phase.kind) {
     case "aiming":
-      return aimingItems(view);
+      return aimingSceneItems(view);
     case "inFlight":
-      return flightItems(view, view.phase, display);
+      return flightSceneItems(view, view.phase, MISSILE_SPRITE_SIZE / view.zoomScale);
     case "roundOver":
-      return roundOverItems(view.ships, view.phase);
+      return hitSceneItems(view.ships, view.phase);
+  }
+}
+
+function phaseHudItems(view: MatchView): FrameItem[] {
+  switch (view.phase.kind) {
+    case "aiming":
+      return aimInfoItems(view.ships[view.activePlayer].aim);
+    case "inFlight":
+      return flightHudItems(view.powerPenalty, view.phase);
+    case "roundOver":
+      return roundOverMessageItems(view.phase.result);
   }
 }
 
@@ -368,12 +388,10 @@ function shipFrameItem(side: Side, frameLeft: number, alpha: number): SpriteFram
   };
 }
 
-function aimingItems(view: MatchView): FrameItem[] {
-  const side = view.activePlayer;
+function aimingSceneItems(view: MatchView): FrameItem[] {
   const ships = shipItems(view.ships, SIDES);
-  const reticle = aimReticleItems(view.aimLine, PLAYER_COLOURS[side]);
-  const aimInfo = aimInfoItems(view.ships[side].aim);
-  return [...ships, ...reticle, ...aimInfo];
+  const reticle = aimReticleItems(view.aimLine, PLAYER_COLOURS[view.activePlayer]);
+  return [...ships, ...reticle];
 }
 
 function aimReticleItems(line: Readonly<Segment>, colour: string): FrameItem[] {
@@ -391,19 +409,17 @@ function aimInfoItems(aim: Readonly<Aim>): TextItem[] {
   ];
 }
 
-function flightItems(view: MatchView, flight: InFlightView, display: Readonly<DisplaySettings>): FrameItem[] {
+function flightSceneItems(view: MatchView, flight: InFlightView, missileSize: number): FrameItem[] {
   const ships = shipItems(view.ships, SIDES);
   const afterglow = afterglowItems(view.trails, flight);
-  const missile = view.zoomViewShown ? zoomViewItems(view, flight, display) : [missileItem(flight.missile)];
-  const penaltyText = powerPenaltyText(view.powerPenalty);
+  const missile = missileItem(flight.missile, missileSize);
+  return [...ships, ...afterglow, missile];
+}
+
+function flightHudItems(powerPenalty: number, flight: InFlightView): TextItem[] {
+  const penaltyText = powerPenaltyText(powerPenalty);
   const timeout = timeoutItems(flight);
-  return [
-    ...ships,
-    ...afterglow,
-    ...missile,
-    hudText(penaltyText, COLOURS.instrumentDim, SCREEN_CENTRE_X, HUD_TOP, "center", "top"),
-    ...timeout,
-  ];
+  return [hudText(penaltyText, COLOURS.instrumentDim, SCREEN_CENTRE_X, HUD_TOP, "center", "top"), ...timeout];
 }
 
 function timeoutItems(flight: InFlightView): TextItem[] {
@@ -420,64 +436,9 @@ function afterglowItems(roundTrails: MatchView["trails"], flight: InFlightView):
   return fading.map(({ segment, alpha }) => glowLinesItem(PLAYER_COLOURS[segment.shooter], [segment], alpha, SOLID));
 }
 
-function missileItem(flyingMissile: Readonly<Missile>): ImageItem {
-  const box = centredBox(flyingMissile, MISSILE_SPRITE_SIZE, MISSILE_SPRITE_SIZE);
+function missileItem(flyingMissile: Readonly<Missile>, size: number): ImageItem {
+  const box = centredBox(flyingMissile, size, size);
   return imageItem("missile", box);
-}
-
-function zoomViewItems(view: MatchView, flight: InFlightView, display: Readonly<DisplaySettings>): FrameItem[] {
-  const dimming: FillRectItem = { kind: "fillRect", colour: ZOOM_DIM_COLOUR, rect: PLAYING_AREA };
-  const backdrop = imageItem("backdrop", ZOOM_VIEW);
-  const grid = zoomGridItem();
-  const zoomedPlayingArea = zoomedPlayingAreaItem(view, display);
-  const zoomedTrails = zoomedTrailItems(view.trails, flight);
-  const zoomedMissile = zoomedMissileItem(flight.missile);
-  const outlines = zoomOutlineItems();
-  return [dimming, backdrop, grid, zoomedPlayingArea, ...zoomedTrails, zoomedMissile, ...outlines];
-}
-
-function zoomGridItem(): LinesItem {
-  const gridArea = strokeOutline(ZOOM_VIEW);
-  const segments = gridLines(gridArea, ZOOM_GRID_SPACING);
-  return { kind: "lines", colour: COLOURS.instrumentDim, segments, alpha: ZOOM_GRID_ALPHA, dash: SOLID, glow: false };
-}
-
-function zoomedPlayingAreaItem(view: MatchView, display: Readonly<DisplaySettings>): GroupItem {
-  const planets = planetItems(view.planets, display);
-  const ships = shipItems(view.ships, SIDES);
-  return {
-    kind: "group",
-    transform: { x: ZOOMED_PLAYING_AREA.left, y: ZOOMED_PLAYING_AREA.top, rotation: 0, scale: ZOOM_SCALE },
-    items: [...planets, ...ships],
-  };
-}
-
-function zoomedTrailItems(roundTrails: MatchView["trails"], flight: InFlightView): LinesItem[] {
-  const trails = trailItems(roundTrails);
-  const afterglow = afterglowItems(roundTrails, flight);
-  return [...trails, ...afterglow].map(zoomedLinesItem);
-}
-
-function zoomedLinesItem(item: LinesItem): LinesItem {
-  const segments = item.segments.map(zoomViewSegment);
-  return { ...item, segments };
-}
-
-function zoomedMissileItem(flyingMissile: Readonly<Missile>): ImageItem {
-  const centre = zoomViewPoint(flyingMissile);
-  const box = centredBox(centre, ZOOMED_MISSILE_SIZE, ZOOMED_MISSILE_SIZE);
-  return imageItem("missile", box);
-}
-
-function zoomOutlineItems(): FrameItem[] {
-  const zoomViewOutline = strokeOutline(ZOOM_VIEW);
-  const playingAreaOutline = strokeOutline(ZOOMED_PLAYING_AREA);
-  const brackets = bracketItem(zoomViewOutline);
-  return [
-    { kind: "strokeRect", colour: COLOURS.instrumentDim, rect: zoomViewOutline },
-    { kind: "strokeRect", colour: COLOURS.instrumentDim, rect: playingAreaOutline },
-    brackets,
-  ];
 }
 
 function scoreItems(matchScores: MatchView["scores"]): TextItem[] {
@@ -507,12 +468,6 @@ function roundBannerItems(round: number, stepsIntoRound: number): TextItem[] {
       alpha: banner.alpha,
     },
   ];
-}
-
-function roundOverItems(roundShips: MatchView["ships"], roundOver: RoundOverView): FrameItem[] {
-  const hitScene = hitSceneItems(roundShips, roundOver);
-  const message = roundOverMessageItems(roundOver.result);
-  return [...hitScene, ...message];
 }
 
 function hitSceneItems(roundShips: MatchView["ships"], roundOver: RoundOverView): FrameItem[] {
@@ -665,33 +620,16 @@ function cornerBrackets(rect: Readonly<Rect>, length: number): Segment[] {
   ]);
 }
 
-function gridLines(rect: Readonly<Rect>, spacing: number): Segment[] {
+function rectSegments(rect: Readonly<Rect>): Segment[] {
   const right = rect.left + rect.width;
   const bottom = rect.top + rect.height;
-  const columnCount = Math.ceil(rect.width / spacing) - 1;
-  const rowCount = Math.ceil(rect.height / spacing) - 1;
-  const columns = Array.from({ length: columnCount }, (_, index) => {
-    const x = rect.left + (index + 1) * spacing;
-    return { from: { x, y: rect.top }, to: { x, y: bottom } };
-  });
-  const rows = Array.from({ length: rowCount }, (_, index) => {
-    const y = rect.top + (index + 1) * spacing;
-    return { from: { x: rect.left, y }, to: { x: right, y } };
-  });
-  return [...columns, ...rows];
-}
-
-function zoomViewPoint(point: Readonly<Point>): Point {
-  return {
-    x: ZOOMED_PLAYING_AREA.left + point.x * ZOOM_SCALE,
-    y: ZOOMED_PLAYING_AREA.top + point.y * ZOOM_SCALE,
-  };
-}
-
-function zoomViewSegment(segment: Readonly<Segment>): Segment {
-  const from = zoomViewPoint(segment.from);
-  const to = zoomViewPoint(segment.to);
-  return { from, to };
+  const corners = [
+    { x: rect.left, y: rect.top },
+    { x: right, y: rect.top },
+    { x: right, y: bottom },
+    { x: rect.left, y: bottom },
+  ];
+  return corners.map((corner, index) => ({ from: corner, to: corners[(index + 1) % corners.length] }));
 }
 
 function angleInfoText(aim: Readonly<Aim>): string {
