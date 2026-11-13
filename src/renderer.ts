@@ -105,7 +105,10 @@ function drawItem(context: CanvasRenderingContext2D, sprites: Sprites, item: Fra
 
 function drawImage(context: CanvasRenderingContext2D, sprites: Sprites, item: ImageItem): void {
   const target = item.target;
+  context.save();
+  context.globalAlpha = item.alpha;
   context.drawImage(sprites[item.sprite], target.left, target.top, target.width, target.height);
+  context.restore();
 }
 
 function drawSpriteFrame(context: CanvasRenderingContext2D, sprites: Sprites, item: SpriteFrameItem): void {

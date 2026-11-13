@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { describe, expect, test } from "vitest";
-import { afterglowSegments, explosionBloom, explosionSize, roundBanner, trailAlpha } from "./animationCurves";
+import { afterglowSegments, explosionBloom, explosionSize, planetAlpha, roundBanner, trailAlpha } from "./animationCurves";
 
 describe("explosionSize", () => {
   test.each([
@@ -96,5 +96,40 @@ describe("trailAlpha", () => {
   test("never drops below a faint floor", () => {
     expect(trailAlpha(5)).toBe(0.15);
     expect(trailAlpha(20)).toBe(0.15);
+  });
+});
+
+describe("planetAlpha", () => {
+  test.each([0, 90, 500])("planets that are always visible are fully shown %i steps into the round", (steps) => {
+    expect(planetAlpha("always", steps, undefined)).toBe(1);
+    expect(planetAlpha("always", steps, 0)).toBe(1);
+  });
+
+  test("planets revealed at round start are fully shown for 3 s, then fade out over 1 s", () => {
+    expect(planetAlpha("atRoundStart", 0, undefined)).toBe(1);
+    expect(planetAlpha("atRoundStart", 90, undefined)).toBe(1);
+    expect(planetAlpha("atRoundStart", 105, undefined)).toBeCloseTo(0.5, 9);
+    expect(planetAlpha("atRoundStart", 120, undefined)).toBe(0);
+    expect(planetAlpha("atRoundStart", 500, undefined)).toBe(0);
+  });
+
+  test("hidden planets are never shown during the round", () => {
+    expect(planetAlpha("hidden", 0, undefined)).toBe(0);
+    expect(planetAlpha("hidden", 500, undefined)).toBe(0);
+  });
+
+  test.each(["atRoundStart", "hidden"] as const)("%s planets fade in over 1 s once the round is over", (visibility) => {
+    expect(planetAlpha(visibility, 300, 0)).toBe(0);
+    expect(planetAlpha(visibility, 315, 15)).toBeCloseTo(0.5, 9);
+    expect(planetAlpha(visibility, 330, 30)).toBe(1);
+    expect(planetAlpha(visibility, 400, 100)).toBe(1);
+  });
+
+  test("planets still being revealed when the round ends never dim again", () => {
+    const alphas = Array.from({ length: 40 }, (_, steps) => planetAlpha("atRoundStart", 100 + steps, steps));
+
+    expect(alphas[0]).toBeCloseTo(2 / 3, 9);
+    expect(alphas.every((alpha, index) => index === 0 || alpha >= alphas[index - 1])).toBe(true);
+    expect(alphas.at(-1)).toBe(1);
   });
 });

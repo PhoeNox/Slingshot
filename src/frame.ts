@@ -5,7 +5,7 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { afterglowSegments, explosionBloom, explosionSize, roundBanner, trailAlpha } from "./animationCurves";
+import { afterglowSegments, explosionBloom, explosionSize, planetAlpha, roundBanner, trailAlpha } from "./animationCurves";
 import { COLOURS } from "./colours";
 import type { Missile, Point, Segment } from "./core/flight";
 import type { InFlightView, MatchView, RoundOutcome, RoundOverView, RoundResult, Zoom } from "./core/match";
@@ -33,6 +33,7 @@ export interface ImageItem {
   kind: "image";
   sprite: SpriteName;
   target: Rect;
+  alpha: number;
 }
 
 export interface SpriteFrameItem {
@@ -232,11 +233,17 @@ function sceneItems(
   display: Readonly<DisplaySettings>,
   debris: readonly Readonly<Particle>[],
 ): FrameItem[] {
-  const planets = planetItems(view.planets, display);
+  const alpha = matchPlanetAlpha(view);
+  const planets = planetItems(view.planets, display, alpha);
   const trails = trailItems(view.trails);
   const particles = debrisItems(debris, 1 / view.zoom.scale);
   const phase = phaseSceneItems(view);
   return [...planets, ...trails, ...particles, ...phase];
+}
+
+function matchPlanetAlpha(view: MatchView): number {
+  const stepsSinceRoundOver = view.phase.kind === "roundOver" ? view.phase.stepsSinceRoundOver : undefined;
+  return planetAlpha(view.planetVisibility, view.roundStepCount, stepsSinceRoundOver);
 }
 
 function debrisItems(debris: readonly Readonly<Particle>[], sizeScale: number): DotItem[] {
@@ -287,7 +294,7 @@ export function describeAttractFrame(
   display: Readonly<DisplaySettings>,
   debris: readonly Readonly<Particle>[],
 ): FrameItem[] {
-  const planets = planetItems(view.planets, display);
+  const planets = planetItems(view.planets, display, 1);
   const trails = trailItems(view.trails);
   const particles = debrisItems(debris, 1);
   const phase = attractPhaseItems(view);
@@ -311,7 +318,7 @@ function attractFlightItems(view: MatchView, flight: InFlightView): FrameItem[] 
 }
 
 export function describeBackdropFrame(): FrameItem[] {
-  const backdrop = imageItem("backdrop", PLAYING_AREA);
+  const backdrop = imageItem("backdrop", PLAYING_AREA, 1);
   return [backdrop];
 }
 
@@ -337,8 +344,8 @@ function phaseHudItems(view: MatchView): FrameItem[] {
   }
 }
 
-function imageItem(sprite: SpriteName, target: Readonly<Rect>): ImageItem {
-  return { kind: "image", sprite, target };
+function imageItem(sprite: SpriteName, target: Readonly<Rect>, alpha: number): ImageItem {
+  return { kind: "image", sprite, target, alpha };
 }
 
 function hudText(
@@ -361,27 +368,36 @@ function bracketItem(rect: Readonly<Rect>): LinesItem {
   return glowLinesItem(COLOURS.phosphor, brackets, 1, SOLID);
 }
 
-function planetItems(roundPlanets: MatchView["planets"], display: Readonly<DisplaySettings>): FrameItem[] {
-  const contours = display.gravityWellContours ? roundPlanets.flatMap(gravityWellContourItems) : [];
-  const sprites = roundPlanets.map(planetSpriteItem);
+function planetItems(
+  roundPlanets: MatchView["planets"],
+  display: Readonly<DisplaySettings>,
+  alpha: number,
+): FrameItem[] {
+  if (alpha === 0) {
+    return [];
+  }
+  const contours = display.gravityWellContours
+    ? roundPlanets.flatMap((planet) => gravityWellContourItems(planet, alpha))
+    : [];
+  const sprites = roundPlanets.map((planet) => planetSpriteItem(planet, alpha));
   return [...contours, ...sprites];
 }
 
-function gravityWellContourItems(planet: Readonly<Planet>): RingItem[] {
+function gravityWellContourItems(planet: Readonly<Planet>, alpha: number): RingItem[] {
   const radii = gravityWellContourRadii(planet);
   return radii.map((radius) => ({
     kind: "ring",
     colour: COLOURS.instrumentDim,
     centre: { x: planet.x, y: planet.y },
     radius,
-    alpha: GRAVITY_WELL_CONTOUR_ALPHA,
+    alpha: GRAVITY_WELL_CONTOUR_ALPHA * alpha,
   }));
 }
 
-function planetSpriteItem(planet: Readonly<Planet>): ImageItem {
+function planetSpriteItem(planet: Readonly<Planet>, alpha: number): ImageItem {
   const sprite: SpriteName = `planet${planet.sprite}`;
   const box = planetBox(planet);
-  return imageItem(sprite, box);
+  return imageItem(sprite, box, alpha);
 }
 
 function trailItems(roundTrails: MatchView["trails"]): LinesItem[] {
@@ -482,7 +498,7 @@ function afterglowItems(roundTrails: MatchView["trails"], flight: InFlightView):
 
 function missileItem(flyingMissile: Readonly<Missile>, size: number): ImageItem {
   const box = centredBox(flyingMissile, size, size);
-  return imageItem("missile", box);
+  return imageItem("missile", box, 1);
 }
 
 function scoreItems(matchScores: MatchView["scores"]): TextItem[] {
@@ -530,7 +546,7 @@ function explosionItems(ship: Readonly<Ship>, stepsSinceHit: number): ImageItem[
     return [];
   }
   const box = centredBox(ship, size, size);
-  return [imageItem("explosion", box)];
+  return [imageItem("explosion", box, 1)];
 }
 
 function bloomItems(ship: Readonly<Ship>, stepsSinceHit: number): BloomItem[] {

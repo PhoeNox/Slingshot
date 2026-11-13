@@ -2,9 +2,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { COLOURS } from "./colours";
+import type { PlanetVisibility } from "./core/match";
 import { backTargetFor, hashFor, moveFocus, resolveHash, type FocusStep, type MenuItem, type Screen } from "./navigation";
 import { scrambleLabel } from "./scramble";
-import { PLANET_COUNT_CHOICES, TIMEOUT_CHOICES, withMaxPlanets, withMinPlanets, type Settings } from "./settings";
+import {
+  PLANET_COUNT_CHOICES,
+  PLANET_VISIBILITY_CHOICES,
+  TIMEOUT_CHOICES,
+  withMaxPlanets,
+  withMinPlanets,
+  type Settings,
+} from "./settings";
 
 export interface ScreenElements {
   overlay: HTMLElement;
@@ -14,6 +22,7 @@ export interface ScreenElements {
   minPlanetsSelect: HTMLSelectElement;
   maxPlanetsSelect: HTMLSelectElement;
   timeoutSelect: HTMLSelectElement;
+  planetVisibilitySelect: HTMLSelectElement;
   bounceCheckbox: HTMLInputElement;
   credits: HTMLElement;
   creditsBackButton: HTMLButtonElement;
@@ -26,6 +35,12 @@ const FOCUS_STEPS: Record<string, FocusStep> = {
   KeyW: -1,
   ArrowDown: 1,
   KeyS: 1,
+};
+
+const PLANET_VISIBILITY_LABELS: Record<PlanetVisibility, string> = {
+  always: "Always",
+  atRoundStart: "At round start",
+  hidden: "Hidden",
 };
 
 const SCRAMBLE_DURATION_MS = 200;
@@ -220,6 +235,25 @@ function timeoutOption(seconds: number | undefined): HTMLOptionElement {
 
 function timeoutOptionValue(seconds: number | undefined): string {
   return seconds === undefined ? "never" : String(seconds);
+}
+
+export function bindPlanetVisibilitySelect(
+  select: HTMLSelectElement,
+  settings: Settings,
+  saveSettings: (settings: Readonly<Settings>) => void,
+): void {
+  const options = PLANET_VISIBILITY_CHOICES.map(planetVisibilityOption);
+  select.replaceChildren(...options);
+  select.value = settings.planetVisibility;
+  select.addEventListener("change", () => {
+    settings.planetVisibility = PLANET_VISIBILITY_CHOICES.find((visibility) => visibility === select.value)!;
+    saveSettings(settings);
+  });
+}
+
+function planetVisibilityOption(visibility: PlanetVisibility): HTMLOptionElement {
+  const label = PLANET_VISIBILITY_LABELS[visibility];
+  return new Option(label, visibility);
 }
 
 export function bindMainMenuButton(button: HTMLButtonElement): void {

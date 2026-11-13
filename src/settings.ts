@@ -1,13 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { DEFAULT_MATCH_RULES, type MatchRules, type PlanetCountRange } from "./core/match";
+import { DEFAULT_MATCH_RULES, type MatchRules, type PlanetCountRange, type PlanetVisibility } from "./core/match";
 
 export interface Settings {
   gravityWellContours: boolean;
   planetCount: Readonly<PlanetCountRange>;
   timeoutSeconds: number | undefined;
   bounce: boolean;
+  planetVisibility: PlanetVisibility;
 }
 
 export const DEFAULT_SETTINGS: Readonly<Settings> = {
@@ -15,6 +16,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = {
   planetCount: DEFAULT_MATCH_RULES.planetCount,
   timeoutSeconds: DEFAULT_MATCH_RULES.timeoutSeconds,
   bounce: DEFAULT_MATCH_RULES.bounce,
+  planetVisibility: DEFAULT_MATCH_RULES.planetVisibility,
 };
 
 const FEWEST_PLANETS = 1;
@@ -26,6 +28,8 @@ export const PLANET_COUNT_CHOICES: readonly number[] = Array.from(
 );
 
 export const TIMEOUT_CHOICES: readonly (number | undefined)[] = [10, 25, 50, undefined];
+
+export const PLANET_VISIBILITY_CHOICES: readonly PlanetVisibility[] = ["always", "atRoundStart", "hidden"];
 
 export function parseSettings(stored: string | null): Settings {
   let parsed: unknown;
@@ -40,7 +44,10 @@ export function parseSettings(stored: string | null): Settings {
   const planetCount = parsePlanetCount(fields.planetCount);
   const timeoutSeconds = parseTimeoutSeconds(fields.timeoutSeconds);
   const bounce = typeof fields.bounce === "boolean" ? fields.bounce : DEFAULT_SETTINGS.bounce;
-  return { gravityWellContours, planetCount, timeoutSeconds, bounce };
+  const planetVisibility = isPlanetVisibilityChoice(fields.planetVisibility)
+    ? fields.planetVisibility
+    : DEFAULT_SETTINGS.planetVisibility;
+  return { gravityWellContours, planetCount, timeoutSeconds, bounce, planetVisibility };
 }
 
 function parsePlanetCount(value: unknown): Readonly<PlanetCountRange> {
@@ -69,6 +76,10 @@ function isPlanetCountChoice(value: unknown): value is number {
   return typeof value === "number" && PLANET_COUNT_CHOICES.includes(value);
 }
 
+function isPlanetVisibilityChoice(value: unknown): value is PlanetVisibility {
+  return PLANET_VISIBILITY_CHOICES.some((choice) => choice === value);
+}
+
 export function serialiseSettings(settings: Readonly<Settings>): string {
   const stored = { ...settings, timeoutSeconds: settings.timeoutSeconds ?? null };
   return JSON.stringify(stored);
@@ -83,5 +94,10 @@ export function withMaxPlanets(range: Readonly<PlanetCountRange>, max: number): 
 }
 
 export function matchRulesFor(settings: Readonly<Settings>): MatchRules {
-  return { planetCount: settings.planetCount, timeoutSeconds: settings.timeoutSeconds, bounce: settings.bounce };
+  return {
+    planetCount: settings.planetCount,
+    timeoutSeconds: settings.timeoutSeconds,
+    bounce: settings.bounce,
+    planetVisibility: settings.planetVisibility,
+  };
 }

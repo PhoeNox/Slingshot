@@ -6,6 +6,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import type { Segment } from "./core/flight";
+import type { PlanetVisibility } from "./core/match";
 
 interface RoundBanner {
   text: string;
@@ -40,6 +41,10 @@ const BANNER_END_INTENSITY = 30;
 const BANNER_DECAY_PER_STEP = 1.04;
 const BANNER_FONT_SIZE = 100;
 const BANNER_GROWTH_DIVISOR = 25;
+
+const PLANET_REVEAL_STEPS = 90;
+const PLANET_FADE_OUT_STEPS = 30;
+const PLANET_FADE_IN_STEPS = 30;
 
 export function afterglowSegments<S extends Segment>(trail: readonly Readonly<S>[], stepsFlown: number): FadingSegment<S>[] {
   const count = Math.min(stepsFlown, AFTERGLOW_STEPS);
@@ -82,4 +87,33 @@ export function roundBanner(round: number, stepsIntoRound: number): RoundBanner 
     fontSize: (BANNER_FONT_SIZE * (BANNER_START_INTENSITY - intensity)) / BANNER_GROWTH_DIVISOR,
     alpha: (2 * intensity - 60) / 255,
   };
+}
+
+export function planetAlpha(
+  visibility: PlanetVisibility,
+  stepsIntoRound: number,
+  stepsSinceRoundOver: number | undefined,
+): number {
+  if (stepsSinceRoundOver === undefined) {
+    return roundPlanetAlpha(visibility, stepsIntoRound);
+  }
+  const alphaAtRoundOver = roundPlanetAlpha(visibility, stepsIntoRound - stepsSinceRoundOver);
+  const fadeIn = Math.min(stepsSinceRoundOver / PLANET_FADE_IN_STEPS, 1);
+  return alphaAtRoundOver + (1 - alphaAtRoundOver) * fadeIn;
+}
+
+function roundPlanetAlpha(visibility: PlanetVisibility, stepsIntoRound: number): number {
+  switch (visibility) {
+    case "always":
+      return 1;
+    case "atRoundStart":
+      return revealedPlanetAlpha(stepsIntoRound);
+    case "hidden":
+      return 0;
+  }
+}
+
+function revealedPlanetAlpha(stepsIntoRound: number): number {
+  const fadeOut = (stepsIntoRound - PLANET_REVEAL_STEPS) / PLANET_FADE_OUT_STEPS;
+  return Math.min(Math.max(1 - fadeOut, 0), 1);
 }

@@ -8,6 +8,7 @@ import {
   matchRulesFor,
   parseSettings,
   PLANET_COUNT_CHOICES,
+  PLANET_VISIBILITY_CHOICES,
   serialiseSettings,
   TIMEOUT_CHOICES,
   withMaxPlanets,
@@ -16,20 +17,21 @@ import {
 } from "./settings";
 
 describe("parseSettings", () => {
-  test("shows gravity-well contours and plays with 2 to 4 planets, a 25 s timeout and no bounce by default", () => {
+  test("shows contours and always-visible planets, with 2 to 4 planets, a 25 s timeout and no bounce by default", () => {
     expect(DEFAULT_SETTINGS).toEqual({
       gravityWellContours: true,
       planetCount: { min: 2, max: 4 },
       timeoutSeconds: 25,
       bounce: false,
+      planetVisibility: "always",
     });
   });
 
   test.each<Settings>([
-    { gravityWellContours: true, planetCount: { min: 2, max: 4 }, timeoutSeconds: 25, bounce: false },
-    { gravityWellContours: false, planetCount: { min: 1, max: 6 }, timeoutSeconds: 10, bounce: true },
-    { gravityWellContours: true, planetCount: { min: 3, max: 3 }, timeoutSeconds: 50, bounce: false },
-    { gravityWellContours: true, planetCount: { min: 2, max: 4 }, timeoutSeconds: undefined, bounce: true },
+    DEFAULT_SETTINGS,
+    { ...DEFAULT_SETTINGS, gravityWellContours: false, planetCount: { min: 1, max: 6 }, timeoutSeconds: 10, bounce: true },
+    { ...DEFAULT_SETTINGS, planetCount: { min: 3, max: 3 }, timeoutSeconds: 50, planetVisibility: "atRoundStart" },
+    { ...DEFAULT_SETTINGS, timeoutSeconds: undefined, bounce: true, planetVisibility: "hidden" },
   ])("reads back serialised settings %j", (settings) => {
     expect(parseSettings(serialiseSettings(settings))).toEqual(settings);
   });
@@ -63,6 +65,7 @@ describe("parseSettings", () => {
       planetCount: { min: 2, max: 4 },
       timeoutSeconds: 25,
       bounce: false,
+      planetVisibility: "always",
     });
   });
 
@@ -79,6 +82,7 @@ describe("parseSettings", () => {
       planetCount: { min: 1, max: 3 },
       timeoutSeconds: 25,
       bounce: false,
+      planetVisibility: "always",
     });
   });
 
@@ -96,18 +100,40 @@ describe("parseSettings", () => {
       planetCount: { min: 1, max: 3 },
       timeoutSeconds: 10,
       bounce: false,
+      planetVisibility: "always",
+    });
+  });
+
+  test.each([
+    ["an unoffered value", "invisible"],
+    ["a differently cased value", "Hidden"],
+    ["a number", 2],
+    ["null", null],
+    ["a missing value", undefined],
+  ])("falls back to always-visible planets for %s", (_, planetVisibility) => {
+    const fields = { gravityWellContours: false, planetCount: { min: 1, max: 3 }, timeoutSeconds: 10, planetVisibility };
+    const stored = JSON.stringify(fields);
+
+    expect(parseSettings(stored)).toEqual({
+      gravityWellContours: false,
+      planetCount: { min: 1, max: 3 },
+      timeoutSeconds: 10,
+      bounce: false,
+      planetVisibility: "always",
     });
   });
 
   test("ignores unknown fields", () => {
     const stored =
-      '{"gravityWellContours":false,"planetCount":{"min":1,"max":5,"mean":3},"timeoutSeconds":null,"bounce":true,"volume":3}';
+      '{"gravityWellContours":false,"planetCount":{"min":1,"max":5,"mean":3},"timeoutSeconds":null,"bounce":true,' +
+      '"planetVisibility":"hidden","volume":3}';
 
     expect(parseSettings(stored)).toEqual({
       gravityWellContours: false,
       planetCount: { min: 1, max: 5 },
       timeoutSeconds: undefined,
       bounce: true,
+      planetVisibility: "hidden",
     });
   });
 });
@@ -146,16 +172,28 @@ describe("timeout choices", () => {
   });
 });
 
+describe("planet visibility choices", () => {
+  test("offer always, at round start and hidden", () => {
+    expect(PLANET_VISIBILITY_CHOICES).toEqual(["always", "atRoundStart", "hidden"]);
+  });
+});
+
 describe("matchRulesFor", () => {
-  test("takes the planet count range, the timeout and bounce from the settings", () => {
+  test("takes the planet count range, the timeout, bounce and planet visibility from the settings", () => {
     const settings: Settings = {
       gravityWellContours: true,
       planetCount: { min: 5, max: 6 },
       timeoutSeconds: 10,
       bounce: true,
+      planetVisibility: "atRoundStart",
     };
 
-    expect(matchRulesFor(settings)).toEqual({ planetCount: { min: 5, max: 6 }, timeoutSeconds: 10, bounce: true });
+    expect(matchRulesFor(settings)).toEqual({
+      planetCount: { min: 5, max: 6 },
+      timeoutSeconds: 10,
+      bounce: true,
+      planetVisibility: "atRoundStart",
+    });
   });
 
   test("lets missiles never time out", () => {

@@ -68,16 +68,20 @@ interface TrailSegment {
   to: Point;
 }
 
+export type PlanetVisibility = "always" | "atRoundStart" | "hidden";
+
 export interface MatchRules {
   planetCount: PlanetCountRange;
   timeoutSeconds: number | undefined;
   bounce: boolean;
+  planetVisibility: PlanetVisibility;
 }
 
 export const DEFAULT_MATCH_RULES: DeepReadonly<MatchRules> = {
   planetCount: { min: 2, max: 4 },
   timeoutSeconds: 25,
   bounce: false,
+  planetVisibility: "always",
 };
 
 const STEPS_PER_SECOND = 30;
@@ -137,6 +141,7 @@ interface MatchViewState extends Omit<MatchState, "phase"> {
   aimLine: Segment;
   powerPenalty: number;
   bounce: boolean;
+  planetVisibility: PlanetVisibility;
 }
 
 export type MatchView = DeepReadonly<MatchViewState>;
@@ -347,6 +352,7 @@ export function matchView(match: Match): MatchView {
     zoom: match.zoom,
     impact: match.impact,
     bounce: match.rules.bounce,
+    planetVisibility: match.rules.planetVisibility,
   };
 }
 

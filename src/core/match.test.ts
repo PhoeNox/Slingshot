@@ -1023,12 +1023,17 @@ describe("previewShot", () => {
 });
 
 describe("match rules", () => {
-  const FIVE_TO_SIX_PLANETS: MatchRules = { planetCount: { min: 5, max: 6 }, timeoutSeconds: 25, bounce: false };
-  const TEN_SECOND_TIMEOUT: MatchRules = { planetCount: { min: 2, max: 4 }, timeoutSeconds: 10, bounce: false };
-  const NO_TIMEOUT: MatchRules = { planetCount: { min: 2, max: 4 }, timeoutSeconds: undefined, bounce: false };
+  const FIVE_TO_SIX_PLANETS: MatchRules = { ...DEFAULT_MATCH_RULES, planetCount: { min: 5, max: 6 } };
+  const TEN_SECOND_TIMEOUT: MatchRules = { ...DEFAULT_MATCH_RULES, timeoutSeconds: 10 };
+  const NO_TIMEOUT: MatchRules = { ...DEFAULT_MATCH_RULES, timeoutSeconds: undefined };
 
-  test("default match rules are two to four planets, a 25 second timeout and no bounce", () => {
-    expect(DEFAULT_MATCH_RULES).toEqual({ planetCount: { min: 2, max: 4 }, timeoutSeconds: 25, bounce: false });
+  test("default match rules are 2 to 4 planets, a 25 s timeout, no bounce and always-visible planets", () => {
+    expect(DEFAULT_MATCH_RULES).toEqual({
+      planetCount: { min: 2, max: 4 },
+      timeoutSeconds: 25,
+      bounce: false,
+      planetVisibility: "always",
+    });
   });
 
   test("omitted match rules play exactly like the default match rules", () => {
@@ -1120,8 +1125,8 @@ describe("match rules", () => {
 });
 
 describe("bounce", () => {
-  const BOUNCE_TEN_SECOND_TIMEOUT: MatchRules = { planetCount: { min: 2, max: 4 }, timeoutSeconds: 10, bounce: true };
-  const BOUNCE_NO_TIMEOUT: MatchRules = { planetCount: { min: 2, max: 4 }, timeoutSeconds: undefined, bounce: true };
+  const BOUNCE_TEN_SECOND_TIMEOUT: MatchRules = { ...DEFAULT_MATCH_RULES, timeoutSeconds: 10, bounce: true };
+  const BOUNCE_NO_TIMEOUT: MatchRules = { ...DEFAULT_MATCH_RULES, timeoutSeconds: undefined, bounce: true };
 
   function bounceMatch(seed: number, rules = BOUNCE_NO_TIMEOUT): Match {
     return createMatch(seed, fixedLayout([]), rules);
@@ -1249,6 +1254,15 @@ describe("bounce", () => {
   test("the match view reports whether the match bounces", () => {
     expect(matchView(bounceMatch(88)).bounce).toBe(true);
     expect(matchView(createMatch(88)).bounce).toBe(false);
+  });
+});
+
+describe("planet visibility", () => {
+  test("the match view reports the match's planet visibility", () => {
+    const hiddenRules: MatchRules = { ...DEFAULT_MATCH_RULES, planetVisibility: "hidden" };
+
+    expect(matchView(createMatch(89, undefined, hiddenRules)).planetVisibility).toBe("hidden");
+    expect(matchView(createMatch(89)).planetVisibility).toBe("always");
   });
 });
 

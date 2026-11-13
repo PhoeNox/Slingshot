@@ -13,6 +13,7 @@ import {
   step,
   type Match,
   type MatchView,
+  type PlanetVisibility,
   type RoundLayout,
   type RoundOverView,
   type RoundResult,
@@ -515,6 +516,112 @@ describe("gravity-well contours", () => {
 
     expect(ringsAround(attractFrameOf(match, CONTOURS_SHOWN), HEAVY_PLANET)).toHaveLength(3);
     expect(ringsAround(attractFrameOf(match, CONTOURS_HIDDEN), HEAVY_PLANET)).toHaveLength(0);
+  });
+});
+
+describe("planet visibility", () => {
+  function visibilityMatch(seed: number, planetVisibility: PlanetVisibility): Match {
+    const layout = { ...structuredClone(EMPTY_LAYOUT), planets: [{ ...LIGHT_PLANET }, { ...HEAVY_PLANET }] };
+    return createMatch(seed, layout, { ...DEFAULT_MATCH_RULES, planetVisibility });
+  }
+
+  function stepTimes(match: Match, steps: number): void {
+    for (let i = 0; i < steps; i++) {
+      step(match);
+    }
+  }
+
+  function planetAlphasOf(frame: FrameItem[]): number[] {
+    return frame.flatMap((item) => (item.kind === "image" && item.sprite.startsWith("planet") ? [item.alpha] : []));
+  }
+
+  function contourAlphasOf(frame: FrameItem[]): number[] {
+    return [...ringsAround(frame, LIGHT_PLANET), ...ringsAround(frame, HEAVY_PLANET)].map((ring) => ring.alpha);
+  }
+
+  function roundOverFrameAfter(match: Match, stepsSinceRoundOver: number, display = CONTOURS_SHOWN): FrameItem[] {
+    const phase: RoundOverView = { kind: "roundOver", result: HIT, stepsSinceRoundOver };
+    const view = { ...matchView(match), phase, roundStepCount: 300 + stepsSinceRoundOver };
+    return flatten(describeFrame(view, display, NO_DEBRIS));
+  }
+
+  test("planets that are always visible stay fully shown throughout the round", () => {
+    const match = visibilityMatch(100, "always");
+    stepTimes(match, 500);
+
+    const frame = frameOf(match);
+
+    expect(planetAlphasOf(frame)).toEqual([1, 1]);
+    expect(contourAlphasOf(frame)).toEqual(Array(6).fill(0.45));
+  });
+
+  test("planets revealed at round start are fully shown for 3 s, then fade out with their contours", () => {
+    const match = visibilityMatch(101, "atRoundStart");
+    const start = frameOf(match);
+    stepTimes(match, 90);
+    const revealEnd = frameOf(match);
+    stepTimes(match, 15);
+    const fading = frameOf(match);
+    stepTimes(match, 15);
+    const gone = frameOf(match);
+
+    expect(planetAlphasOf(start)).toEqual([1, 1]);
+    expect(planetAlphasOf(revealEnd)).toEqual([1, 1]);
+    expect(planetAlphasOf(fading)).toEqual([expect.closeTo(0.5, 9), expect.closeTo(0.5, 9)]);
+    expect(contourAlphasOf(fading)).toEqual(Array(6).fill(expect.closeTo(0.225, 9)));
+    expect(planetAlphasOf(gone)).toHaveLength(0);
+    expect(contourAlphasOf(gone)).toHaveLength(0);
+  });
+
+  test("hidden planets and their contours are never drawn while aiming or in flight", () => {
+    const match = visibilityMatch(102, "hidden");
+    const aimingFrame = frameOf(match);
+    fire(match);
+    step(match);
+    const flightFrame = frameOf(match);
+
+    for (const frame of [aimingFrame, flightFrame]) {
+      expect(planetAlphasOf(frame)).toHaveLength(0);
+      expect(contourAlphasOf(frame)).toHaveLength(0);
+    }
+  });
+
+  test.each<PlanetVisibility>(["atRoundStart", "hidden"])("%s planets fade in with their contours once the round is over", (
+    visibility,
+  ) => {
+    const match = visibilityMatch(103, visibility);
+
+    expect(planetAlphasOf(roundOverFrameAfter(match, 0))).toHaveLength(0);
+    expect(planetAlphasOf(roundOverFrameAfter(match, 15))).toEqual([expect.closeTo(0.5, 9), expect.closeTo(0.5, 9)]);
+    expect(planetAlphasOf(roundOverFrameAfter(match, 30))).toEqual([1, 1]);
+    expect(contourAlphasOf(roundOverFrameAfter(match, 30))).toEqual(Array(6).fill(0.45));
+  });
+
+  test("the contours setting keeps contours off when hidden planets are revealed", () => {
+    const frame = roundOverFrameAfter(visibilityMatch(104, "hidden"), 30, CONTOURS_HIDDEN);
+
+    expect(planetAlphasOf(frame)).toEqual([1, 1]);
+    expect(contourAlphasOf(frame)).toHaveLength(0);
+  });
+
+  test("ships, the missile, its trail and afterglow stay visible while planets are hidden", () => {
+    const match = visibilityMatch(105, "hidden");
+    fire(match);
+    stepTimes(match, 5);
+
+    const frame = frameOf(match);
+
+    expect(shipSpritesOf(frame)).toEqual(new Set(["leftShip", "rightShip"]));
+    expect(imagesOf(frame, "missile")).toHaveLength(1);
+    expect(afterglowOf(frame).length).toBeGreaterThan(0);
+    expect(linesOf(frame).some((item) => !item.glow && item.alpha > 0)).toBe(true);
+  });
+
+  test("the attract frame always shows planets and their contours", () => {
+    const frame = attractFrameOf(visibilityMatch(106, "hidden"));
+
+    expect(planetAlphasOf(frame)).toEqual([1, 1]);
+    expect(contourAlphasOf(frame)).toEqual(Array(6).fill(0.45));
   });
 });
 
