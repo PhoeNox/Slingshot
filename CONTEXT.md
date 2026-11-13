@@ -7,12 +7,16 @@ A two-player, turn-based artillery game in which missiles are bent by the gravit
 ### Navigation
 
 **Screen**:
-What the game currently shows: the main menu, the credits, or a match.
+What the game currently shows: the main menu, the settings, the credits, or a match.
 _Avoid_: Scene, state, page
 
 **Main menu**:
-The screen the game opens on; offers Play and Credits.
+The screen the game opens on; offers Play, Settings and Credits.
 _Avoid_: Title screen, start screen
+
+**Settings**:
+The screen, reached from the main menu, where players choose how future matches are played and how the game is drawn; choices are remembered between visits.
+_Avoid_: Options, preferences, config
 
 **Credits**:
 The screen naming the original game's authors, the asset sources, and the licences.
@@ -27,6 +31,10 @@ _Avoid_: Demo, idle mode, screensaver
 A series of rounds between two players, started from the main menu and played until abandoned.
 _Avoid_: Game, session
 
+**Match rules**:
+The settings that shape play (planet count range, timeout), fixed when a match starts and unchanged for its whole life; attract mode always uses the default match rules.
+_Avoid_: Game options, config
+
 **Round**:
 One planet layout and ship placement, played until a ship is hit.
 _Avoid_: Level, game
@@ -36,7 +44,7 @@ One firing by a player, from launch until the missile hits a planet or ship, lea
 _Avoid_: Turn, attempt
 
 **Timeout**:
-The point after a fixed flight duration from which a missile no longer returns from outside the playing area.
+The point after a flight duration set by the match rules from which a missile no longer returns from outside the playing area; the match rules may also disable it.
 
 **Attempt**:
 The count of shots a player has fired in the current round; earlier hits earn a quick-hit bonus.
