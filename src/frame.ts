@@ -182,6 +182,8 @@ const ZOOM_DIM_COLOUR = "rgba(4, 8, 21, 0.75)";
 const ZOOM_GRID_SPACING = 50;
 const ZOOM_GRID_ALPHA = 0.3;
 
+const ATTRACT_DIM_COLOUR = "rgba(4, 8, 21, 0.55)";
+
 const BANNER_CENTRE_X = 399;
 const BANNER_CENTRE_Y = 299;
 
@@ -194,6 +196,32 @@ export function describeFrame(view: MatchView): FrameItem[] {
   const scores = scoreItems(view.scores);
   const banner = roundBannerItems(view.roundNumber, view.roundStepCount);
   return [...planets, ...trails, ...phase, ...scores, ...banner];
+}
+
+export function describeAttractFrame(view: MatchView): FrameItem[] {
+  const planets = planetItems(view.planets);
+  const trails = trailItems(view.trails);
+  const phase = attractPhaseItems(view);
+  const dimming: FillRectItem = { kind: "fillRect", colour: ATTRACT_DIM_COLOUR, rect: PLAYING_AREA };
+  return [...planets, ...trails, ...phase, dimming];
+}
+
+function attractPhaseItems(view: MatchView): FrameItem[] {
+  switch (view.phase.kind) {
+    case "aiming":
+      return shipItems(view.ships, SIDES);
+    case "inFlight":
+      return attractFlightItems(view, view.phase.missile);
+    case "roundOver":
+      return hitSceneItems(view.ships, view.phase);
+  }
+}
+
+function attractFlightItems(view: MatchView, flyingMissile: Readonly<Missile>): FrameItem[] {
+  const ships = shipItems(view.ships, SIDES);
+  const afterglow = afterglowItems(view.trails, flyingMissile);
+  const missile = missileItem(flyingMissile);
+  return [...ships, ...afterglow, missile];
 }
 
 export function describeBackdropFrame(): FrameItem[] {
@@ -445,14 +473,19 @@ function roundBannerItems(round: number, stepsIntoRound: number): TextItem[] {
 }
 
 function roundOverItems(roundShips: MatchView["ships"], roundOver: RoundOverView): FrameItem[] {
-  const result = roundOver.result;
-  const survivingSides = SIDES.filter((side) => side !== result.hitShip);
+  const hitScene = hitSceneItems(roundShips, roundOver);
+  const message = roundOverMessageItems(roundOver.result);
+  return [...hitScene, ...message];
+}
+
+function hitSceneItems(roundShips: MatchView["ships"], roundOver: RoundOverView): FrameItem[] {
+  const hitSide = roundOver.result.hitShip;
+  const survivingSides = SIDES.filter((side) => side !== hitSide);
   const ships = shipItems(roundShips, survivingSides);
-  const hitShip = roundShips[result.hitShip];
+  const hitShip = roundShips[hitSide];
   const explosion = explosionItems(hitShip, roundOver.stepsSinceRoundOver);
   const bloom = bloomItems(hitShip, roundOver.stepsSinceRoundOver);
-  const message = roundOverMessageItems(result);
-  return [...ships, ...explosion, ...bloom, ...message];
+  return [...ships, ...explosion, ...bloom];
 }
 
 function explosionItems(ship: Readonly<Ship>, stepsSinceHit: number): ImageItem[] {

@@ -3,15 +3,16 @@
 
 import "./style.css";
 import { loadFonts, loadSprites } from "./assets";
+import { createAttractMode, stepAttractMode, type AttractMode } from "./core/attract";
 import { adjustAim, createMatch, fire, matchView, step, type AimDelta, type Match } from "./core/match";
 import { applyFit, applyOverlayFit, fitPlayingArea } from "./display";
-import { describeBackdropFrame, describeFrame } from "./frame";
+import { describeAttractFrame, describeBackdropFrame, describeFrame } from "./frame";
 import { startGameLoop } from "./gameLoop";
 import { bindControls, bindEscape } from "./input";
 import { MAIN_MENU_ITEMS, type Screen } from "./navigation";
 import type { Point } from "./core/flight";
 import { drawFrame, drawShakenFrame } from "./renderer";
-import { bindBracketFlash, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, navigateBack, renderMenuItems, showScreen, type ScreenElements } from "./screens";
+import { bindBracketFlash, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, navigateBack, renderMenuItems, showScreen, traceTitleArc, type ScreenElements } from "./screens";
 import { NO_SHAKE, screenShakeOffset } from "./screenShake";
 import { drawStars, renderStarSprites } from "./starLayer";
 import { generateStars } from "./stars";
@@ -21,11 +22,21 @@ const STATIC_STAR_TIME_MS = 0;
 interface MatchSession {
   screen: Screen;
   match: Match | undefined;
+  attract: AttractMode | undefined;
+}
+
+function randomSeed(): number {
+  return Math.floor(Math.random() * 2 ** 32);
 }
 
 function createRandomMatch(): Match {
-  const seed = Math.floor(Math.random() * 2 ** 32);
+  const seed = randomSeed();
   return createMatch(seed);
+}
+
+function createRandomAttractMode(): AttractMode {
+  const seed = randomSeed();
+  return createAttractMode(seed);
 }
 
 async function start(): Promise<void> {
@@ -42,11 +53,12 @@ async function start(): Promise<void> {
   };
   const menu = document.querySelector<HTMLElement>("#main-menu .menu")!;
   const matchMenuButton = document.querySelector<HTMLButtonElement>("#match-menu-button")!;
+  const titleArc = document.querySelector<SVGPathElement>("#main-menu .title-arc path")!;
 
   const sprites = await loadSprites();
   await loadFonts();
 
-  const session: MatchSession = { screen: "mainMenu", match: undefined };
+  const session: MatchSession = { screen: "mainMenu", match: undefined, attract: undefined };
 
   const fitStage = () => {
     const fit = fitPlayingArea(stage.clientWidth, stage.clientHeight, window.devicePixelRatio);
@@ -77,21 +89,27 @@ async function start(): Promise<void> {
   const enterScreen = (screen: Screen) => {
     session.screen = screen;
     session.match = screen === "match" ? createRandomMatch() : undefined;
+    session.attract = screen === "match" ? undefined : (session.attract ?? createRandomAttractMode());
     showScreen(elements, screen);
   };
   bindScreenRoutes(window, enterScreen);
+  traceTitleArc(titleArc, reducedMotion);
 
-  const stepMatch = () => {
+  const isAttractModePlaying = () => session.screen === "mainMenu" && !reducedMotion.matches;
+  const stepSimulation = () => {
     if (session.match !== undefined) {
       step(session.match);
+    } else if (isAttractModePlaying()) {
+      stepAttractMode(session.attract!);
     }
   };
   const describeCurrentFrame = () => {
-    if (session.match === undefined) {
-      return [];
+    if (session.match !== undefined) {
+      const view = matchView(session.match);
+      return describeFrame(view);
     }
-    const view = matchView(session.match);
-    return describeFrame(view);
+    const attractView = matchView(session.attract!.match);
+    return describeAttractFrame(attractView);
   };
   const currentShake = (): Readonly<Point> => {
     if (reducedMotion.matches || session.match === undefined) {
@@ -111,7 +129,7 @@ async function start(): Promise<void> {
     drawStars(context, starSprites, stars, starTimeMs);
     drawShakenFrame(context, sprites, frame, shake);
   };
-  startGameLoop(stepMatch, render);
+  startGameLoop(stepSimulation, render);
 }
 
 start();

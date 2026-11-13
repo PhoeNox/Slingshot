@@ -81,6 +81,24 @@ body {
   text-shadow: var(--phosphor-glow-strong);
 }
 
+.title-arc {
+  display: block;
+  width: 70cqh;
+  height: 4cqh;
+  margin: 1.5cqh auto 0;
+  overflow: visible;
+  filter: drop-shadow(0 0 3px var(--phosphor));
+}
+
+.title-arc path {
+  fill: none;
+  stroke: var(--phosphor);
+  stroke-width: 2px;
+  stroke-linecap: round;
+  stroke-dasharray: 1 1;
+  vector-effect: non-scaling-stroke;
+}
+
 #credits {
   box-sizing: border-box;
   justify-content: safe center;

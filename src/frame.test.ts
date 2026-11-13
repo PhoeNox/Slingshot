@@ -7,6 +7,7 @@ import { isInsidePlayingArea, type Segment } from "./core/flight";
 import { adjustAim, aimLine, createMatch, fire, matchView, step, type Match, type RoundLayout } from "./core/match";
 import type { Planet, Side } from "./core/round";
 import {
+  describeAttractFrame,
   describeBackdropFrame,
   describeFrame,
   type BloomItem,
@@ -512,5 +513,51 @@ describe("backdrop-only frame", () => {
     expect(imagesOf(frame, "missile")).toHaveLength(0);
     expect(frame.some((item) => item.kind === "image" && item.sprite.startsWith("planet"))).toBe(false);
     expect(textsOf(frame)).toHaveLength(0);
+  });
+});
+
+describe("attract frame", () => {
+  function attractFrameOf(match: Match): FrameItem[] {
+    return flatten(describeAttractFrame(matchView(match)));
+  }
+
+  test("shows planets and both ships without HUD or aim reticle, dimmed over the playing area", () => {
+    const match = planetMatch(40);
+
+    const frame = attractFrameOf(match);
+
+    expect(shipSpritesOf(frame)).toEqual(new Set(["leftShip", "rightShip"]));
+    expect(ringsAround(frame, HEAVY_PLANET).length).toBeGreaterThan(0);
+    expect(textsOf(frame)).toHaveLength(0);
+    expect(linesOf(frame).some((item) => item.dash.length > 0)).toBe(false);
+    expect(frame.at(-1)).toEqual(
+      expect.objectContaining({ kind: "fillRect", rect: { left: 0, top: 0, width: 800, height: 600 } }),
+    );
+  });
+
+  test("shows the missile and its afterglow in flight, without zoom view or flight HUD", () => {
+    const match = emptyMatch(41);
+    fire(match);
+    for (let i = 0; i < 5; i++) {
+      step(match);
+    }
+
+    const frame = attractFrameOf(match);
+
+    expect(imagesOf(frame, "missile")).toHaveLength(1);
+    expect(afterglowOf(frame).length).toBeGreaterThan(0);
+    expect(zoomGroupsOf(frame)).toHaveLength(0);
+    expect(textsOf(frame)).toHaveLength(0);
+  });
+
+  test("a hit shows the explosion without the round-over panel", () => {
+    const match = emptyMatch(42);
+    hitOpponent(match);
+
+    const frame = attractFrameOf(match);
+
+    expect(imagesOf(frame, "explosion")).toHaveLength(1);
+    expect(textsOf(frame)).toHaveLength(0);
+    expect(strokeRectsOf(frame)).toHaveLength(0);
   });
 });

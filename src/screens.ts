@@ -25,6 +25,14 @@ const SCRAMBLE_DURATION_MS = 200;
 const BRACKET_FLASH_KEYFRAMES: Keyframe[] = [{ color: COLOURS.lock }, { color: COLOURS.phosphor }];
 const BRACKET_FLASH_OPTIONS: KeyframeAnimationOptions = { duration: 180, pseudoElement: "::before" };
 
+const TITLE_ARC_TRACE_KEYFRAMES: Keyframe[] = [{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }];
+const TITLE_ARC_TRACE_OPTIONS: KeyframeAnimationOptions = {
+  duration: 1400,
+  delay: 300,
+  easing: "cubic-bezier(0.4, 0, 0.2, 1)",
+  fill: "backwards",
+};
+
 export function renderMenuItems(menu: HTMLElement, items: readonly MenuItem[]): void {
   const buttons = items.map(menuButton);
   menu.replaceChildren(...buttons);
@@ -75,6 +83,13 @@ export function bindBracketFlash(button: HTMLButtonElement): void {
   button.addEventListener("click", () => {
     button.animate(BRACKET_FLASH_KEYFRAMES, BRACKET_FLASH_OPTIONS);
   });
+}
+
+export function traceTitleArc(arc: SVGPathElement, reducedMotion: MediaQueryList): void {
+  if (reducedMotion.matches) {
+    return;
+  }
+  arc.animate(TITLE_ARC_TRACE_KEYFRAMES, TITLE_ARC_TRACE_OPTIONS);
 }
 
 function playScramble(button: HTMLButtonElement, label: string): void {

@@ -12,7 +12,12 @@
       <canvas id="game" tabindex="0" aria-label="Slingshot playing area"></canvas>
       <div id="overlay">
         <section id="main-menu" class="overlay-screen" hidden>
-          <h1>Slingshot</h1>
+          <div class="title-block">
+            <h1>Slingshot</h1>
+            <svg class="title-arc" viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true">
+              <path d="M 2 2 Q 50 14 98 2" pathLength="1" />
+            </svg>
+          </div>
           <nav class="menu" aria-label="Main menu"></nav>
         </section>
         <section id="credits" class="overlay-screen" hidden>
