@@ -1,33 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import { RELEASED_AIM_KEY_REPEAT, stepAimKeyRepeat, type AimKeyInput, type AimKeyRepeatStep } from "./aimKeyRepeat";
 import type { AimDelta } from "./core/match";
-
-interface KeyRepeat {
-  heldCode: string | undefined;
-  shiftHeld: boolean;
-  timer: number | undefined;
-}
-
-const ANGLE_STEP = 2;
-const POWER_STEP = 10;
-const COARSE_ANGLE_STEP = 5;
-const COARSE_POWER_STEP = 25;
-const REPEAT_DELAY_MS = 250;
-const REPEAT_INTERVAL_MS = 30;
-
-const AIM_DIRECTIONS: Record<string, AimDelta> = {
-  ArrowLeft: { angle: -1, power: 0 },
-  KeyA: { angle: -1, power: 0 },
-  ArrowRight: { angle: 1, power: 0 },
-  KeyD: { angle: 1, power: 0 },
-  ArrowUp: { angle: 0, power: 1 },
-  KeyW: { angle: 0, power: 1 },
-  ArrowDown: { angle: 0, power: -1 },
-  KeyS: { angle: 0, power: -1 },
-};
-
-const FIRE_KEYS = new Set(["Space", "Enter"]);
 
 export function bindControls(
   target: Window,
@@ -35,50 +10,52 @@ export function bindControls(
   adjustAim: (delta: AimDelta) => void,
   fire: () => void,
 ): void {
-  const repeat: KeyRepeat = { heldCode: undefined, shiftHeld: false, timer: undefined };
+  let repeat = RELEASED_AIM_KEY_REPEAT;
+  let timer: number | undefined;
 
-  const applyHeldKey = () => {
-    const delta = aimDeltaFor(repeat.heldCode!, repeat.shiftHeld);
-    adjustAim(delta);
-  };
-  const repeatHeldKey = () => {
-    if (!isMatchActive()) {
-      releaseHeldKey();
-      return;
+  const apply = (input: AimKeyInput): AimKeyRepeatStep => {
+    const now = target.performance.now();
+    const step = stepAimKeyRepeat(repeat, input, now);
+    repeat = step.repeat;
+    target.clearTimeout(timer);
+    timer = undefined;
+    if (step.nextTickInMs !== undefined) {
+      timer = target.setTimeout(tick, step.nextTickInMs);
     }
-    applyHeldKey();
-    repeat.timer = target.setTimeout(repeatHeldKey, REPEAT_INTERVAL_MS);
+    if (step.aimDelta) {
+      adjustAim(step.aimDelta);
+    }
+    if (step.fire) {
+      fire();
+    }
+    return step;
   };
-  const releaseHeldKey = () => {
-    target.clearTimeout(repeat.timer);
-    repeat.heldCode = undefined;
+  const tick = () => {
+    const input: AimKeyInput = { kind: "tick", matchActive: isMatchActive() };
+    apply(input);
   };
 
   target.addEventListener("keydown", (event) => {
-    repeat.shiftHeld = event.shiftKey;
-    if (!isMatchActive() || !isHandledKey(event.code)) {
-      return;
+    const input: AimKeyInput = {
+      kind: "keyDown",
+      code: event.code,
+      shiftKey: event.shiftKey,
+      repeat: event.repeat,
+      matchActive: isMatchActive(),
+    };
+    const step = apply(input);
+    if (step.consumesKey) {
+      event.preventDefault();
     }
-    event.preventDefault();
-    if (event.repeat) {
-      return;
-    }
-    if (FIRE_KEYS.has(event.code)) {
-      fire();
-      return;
-    }
-    releaseHeldKey();
-    repeat.heldCode = event.code;
-    applyHeldKey();
-    repeat.timer = target.setTimeout(repeatHeldKey, REPEAT_DELAY_MS);
   });
   target.addEventListener("keyup", (event) => {
-    repeat.shiftHeld = event.shiftKey;
-    if (event.code === repeat.heldCode) {
-      releaseHeldKey();
-    }
+    const input: AimKeyInput = { kind: "keyUp", code: event.code, shiftKey: event.shiftKey };
+    apply(input);
   });
-  target.addEventListener("blur", releaseHeldKey);
+  target.addEventListener("blur", () => {
+    const input: AimKeyInput = { kind: "blur" };
+    apply(input);
+  });
 }
 
 export function bindEscape(target: Window, onEscape: () => void): void {
@@ -87,15 +64,4 @@ export function bindEscape(target: Window, onEscape: () => void): void {
       onEscape();
     }
   });
-}
-
-function isHandledKey(code: string): boolean {
-  return code in AIM_DIRECTIONS || FIRE_KEYS.has(code);
-}
-
-function aimDeltaFor(code: string, coarse: boolean): AimDelta {
-  const direction = AIM_DIRECTIONS[code];
-  const angleStep = coarse ? COARSE_ANGLE_STEP : ANGLE_STEP;
-  const powerStep = coarse ? COARSE_POWER_STEP : POWER_STEP;
-  return { angle: direction.angle * angleStep, power: direction.power * powerStep };
 }
