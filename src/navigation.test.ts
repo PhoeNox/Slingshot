@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { describe, expect, test } from "vitest";
-import { backTargetFor, hashFor, resolveHash, type Screen } from "./navigation";
+import { backTargetFor, hashFor, moveFocus, resolveHash, type FocusStep, type Screen } from "./navigation";
 
 describe("resolveHash", () => {
   test.each<[string, Screen]>([
@@ -32,5 +32,22 @@ describe("backTargetFor", () => {
     ["mainMenu", undefined],
   ])("the back target of %s is %s", (screen, backTarget) => {
     expect(backTargetFor(screen)).toBe(backTarget);
+  });
+});
+
+describe("moveFocus", () => {
+  test.each<[number, FocusStep, number, number]>([
+    [0, 1, 2, 1],
+    [1, -1, 2, 0],
+    [1, 1, 2, 0],
+    [0, -1, 2, 1],
+    [0, 1, 3, 1],
+    [1, 1, 3, 2],
+    [2, -1, 3, 1],
+    [1, -1, 3, 0],
+    [2, 1, 3, 0],
+    [0, -1, 3, 2],
+  ])("from %i by %i over %i items lands on %i", (index, step, itemCount, expected) => {
+    expect(moveFocus(index, step, itemCount)).toBe(expected);
   });
 });

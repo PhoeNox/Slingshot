@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { backTargetFor, hashFor, resolveHash, type MenuItem, type Screen } from "./navigation";
+import { backTargetFor, hashFor, moveFocus, resolveHash, type FocusStep, type MenuItem, type Screen } from "./navigation";
 
 export interface ScreenElements {
   overlay: HTMLElement;
@@ -11,6 +11,13 @@ export interface ScreenElements {
   keyHint: HTMLElement;
   canvas: HTMLCanvasElement;
 }
+
+const FOCUS_STEPS: Record<string, FocusStep> = {
+  ArrowUp: -1,
+  KeyW: -1,
+  ArrowDown: 1,
+  KeyS: 1,
+};
 
 export function renderMenuItems(menu: HTMLElement, items: readonly MenuItem[]): void {
   const buttons = items.map(menuButton);
@@ -26,6 +33,20 @@ function menuButton(item: MenuItem): HTMLButtonElement {
     location.hash = hash;
   });
   return button;
+}
+
+export function bindMenuFocusKeys(menu: HTMLElement): void {
+  menu.addEventListener("keydown", (event) => {
+    const step = FOCUS_STEPS[event.code];
+    if (step === undefined) {
+      return;
+    }
+    event.preventDefault();
+    const buttons = [...menu.querySelectorAll("button")];
+    const focusedIndex = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    const nextIndex = moveFocus(focusedIndex, step, buttons.length);
+    buttons[nextIndex].focus();
+  });
 }
 
 export function showScreen(elements: ScreenElements, screen: Screen): void {

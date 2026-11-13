@@ -8,6 +8,8 @@ export interface Route {
   replace: boolean;
 }
 
+export type FocusStep = -1 | 1;
+
 export interface MenuItem {
   label: string;
   screen: Screen;
@@ -47,4 +49,8 @@ export function hashFor(screen: Screen): string {
 
 export function backTargetFor(screen: Screen): Screen | undefined {
   return BACK_TARGETS[screen];
+}
+
+export function moveFocus(index: number, step: FocusStep, itemCount: number): number {
+  return (index + step + itemCount) % itemCount;
 }

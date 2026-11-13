@@ -10,7 +10,7 @@ import { startGameLoop } from "./gameLoop";
 import { bindControls, bindEscape } from "./input";
 import { MAIN_MENU_ITEMS, type Screen } from "./navigation";
 import { drawFrame } from "./renderer";
-import { bindMainMenuButton, bindScreenRoutes, navigateBack, renderMenuItems, showScreen, type ScreenElements } from "./screens";
+import { bindMainMenuButton, bindMenuFocusKeys, bindScreenRoutes, navigateBack, renderMenuItems, showScreen, type ScreenElements } from "./screens";
 
 interface MatchSession {
   screen: Screen;
@@ -59,6 +59,7 @@ async function start(): Promise<void> {
   bindEscape(window, navigateBackFromCurrentScreen);
 
   renderMenuItems(menu, MAIN_MENU_ITEMS);
+  bindMenuFocusKeys(menu);
   bindMainMenuButton(matchMenuButton);
   bindMainMenuButton(elements.creditsBackButton);
   const enterScreen = (screen: Screen) => {
