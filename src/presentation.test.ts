@@ -20,6 +20,7 @@ import {
   SHIP_FRAME_WIDTH,
   shipPose,
   timeoutText,
+  trailAlpha,
   ZOOM_VIEW,
   ZOOMED_PLAYING_AREA,
   zoomViewPoint,
@@ -167,6 +168,19 @@ describe("afterglowSegments", () => {
 
   test("a just-launched shot has no afterglow", () => {
     expect(afterglowSegments(trail, 0)).toEqual([]);
+  });
+});
+
+describe("trailAlpha", () => {
+  test("fades by a quarter with each later shot", () => {
+    expect(trailAlpha(0)).toBe(0.6);
+    expect(trailAlpha(1)).toBeCloseTo(0.45);
+    expect(trailAlpha(2)).toBeCloseTo(0.3375);
+  });
+
+  test("never drops below a faint floor", () => {
+    expect(trailAlpha(5)).toBe(0.15);
+    expect(trailAlpha(20)).toBe(0.15);
   });
 });
 

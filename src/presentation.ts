@@ -75,6 +75,10 @@ const PLAYER_NAMES: Record<Side, string> = { left: "Player 1", right: "Player 2"
 
 const AFTERGLOW_STEPS = 45;
 
+const LATEST_TRAIL_ALPHA = 0.6;
+const OLDEST_TRAIL_ALPHA = 0.15;
+const TRAIL_FADE_PER_SHOT = 0.75;
+
 const EXPLOSION_STEPS = 6;
 const EXPLOSION_SIZE_FACTOR = 100 / 9;
 const BLOOM_STEPS = 8;
@@ -206,6 +210,10 @@ export function afterglowSegments(trail: readonly Readonly<Segment>[], stepsFlow
     segment,
     alpha: (AFTERGLOW_STEPS - count + index + 1) / AFTERGLOW_STEPS,
   }));
+}
+
+export function trailAlpha(shotsSince: number): number {
+  return Math.max(LATEST_TRAIL_ALPHA * TRAIL_FADE_PER_SHOT ** shotsSince, OLDEST_TRAIL_ALPHA);
 }
 
 export function explosionSize(stepsSinceHit: number): number | null {

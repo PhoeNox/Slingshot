@@ -50,6 +50,7 @@ import {
   shipPose,
   strokeOutline,
   timeoutText,
+  trailAlpha,
   ZOOM_SCALE,
   ZOOM_VIEW,
   ZOOMED_PLAYING_AREA,
@@ -153,8 +154,6 @@ const SIDES: readonly Side[] = ["left", "right"];
 
 const PLAYER_COLOURS: Record<Side, string> = { left: COLOURS.leftPlayer, right: COLOURS.rightPlayer };
 const SOLID: number[] = [];
-
-const TRAIL_ALPHA = 0.6;
 
 const AIM_DASH = [8, 6];
 const AIM_TIP_RADIUS = 5;
@@ -261,14 +260,20 @@ function planetSpriteItem(planet: Readonly<Planet>): ImageItem {
 }
 
 function trailItems(roundTrails: MatchView["trails"]): LinesItem[] {
-  return SIDES.map((side) => ({
-    kind: "lines",
-    colour: PLAYER_COLOURS[side],
-    segments: roundTrails.filter((segment) => segment.shooter === side),
-    alpha: TRAIL_ALPHA,
-    dash: SOLID,
-    glow: false,
-  }));
+  const latestShotNumber = roundTrails.at(-1)?.shotNumber ?? 0;
+  const shotNumbers = new Set(roundTrails.map((segment) => segment.shotNumber));
+  return [...shotNumbers].map((shotNumber) => {
+    const segments = roundTrails.filter((segment) => segment.shotNumber === shotNumber);
+    const alpha = trailAlpha(latestShotNumber - shotNumber);
+    return {
+      kind: "lines",
+      colour: PLAYER_COLOURS[segments[0].shooter],
+      segments,
+      alpha,
+      dash: SOLID,
+      glow: false,
+    };
+  });
 }
 
 function shipItems(roundShips: MatchView["ships"], sides: readonly Side[]): GroupItem[] {

@@ -47,6 +47,7 @@ export interface AimDelta {
 
 interface TrailSegment {
   shooter: Side;
+  shotNumber: number;
   from: Point;
   to: Point;
 }
@@ -110,7 +111,8 @@ export function step(match: Match): void {
 
 function advanceShot(match: Match, missile: Missile): void {
   const flightStep = flyMissile(missile, match.planets, match.ships);
-  const trailSegment = { shooter: match.activePlayer, ...flightStep.segment };
+  const shotNumber = match.attempts.left + match.attempts.right;
+  const trailSegment = { shooter: match.activePlayer, shotNumber, ...flightStep.segment };
   match.trails.push(trailSegment);
   if (flightStep.hitShip !== undefined) {
     endRound(match, flightStep.hitShip);
