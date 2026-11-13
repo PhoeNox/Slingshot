@@ -28,7 +28,8 @@ export interface ShotRecord {
 }
 
 export interface Missile extends ShotRecord {
-  flightStepsLeft: number;
+  stepsFlown: number;
+  flightStepsLeft: number | undefined;
 }
 
 export interface Segment {
@@ -45,7 +46,6 @@ export interface FlightStep {
 const GRAVITY = 120;
 const LAUNCH_SPEED_PER_POWER = 0.1;
 const RADIANS_PER_DEGREE = Math.PI / 180;
-const FLIGHT_TIMEOUT_STEPS = 750;
 const SHIP_HIT_RADIUS = 14;
 const SHIP_HIT_SAMPLES = 10;
 const SHIP_HIT_SAMPLE_SPACING = 0.1;
@@ -80,8 +80,8 @@ function offsetAlong(origin: Readonly<Point>, direction: Readonly<Point>, distan
   };
 }
 
-export function launchMissile(shot: ShotRecord): Missile {
-  return { ...shot, flightStepsLeft: FLIGHT_TIMEOUT_STEPS };
+export function launchMissile(shot: ShotRecord, timeoutSteps: number | undefined): Missile {
+  return { ...shot, stepsFlown: 0, flightStepsLeft: timeoutSteps };
 }
 
 export function flyMissile(
@@ -103,7 +103,10 @@ export function flyMissile(
 }
 
 function advanceMissile(missile: Missile, planets: readonly Readonly<Planet>[]): void {
-  missile.flightStepsLeft--;
+  missile.stepsFlown++;
+  if (missile.flightStepsLeft !== undefined) {
+    missile.flightStepsLeft--;
+  }
   for (const planet of planets) {
     const dx = missile.x - planet.x;
     const dy = missile.y - planet.y;
@@ -131,11 +134,7 @@ export function isInsidePlayingArea(point: Readonly<Point>): boolean {
 }
 
 export function hasTimedOut(missile: Readonly<Missile>): boolean {
-  return missile.flightStepsLeft < 0;
-}
-
-export function stepsFlown(missile: Readonly<Missile>): number {
-  return FLIGHT_TIMEOUT_STEPS - missile.flightStepsLeft;
+  return missile.flightStepsLeft !== undefined && missile.flightStepsLeft < 0;
 }
 
 function isLostAfterTimeout(missile: Readonly<Missile>): boolean {

@@ -12,10 +12,10 @@ import {
   isInsidePlayingArea,
   launchMissile,
   shotRecordFor,
-  stepsFlown,
   type Missile,
   type Point,
   type Segment,
+  type ShotRecord,
 } from "./flight";
 import { createRng, randomInt, type Rng } from "./random";
 import {
@@ -23,13 +23,14 @@ import {
   createRoundLayout,
   type Aim,
   type Planet,
+  type PlanetCountRange,
   type RoundLayout,
   type Ship,
   type Side,
 } from "./round";
 import { nextRoundShooter, powerPenaltyFor, roundResultFor, type RoundResult } from "./scoring";
 
-export type { RoundLayout } from "./round";
+export type { PlanetCountRange, RoundLayout } from "./round";
 export type { RoundOutcome, RoundResult } from "./scoring";
 
 interface AimingPhase {
@@ -66,6 +67,17 @@ interface TrailSegment {
   to: Point;
 }
 
+export interface MatchRules {
+  planetCount: PlanetCountRange;
+  timeoutSeconds: number | undefined;
+}
+
+export const DEFAULT_MATCH_RULES: DeepReadonly<MatchRules> = {
+  planetCount: { min: 2, max: 4 },
+  timeoutSeconds: 25,
+};
+
+const STEPS_PER_SECOND = 30;
 const MAX_POWER = 350;
 const FULL_TURN = 360;
 
@@ -81,11 +93,12 @@ interface MatchState {
   attempts: Record<Side, number>;
 }
 
+type DeepReadonly<T> = { readonly [K in keyof T]: DeepReadonly<T[K]> };
+
 export interface Match extends MatchState {
   rng: Rng;
+  rules: DeepReadonly<MatchRules>;
 }
-
-type DeepReadonly<T> = { readonly [K in keyof T]: DeepReadonly<T[K]> };
 
 interface InFlightPhaseView extends InFlightPhase {
   stepsFlown: number;
@@ -105,13 +118,18 @@ export type MatchView = DeepReadonly<MatchViewState>;
 export type InFlightView = DeepReadonly<InFlightPhaseView>;
 export type RoundOverView = DeepReadonly<RoundOverPhase>;
 
-export function createMatch(seed: number, firstRoundLayout?: RoundLayout): Match {
+export function createMatch(
+  seed: number,
+  firstRoundLayout?: RoundLayout,
+  rules: DeepReadonly<MatchRules> = DEFAULT_MATCH_RULES,
+): Match {
   const rng = createRng(seed);
   const activePlayer = drawFirstShooter(rng);
-  const generatedLayout = createRoundLayout(rng);
+  const generatedLayout = createRoundLayout(rng, rules.planetCount);
   const layout = firstRoundLayout ?? generatedLayout;
   return {
     rng,
+    rules,
     phase: { kind: "aiming" },
     activePlayer,
     roundNumber: 1,
@@ -166,7 +184,7 @@ function endRound(match: Match, hitShip: Side): void {
 }
 
 function startNextRound(match: Match): void {
-  const layout = createRoundLayout(match.rng);
+  const layout = createRoundLayout(match.rng, match.rules.planetCount);
   match.activePlayer = nextRoundShooter(match.scores, match.activePlayer);
   match.phase = { kind: "aiming" };
   match.roundNumber++;
@@ -197,7 +215,7 @@ export function fire(match: Match): void {
 function launchShot(match: Match): void {
   const side = match.activePlayer;
   const shot = shotRecordFor(match.ships[side], BARREL_DISTANCE[side]);
-  const missile = launchMissile(shot);
+  const missile = launchMissileUnderRules(shot, match.rules);
   match.attempts[side]++;
   match.phase = { kind: "inFlight", missile };
 }
@@ -206,8 +224,13 @@ export function previewShot(match: Readonly<Match>, aim: Readonly<Aim>, stepLimi
   const side = match.activePlayer;
   const ship = { ...match.ships[side], aim };
   const shot = shotRecordFor(ship, BARREL_DISTANCE[side]);
-  const missile = launchMissile(shot);
+  const missile = launchMissileUnderRules(shot, match.rules);
   return previewFlight(missile, match, stepLimit);
+}
+
+function launchMissileUnderRules(shot: ShotRecord, rules: DeepReadonly<MatchRules>): Missile {
+  const timeoutSteps = rules.timeoutSeconds === undefined ? undefined : rules.timeoutSeconds * STEPS_PER_SECOND;
+  return launchMissile(shot, timeoutSteps);
 }
 
 function previewFlight(missile: Missile, match: Readonly<Match>, stepLimit: number): ShotPreview {
@@ -256,9 +279,8 @@ function phaseView(phase: Phase): PhaseView {
 }
 
 function inFlightView(flight: InFlightPhase): InFlightPhaseView {
-  const flown = stepsFlown(flight.missile);
   const timedOut = hasTimedOut(flight.missile);
-  return { ...flight, stepsFlown: flown, timedOut };
+  return { ...flight, stepsFlown: flight.missile.stepsFlown, timedOut };
 }
 
 function isZoomViewShown(phase: Phase): boolean {

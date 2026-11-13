@@ -10,7 +10,7 @@ import {
   stepAttractMode,
   type AttractMode,
 } from "./attract";
-import { matchView, previewShot } from "./match";
+import { DEFAULT_MATCH_RULES, matchView, previewShot } from "./match";
 
 function stepUntil(attract: AttractMode, done: () => boolean): void {
   for (let i = 0; i < 100_000; i++) {
@@ -27,6 +27,12 @@ function phaseOf(attract: AttractMode) {
 }
 
 describe("attract mode", () => {
+  test("plays under the default match rules", () => {
+    const attract = createAttractMode(1);
+
+    expect(attract.match.rules).toEqual(DEFAULT_MATCH_RULES);
+  });
+
   test("fires a shot after a short aiming pause", () => {
     const attract = createAttractMode(1);
 

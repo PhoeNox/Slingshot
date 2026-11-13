@@ -5,12 +5,14 @@ import { describe, expect, test } from "vitest";
 import {
   adjustAim,
   createMatch,
+  DEFAULT_MATCH_RULES,
   fire,
   matchView,
   previewShot,
   step,
   type InFlightView,
   type Match,
+  type MatchRules,
   type RoundLayout,
   type RoundOverView,
 } from "./match";
@@ -901,5 +903,102 @@ describe("previewShot", () => {
     const flightSteps = stepUntilShotEnds(match, 360);
 
     expect(preview).toEqual({ inAreaSteps: flightSteps - 1, endedWithinLimit: true });
+  });
+});
+
+describe("match rules", () => {
+  const FIVE_TO_SIX_PLANETS: MatchRules = { planetCount: { min: 5, max: 6 }, timeoutSeconds: 25 };
+  const TEN_SECOND_TIMEOUT: MatchRules = { planetCount: { min: 2, max: 4 }, timeoutSeconds: 10 };
+  const NO_TIMEOUT: MatchRules = { planetCount: { min: 2, max: 4 }, timeoutSeconds: undefined };
+
+  test("default match rules are two to four planets and a 25 second timeout", () => {
+    expect(DEFAULT_MATCH_RULES).toEqual({ planetCount: { min: 2, max: 4 }, timeoutSeconds: 25 });
+  });
+
+  test("omitted match rules play exactly like the default match rules", () => {
+    const omitted = createMatch(123456);
+    const explicit = createMatch(123456, undefined, DEFAULT_MATCH_RULES);
+
+    expect(matchView(omitted)).toEqual(matchView(explicit));
+  });
+
+  test("the first round draws its planet count from the rules' range across seeds", () => {
+    const matches = SEEDS.map((seed) => createMatch(seed, undefined, FIVE_TO_SIX_PLANETS));
+    const counts = new Set(matches.map((match) => matchView(match).planets.length));
+
+    expect(counts).toEqual(new Set([5, 6]));
+  });
+
+  test("later rounds draw their planet count from the rules' range across seeds", () => {
+    const counts = new Set<number>();
+    for (const seed of SEEDS.slice(0, 100)) {
+      const shooter = matchView(createMatch(seed, undefined, FIVE_TO_SIX_PLANETS)).activePlayer;
+      const ownShipBlocker = fixedLayout([planetAt(SHIP_X[shooter], 450, 100, 10)]);
+      const match = createMatch(seed, ownShipBlocker, FIVE_TO_SIX_PLANETS);
+      hitOwnShip(match);
+      fire(match);
+      counts.add(matchView(match).planets.length);
+    }
+
+    expect(counts).toEqual(new Set([5, 6]));
+  });
+
+  test("same seed and same rules yield identical match state", () => {
+    const first = createMatch(123456, undefined, FIVE_TO_SIX_PLANETS);
+    const second = createMatch(123456, undefined, FIVE_TO_SIX_PLANETS);
+    for (let i = 0; i < 50; i++) {
+      step(first);
+      step(second);
+    }
+
+    expect(matchView(first)).toEqual(matchView(second));
+  });
+
+  test("different rules yield different layouts for the same seed", () => {
+    const defaultPlanets = matchView(createMatch(123456)).planets;
+    const fiveToSixPlanets = matchView(createMatch(123456, undefined, FIVE_TO_SIX_PLANETS)).planets;
+
+    expect(fiveToSixPlanets).not.toEqual(defaultPlanets);
+  });
+
+  test("the timeout is reached after the rules' duration at 30 steps per second", () => {
+    const match = createMatch(53, fixedLayout([]), TEN_SECOND_TIMEOUT);
+    aimAt(match, 0, 0);
+    fire(match);
+
+    expect(inFlight(match).missile.flightStepsLeft).toBe(300);
+    for (let i = 0; i < 300; i++) {
+      step(match);
+    }
+    expect(inFlight(match).timedOut).toBe(false);
+    step(match);
+    expect(inFlight(match).timedOut).toBe(true);
+  });
+
+  test("without a timeout the missile reports no countdown and never times out", () => {
+    const match = createMatch(53, fixedLayout([]), NO_TIMEOUT);
+    aimAt(match, 0, 0);
+    fire(match);
+
+    for (let i = 0; i < 2000; i++) {
+      step(match);
+    }
+
+    expect(inFlight(match).missile.flightStepsLeft).toBeUndefined();
+    expect(inFlight(match).timedOut).toBe(false);
+    expect(inFlight(match).stepsFlown).toBe(2000);
+  });
+
+  test("without a timeout a missile outside the playing area keeps flying", () => {
+    const match = createMatch(55, fixedLayout([]), NO_TIMEOUT);
+    aimAt(match, 0, 2);
+    fire(match);
+
+    for (let i = 0; i < 2000; i++) {
+      step(match);
+    }
+
+    expect(isInsidePlayingArea(inFlight(match).missile)).toBe(false);
+    expect(matchView(match).phase.kind).toBe("inFlight");
   });
 });

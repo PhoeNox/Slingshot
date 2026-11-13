@@ -29,13 +29,16 @@ export interface Planet {
   y: number;
 }
 
+export interface PlanetCountRange {
+  min: number;
+  max: number;
+}
+
 export interface RoundLayout {
   ships: Record<Side, Ship>;
   planets: Planet[];
 }
 
-const MIN_PLANETS = 2;
-const MAX_PLANETS = 4;
 const PLANET_SPRITE_COUNT = 8;
 const MIN_PLANET_MASS = 8;
 const MAX_PLANET_MASS = 512;
@@ -56,9 +59,9 @@ const RIGHT_DEFAULT_ANGLE = 270;
 
 export const BARREL_DISTANCE: Record<Side, number> = { left: 22, right: 23 };
 
-export function createRoundLayout(rng: Rng): RoundLayout {
+export function createRoundLayout(rng: Rng, planetCount: Readonly<PlanetCountRange>): RoundLayout {
   const ships = placeShips(rng);
-  const planets = generatePlanets(rng);
+  const planets = generatePlanets(rng, planetCount);
   return { ships, planets };
 }
 
@@ -79,8 +82,8 @@ function placeShips(rng: Rng): Record<Side, Ship> {
   };
 }
 
-function generatePlanets(rng: Rng): Planet[] {
-  const count = randomInt(rng, MIN_PLANETS, MAX_PLANETS);
+function generatePlanets(rng: Rng, planetCount: Readonly<PlanetCountRange>): Planet[] {
+  const count = randomInt(rng, planetCount.min, planetCount.max);
   const planets: Planet[] = [];
   for (let i = 0; i < count; i++) {
     const planet = placePlanet(rng, planets);

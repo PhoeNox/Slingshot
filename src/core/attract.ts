@@ -1,7 +1,17 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { adjustAim, createMatch, drawRandomInt, fire, matchView, previewShot, step, type Match } from "./match";
+import {
+  adjustAim,
+  createMatch,
+  DEFAULT_MATCH_RULES,
+  drawRandomInt,
+  fire,
+  matchView,
+  previewShot,
+  step,
+  type Match,
+} from "./match";
 import type { Aim, Side } from "./round";
 
 export interface AttractMode {
@@ -24,7 +34,7 @@ export const SHOT_DELAY_STEPS = 30;
 export const NEXT_ROUND_DELAY_STEPS = 45;
 
 export function createAttractMode(seed: number): AttractMode {
-  const match = createMatch(seed);
+  const match = createMatch(seed, undefined, DEFAULT_MATCH_RULES);
   return { match, stepsAiming: 0 };
 }
 

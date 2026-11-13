@@ -693,7 +693,10 @@ function powerPenaltyText(penalty: number): string {
   return `Power penalty: ${Math.trunc(penalty)}`;
 }
 
-function timeoutText(flightStepsLeft: number, timedOut: boolean): string {
+function timeoutText(flightStepsLeft: number | undefined, timedOut: boolean): string {
+  if (flightStepsLeft === undefined) {
+    return "";
+  }
   return timedOut ? "Shot timed out..." : `Timeout in ${flightStepsLeft}`;
 }
 
