@@ -24,7 +24,9 @@ Pure, seeded, no DOM, canvas, or clock (ADR-0001).
 | `gameLoop.ts` | Fixed 30 Hz step loop plus render callback |
 | `screenSession.ts` | Current screen and its match or attract mode; steps it and describes its frame |
 | `navigation.ts` | Hash routes, screens, menu focus movement (ADR-0003) |
-| `screens.ts` | HTML menu/credits overlays, button effects, route binding (ADR-0002) |
+| `screens.ts` | HTML menu/settings/credits overlays, button effects, settings controls, route binding (ADR-0002) |
+| `settings.ts` | Settings type, defaults, parse/serialise of the stored form |
+| `settingsStorage.ts` | Reads and writes the stored settings in `localStorage`, tolerating unavailable storage |
 | `input.ts` | Keyboard bindings for aiming, firing, escape |
 | `aimKeyRepeat.ts` | Held-key repeat timing for aim adjustment |
 | `frame.ts` | Turns a `MatchView` into `FrameItem` data (sprites, rings, lines, text); no drawing |

@@ -10,7 +10,9 @@ import { startGameLoop } from "./gameLoop";
 import { bindControls, bindEscape } from "./input";
 import { MAIN_MENU_ITEMS, type Screen } from "./navigation";
 import { drawFrame, drawShakenFrame } from "./renderer";
-import { bindBracketFlash, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, navigateBack, renderMenuItems, showScreen, traceTitleArc, type ScreenElements } from "./screens";
+import { bindBracketFlash, bindContoursCheckbox, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, navigateBack, renderMenuItems, showScreen, traceTitleArc, type ScreenElements } from "./screens";
+import { parseSettings, serialiseSettings, type Settings } from "./settings";
+import { readStoredSettings, writeStoredSettings } from "./settingsStorage";
 import { createScreenSession, describeScreenSessionFrame, enterScreen, screenSessionShake, stepScreenSession } from "./screenSession";
 import { drawStars, renderStarSprites } from "./starLayer";
 import { generateStars } from "./stars";
@@ -21,6 +23,11 @@ function randomSeed(): number {
   return Math.floor(Math.random() * 2 ** 32);
 }
 
+function saveSettings(settings: Readonly<Settings>): void {
+  const serialised = serialiseSettings(settings);
+  writeStoredSettings(window, serialised);
+}
+
 async function start(): Promise<void> {
   const stage = document.querySelector<HTMLElement>("#stage")!;
   const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
@@ -28,6 +35,8 @@ async function start(): Promise<void> {
   const elements: ScreenElements = {
     overlay: document.querySelector<HTMLElement>("#overlay")!,
     mainMenu: document.querySelector<HTMLElement>("#main-menu")!,
+    settings: document.querySelector<HTMLElement>("#settings")!,
+    contoursCheckbox: document.querySelector<HTMLInputElement>("#contours-checkbox")!,
     credits: document.querySelector<HTMLElement>("#credits")!,
     creditsBackButton: document.querySelector<HTMLButtonElement>("#credits-back-button")!,
     keyHint: document.querySelector<HTMLElement>(".key-hint")!,
@@ -35,12 +44,15 @@ async function start(): Promise<void> {
   };
   const menu = document.querySelector<HTMLElement>("#main-menu .menu")!;
   const matchMenuButton = document.querySelector<HTMLButtonElement>("#match-menu-button")!;
+  const settingsBackButton = document.querySelector<HTMLButtonElement>("#settings-back-button")!;
   const titleArc = document.querySelector<SVGPathElement>("#main-menu .title-arc path")!;
 
   const sprites = await loadSprites();
   await loadFonts();
 
   const session = createScreenSession();
+  const storedSettings = readStoredSettings(window);
+  const settings = parseSettings(storedSettings);
 
   const fitStage = () => {
     const fit = fitPlayingArea(stage.clientWidth, stage.clientHeight, window.devicePixelRatio);
@@ -67,7 +79,9 @@ async function start(): Promise<void> {
   }
   bindBracketFlash(matchMenuButton);
   bindMainMenuButton(matchMenuButton);
+  bindMainMenuButton(settingsBackButton);
   bindMainMenuButton(elements.creditsBackButton);
+  bindContoursCheckbox(elements.contoursCheckbox, settings, saveSettings);
   const enterAndShowScreen = (screen: Screen) => {
     const seed = randomSeed();
     enterScreen(session, screen, seed);
@@ -82,7 +96,7 @@ async function start(): Promise<void> {
   const starSprites = renderStarSprites();
   const render = (timeMs: number) => {
     const starTimeMs = reducedMotion.matches ? STATIC_STAR_TIME_MS : timeMs;
-    const frame = describeScreenSessionFrame(session);
+    const frame = describeScreenSessionFrame(session, settings);
     const shake = screenSessionShake(session, reducedMotion.matches, Math.random);
     drawFrame(context, sprites, backdropFrame);
     drawStars(context, starSprites, stars, starTimeMs);

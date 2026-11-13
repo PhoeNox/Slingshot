@@ -22,6 +22,7 @@ import {
   describeBackdropFrame,
   describeFrame,
   type BloomItem,
+  type DisplaySettings,
   type FrameItem,
   type GroupItem,
   type ImageItem,
@@ -36,6 +37,9 @@ const PLAYER_COLOURS: Record<Side, string> = { left: COLOURS.leftPlayer, right: 
 const SHEET_FACING: Record<Side, number> = { left: 90, right: 270 };
 const HIT_TITLES: Record<Side, string> = { left: "Player 1 hit player 2", right: "Player 2 hit player 1" };
 const PLAYING_AREA = { left: 0, top: 0, width: 800, height: 600 };
+
+const CONTOURS_SHOWN: DisplaySettings = { gravityWellContours: true };
+const CONTOURS_HIDDEN: DisplaySettings = { gravityWellContours: false };
 
 const LIGHT_PLANET: Planet = { sprite: 1, mass: 8, radius: 25, x: 300, y: 200 };
 const HEAVY_PLANET: Planet = { sprite: 2, mass: 512, radius: 100, x: 500, y: 400 };
@@ -83,12 +87,16 @@ function ringsAround(frame: FrameItem[], planet: Planet): RingItem[] {
   );
 }
 
-function frameOf(match: Match): FrameItem[] {
-  return flatten(describeFrame(matchView(match)));
+function frameOf(match: Match, display = CONTOURS_SHOWN): FrameItem[] {
+  return flatten(describeFrame(matchView(match), display));
 }
 
 function frameOfView(view: MatchView): FrameItem[] {
-  return flatten(describeFrame(view));
+  return flatten(describeFrame(view, CONTOURS_SHOWN));
+}
+
+function attractFrameOf(match: Match, display = CONTOURS_SHOWN): FrameItem[] {
+  return flatten(describeAttractFrame(matchView(match), display));
 }
 
 function flatten(items: FrameItem[]): FrameItem[] {
@@ -429,6 +437,21 @@ describe("gravity-well contours", () => {
     const firstPlanet = kinds.findIndex((kind) => kind.startsWith("planet"));
     expect(lastRing).toBeGreaterThanOrEqual(0);
     expect(lastRing).toBeLessThan(firstPlanet);
+  });
+
+  test("are hidden in a match when the display setting turns them off, leaving the planets", () => {
+    const frame = frameOf(planetMatch(14), CONTOURS_HIDDEN);
+
+    expect([...ringsAround(frame, LIGHT_PLANET), ...ringsAround(frame, HEAVY_PLANET)]).toHaveLength(0);
+    expect(imagesOf(frame, "planet1")).toHaveLength(1);
+    expect(imagesOf(frame, "planet2")).toHaveLength(1);
+  });
+
+  test("follow the display setting in attract mode", () => {
+    const match = planetMatch(15);
+
+    expect(ringsAround(attractFrameOf(match, CONTOURS_SHOWN), HEAVY_PLANET)).toHaveLength(3);
+    expect(ringsAround(attractFrameOf(match, CONTOURS_HIDDEN), HEAVY_PLANET)).toHaveLength(0);
   });
 });
 
@@ -821,10 +844,6 @@ describe("backdrop-only frame", () => {
 });
 
 describe("attract frame", () => {
-  function attractFrameOf(match: Match): FrameItem[] {
-    return flatten(describeAttractFrame(matchView(match)));
-  }
-
   test("shows planets and both ships without HUD or aim reticle, dimmed over the playing area", () => {
     const match = planetMatch(40);
 

@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { describe, expect, test } from "vitest";
-import { backTargetFor, hashFor, moveFocus, resolveHash, type FocusStep, type Screen } from "./navigation";
+import { MAIN_MENU_ITEMS, backTargetFor, hashFor, moveFocus, resolveHash, type FocusStep, type Screen } from "./navigation";
 
 describe("resolveHash", () => {
   test.each<[string, Screen]>([
     ["#/", "mainMenu"],
     ["", "mainMenu"],
     ["#/play", "match"],
+    ["#/settings", "settings"],
     ["#/credits", "credits"],
   ])("%j resolves to %s without replacement", (hash, screen) => {
     expect(resolveHash(hash)).toEqual({ screen, replace: false });
@@ -20,7 +21,7 @@ describe("resolveHash", () => {
 });
 
 describe("hashFor", () => {
-  test.each<Screen>(["mainMenu", "match", "credits"])("the hash of %s resolves back to it", (screen) => {
+  test.each<Screen>(["mainMenu", "match", "settings", "credits"])("the hash of %s resolves back to it", (screen) => {
     expect(resolveHash(hashFor(screen))).toEqual({ screen, replace: false });
   });
 });
@@ -28,10 +29,21 @@ describe("hashFor", () => {
 describe("backTargetFor", () => {
   test.each<[Screen, Screen | undefined]>([
     ["match", "mainMenu"],
+    ["settings", "mainMenu"],
     ["credits", "mainMenu"],
     ["mainMenu", undefined],
   ])("the back target of %s is %s", (screen, backTarget) => {
     expect(backTargetFor(screen)).toBe(backTarget);
+  });
+});
+
+describe("MAIN_MENU_ITEMS", () => {
+  test("offers Play, Settings and Credits in that order", () => {
+    expect(MAIN_MENU_ITEMS).toEqual([
+      { label: "Play", screen: "match" },
+      { label: "Settings", screen: "settings" },
+      { label: "Credits", screen: "credits" },
+    ]);
   });
 });
 

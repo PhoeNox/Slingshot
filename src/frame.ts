@@ -105,6 +105,10 @@ export interface GroupItem {
   items: FrameItem[];
 }
 
+export interface DisplaySettings {
+  gravityWellContours: boolean;
+}
+
 export type FrameItem =
   | ImageItem
   | SpriteFrameItem
@@ -218,17 +222,17 @@ const ATTRACT_DIM_COLOUR = "rgba(4, 8, 21, 0.55)";
 
 const PLAYING_AREA: Readonly<Rect> = { left: 0, top: 0, width: PLAYING_AREA_WIDTH, height: PLAYING_AREA_HEIGHT };
 
-export function describeFrame(view: MatchView): FrameItem[] {
-  const planets = planetItems(view.planets);
+export function describeFrame(view: MatchView, display: Readonly<DisplaySettings>): FrameItem[] {
+  const planets = planetItems(view.planets, display);
   const trails = trailItems(view.trails);
-  const phase = phaseItems(view);
+  const phase = phaseItems(view, display);
   const scores = scoreItems(view.scores);
   const banner = roundBannerItems(view.roundNumber, view.roundStepCount);
   return [...planets, ...trails, ...phase, ...scores, ...banner];
 }
 
-export function describeAttractFrame(view: MatchView): FrameItem[] {
-  const planets = planetItems(view.planets);
+export function describeAttractFrame(view: MatchView, display: Readonly<DisplaySettings>): FrameItem[] {
+  const planets = planetItems(view.planets, display);
   const trails = trailItems(view.trails);
   const phase = attractPhaseItems(view);
   const dimming: FillRectItem = { kind: "fillRect", colour: ATTRACT_DIM_COLOUR, rect: PLAYING_AREA };
@@ -258,12 +262,12 @@ export function describeBackdropFrame(): FrameItem[] {
   return [backdrop];
 }
 
-function phaseItems(view: MatchView): FrameItem[] {
+function phaseItems(view: MatchView, display: Readonly<DisplaySettings>): FrameItem[] {
   switch (view.phase.kind) {
     case "aiming":
       return aimingItems(view);
     case "inFlight":
-      return flightItems(view, view.phase);
+      return flightItems(view, view.phase, display);
     case "roundOver":
       return roundOverItems(view.ships, view.phase);
   }
@@ -293,8 +297,8 @@ function bracketItem(rect: Readonly<Rect>): LinesItem {
   return glowLinesItem(COLOURS.phosphor, brackets, 1, SOLID);
 }
 
-function planetItems(roundPlanets: MatchView["planets"]): FrameItem[] {
-  const contours = roundPlanets.flatMap(gravityWellContourItems);
+function planetItems(roundPlanets: MatchView["planets"], display: Readonly<DisplaySettings>): FrameItem[] {
+  const contours = display.gravityWellContours ? roundPlanets.flatMap(gravityWellContourItems) : [];
   const sprites = roundPlanets.map(planetSpriteItem);
   return [...contours, ...sprites];
 }
@@ -387,10 +391,10 @@ function aimInfoItems(aim: Readonly<Aim>): TextItem[] {
   ];
 }
 
-function flightItems(view: MatchView, flight: InFlightView): FrameItem[] {
+function flightItems(view: MatchView, flight: InFlightView, display: Readonly<DisplaySettings>): FrameItem[] {
   const ships = shipItems(view.ships, SIDES);
   const afterglow = afterglowItems(view.trails, flight);
-  const missile = view.zoomViewShown ? zoomViewItems(view, flight) : [missileItem(flight.missile)];
+  const missile = view.zoomViewShown ? zoomViewItems(view, flight, display) : [missileItem(flight.missile)];
   const penaltyText = powerPenaltyText(view.powerPenalty);
   const timeout = timeoutText(flight.missile.flightStepsLeft, flight.timedOut);
   return [
@@ -412,11 +416,11 @@ function missileItem(flyingMissile: Readonly<Missile>): ImageItem {
   return imageItem("missile", box);
 }
 
-function zoomViewItems(view: MatchView, flight: InFlightView): FrameItem[] {
+function zoomViewItems(view: MatchView, flight: InFlightView, display: Readonly<DisplaySettings>): FrameItem[] {
   const dimming: FillRectItem = { kind: "fillRect", colour: ZOOM_DIM_COLOUR, rect: PLAYING_AREA };
   const backdrop = imageItem("backdrop", ZOOM_VIEW);
   const grid = zoomGridItem();
-  const zoomedPlayingArea = zoomedPlayingAreaItem(view);
+  const zoomedPlayingArea = zoomedPlayingAreaItem(view, display);
   const zoomedTrails = zoomedTrailItems(view.trails, flight);
   const zoomedMissile = zoomedMissileItem(flight.missile);
   const outlines = zoomOutlineItems();
@@ -429,8 +433,8 @@ function zoomGridItem(): LinesItem {
   return { kind: "lines", colour: COLOURS.instrumentDim, segments, alpha: ZOOM_GRID_ALPHA, dash: SOLID, glow: false };
 }
 
-function zoomedPlayingAreaItem(view: MatchView): GroupItem {
-  const planets = planetItems(view.planets);
+function zoomedPlayingAreaItem(view: MatchView, display: Readonly<DisplaySettings>): GroupItem {
+  const planets = planetItems(view.planets, display);
   const ships = shipItems(view.ships, SIDES);
   return {
     kind: "group",

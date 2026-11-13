@@ -4,7 +4,7 @@
 import { createAttractMode, stepAttractMode, type AttractMode } from "./core/attract";
 import type { Point } from "./core/flight";
 import { createMatch, matchView, step, type Match } from "./core/match";
-import { describeAttractFrame, describeFrame, type FrameItem } from "./frame";
+import { describeAttractFrame, describeFrame, type DisplaySettings, type FrameItem } from "./frame";
 import type { Screen } from "./navigation";
 import { NO_SHAKE, screenShakeOffset } from "./screenShake";
 
@@ -13,6 +13,8 @@ export interface ScreenSession {
   match: Match | undefined;
   attract: AttractMode | undefined;
 }
+
+const ATTRACT_PLAYING_SCREENS: ReadonlySet<Screen> = new Set(["mainMenu", "settings"]);
 
 export function createScreenSession(): ScreenSession {
   return { screen: "mainMenu", match: undefined, attract: undefined };
@@ -32,18 +34,18 @@ export function enterScreen(session: ScreenSession, screen: Screen, seed: number
 export function stepScreenSession(session: ScreenSession, reducedMotion: boolean): void {
   if (session.match !== undefined) {
     step(session.match);
-  } else if (session.screen === "mainMenu" && !reducedMotion) {
+  } else if (ATTRACT_PLAYING_SCREENS.has(session.screen) && !reducedMotion) {
     stepAttractMode(session.attract!);
   }
 }
 
-export function describeScreenSessionFrame(session: ScreenSession): FrameItem[] {
+export function describeScreenSessionFrame(session: ScreenSession, display: Readonly<DisplaySettings>): FrameItem[] {
   if (session.match !== undefined) {
     const view = matchView(session.match);
-    return describeFrame(view);
+    return describeFrame(view, display);
   }
   const attractView = matchView(session.attract!.match);
-  return describeAttractFrame(attractView);
+  return describeAttractFrame(attractView, display);
 }
 
 export function screenSessionShake(session: ScreenSession, reducedMotion: boolean, random: () => number): Readonly<Point> {

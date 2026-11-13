@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from "vitest";
 import { createMatch, fire, matchView, step, type Match, type RoundLayout } from "./core/match";
-import { describeAttractFrame, describeFrame } from "./frame";
+import { describeAttractFrame, describeFrame, type DisplaySettings } from "./frame";
 import {
   createScreenSession,
   describeScreenSessionFrame,
@@ -36,6 +36,8 @@ function sessionOn(...screens: ScreenSession["screen"][]): ScreenSession {
   screens.forEach((screen, index) => enterScreen(session, screen, index + 1));
   return session;
 }
+
+const CONTOURS_HIDDEN: DisplaySettings = { gravityWellContours: false };
 
 const extremeRandom = () => 1;
 
@@ -82,6 +84,18 @@ describe("stepping", () => {
     expect(session.attract).not.toEqual(before);
   });
 
+  test("plays the main menu's attract mode behind the settings", () => {
+    const session = sessionOn("mainMenu");
+    const attract = session.attract;
+    enterScreen(session, "settings", 7);
+    const before = structuredClone(session.attract);
+
+    stepScreenSession(session, false);
+
+    expect(session.attract).toBe(attract);
+    expect(session.attract).not.toEqual(before);
+  });
+
   test("pauses attract mode behind the credits", () => {
     const session = sessionOn("mainMenu", "credits");
     const before = structuredClone(session.attract);
@@ -115,13 +129,17 @@ describe("describing the frame", () => {
   test("shows the match while one is active", () => {
     const session = sessionOn("match");
 
-    expect(describeScreenSessionFrame(session)).toEqual(describeFrame(matchView(session.match!)));
+    expect(describeScreenSessionFrame(session, CONTOURS_HIDDEN)).toEqual(
+      describeFrame(matchView(session.match!), CONTOURS_HIDDEN),
+    );
   });
 
   test("shows attract mode otherwise", () => {
     const session = sessionOn("mainMenu", "credits");
 
-    expect(describeScreenSessionFrame(session)).toEqual(describeAttractFrame(matchView(session.attract!.match)));
+    expect(describeScreenSessionFrame(session, CONTOURS_HIDDEN)).toEqual(
+      describeAttractFrame(matchView(session.attract!.match), CONTOURS_HIDDEN),
+    );
   });
 });
 

@@ -4,10 +4,13 @@
 import { COLOURS } from "./colours";
 import { backTargetFor, hashFor, moveFocus, resolveHash, type FocusStep, type MenuItem, type Screen } from "./navigation";
 import { scrambleLabel } from "./scramble";
+import type { Settings } from "./settings";
 
 export interface ScreenElements {
   overlay: HTMLElement;
   mainMenu: HTMLElement;
+  settings: HTMLElement;
+  contoursCheckbox: HTMLInputElement;
   credits: HTMLElement;
   creditsBackButton: HTMLButtonElement;
   keyHint: HTMLElement;
@@ -115,10 +118,14 @@ export function showScreen(elements: ScreenElements, screen: Screen): void {
   resetScrambles(elements.overlay);
   elements.overlay.hidden = screen === "match";
   elements.mainMenu.hidden = screen !== "mainMenu";
+  elements.settings.hidden = screen !== "settings";
   elements.credits.hidden = screen !== "credits";
   elements.keyHint.style.visibility = screen === "match" ? "visible" : "hidden";
   if (screen === "mainMenu") {
     elements.mainMenu.querySelector("button")!.focus();
+  }
+  if (screen === "settings") {
+    elements.contoursCheckbox.focus();
   }
   if (screen === "credits") {
     elements.creditsBackButton.focus();
@@ -126,6 +133,18 @@ export function showScreen(elements: ScreenElements, screen: Screen): void {
   if (screen === "match") {
     elements.canvas.focus();
   }
+}
+
+export function bindContoursCheckbox(
+  checkbox: HTMLInputElement,
+  settings: Settings,
+  saveSettings: (settings: Readonly<Settings>) => void,
+): void {
+  checkbox.checked = settings.gravityWellContours;
+  checkbox.addEventListener("change", () => {
+    settings.gravityWellContours = checkbox.checked;
+    saveSettings(settings);
+  });
 }
 
 export function bindMainMenuButton(button: HTMLButtonElement): void {
