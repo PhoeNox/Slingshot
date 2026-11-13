@@ -6,17 +6,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { COLOURS } from "./colours";
-import { stepsFlown, type Missile, type Point, type Segment } from "./core/flight";
-import {
-  aimLine,
-  isTimedOut,
-  isZoomViewShown,
-  powerPenalty,
-  type InFlightView,
-  type MatchView,
-  type RoundOverView,
-  type RoundResult,
-} from "./core/match";
+import type { Missile, Point, Segment } from "./core/flight";
+import type { InFlightView, MatchView, RoundOverView, RoundResult } from "./core/match";
 import { PLAYING_AREA_HEIGHT, PLAYING_AREA_WIDTH } from "./core/playingArea";
 import type { Aim, Planet, Ship, Side } from "./core/round";
 import {
@@ -211,16 +202,16 @@ function attractPhaseItems(view: MatchView): FrameItem[] {
     case "aiming":
       return shipItems(view.ships, SIDES);
     case "inFlight":
-      return attractFlightItems(view, view.phase.missile);
+      return attractFlightItems(view, view.phase);
     case "roundOver":
       return hitSceneItems(view.ships, view.phase);
   }
 }
 
-function attractFlightItems(view: MatchView, flyingMissile: Readonly<Missile>): FrameItem[] {
+function attractFlightItems(view: MatchView, flight: InFlightView): FrameItem[] {
   const ships = shipItems(view.ships, SIDES);
-  const afterglow = afterglowItems(view.trails, flyingMissile);
-  const missile = missileItem(flyingMissile);
+  const afterglow = afterglowItems(view.trails, flight);
+  const missile = missileItem(flight.missile);
   return [...ships, ...afterglow, missile];
 }
 
@@ -338,8 +329,7 @@ function shipFrameItem(side: Side, frameLeft: number, alpha: number): SpriteFram
 function aimingItems(view: MatchView): FrameItem[] {
   const side = view.activePlayer;
   const ships = shipItems(view.ships, SIDES);
-  const segment = aimLine(view);
-  const reticle = aimReticleItems(segment, PLAYER_COLOURS[side]);
+  const reticle = aimReticleItems(view.aimLine, PLAYER_COLOURS[side]);
   const aimInfo = aimInfoItems(view.ships[side].aim);
   return [...ships, ...reticle, ...aimInfo];
 }
@@ -361,12 +351,10 @@ function aimInfoItems(aim: Readonly<Aim>): TextItem[] {
 
 function flightItems(view: MatchView, flight: InFlightView): FrameItem[] {
   const ships = shipItems(view.ships, SIDES);
-  const afterglow = afterglowItems(view.trails, flight.missile);
-  const missile = isZoomViewShown(view) ? zoomViewItems(view, flight.missile) : [missileItem(flight.missile)];
-  const penalty = powerPenalty(view);
-  const timedOut = isTimedOut(flight);
-  const penaltyText = powerPenaltyText(penalty);
-  const timeout = timeoutText(flight.missile.flightStepsLeft, timedOut);
+  const afterglow = afterglowItems(view.trails, flight);
+  const missile = view.zoomViewShown ? zoomViewItems(view, flight) : [missileItem(flight.missile)];
+  const penaltyText = powerPenaltyText(view.powerPenalty);
+  const timeout = timeoutText(flight.missile.flightStepsLeft, flight.timedOut);
   return [
     ...ships,
     ...afterglow,
@@ -376,9 +364,8 @@ function flightItems(view: MatchView, flight: InFlightView): FrameItem[] {
   ];
 }
 
-function afterglowItems(roundTrails: MatchView["trails"], flyingMissile: Readonly<Missile>): LinesItem[] {
-  const flown = stepsFlown(flyingMissile);
-  const fading = afterglowSegments(roundTrails, flown);
+function afterglowItems(roundTrails: MatchView["trails"], flight: InFlightView): LinesItem[] {
+  const fading = afterglowSegments(roundTrails, flight.stepsFlown);
   return fading.map(({ segment, alpha }) => glowLinesItem(COLOURS.phosphor, [segment], alpha, SOLID));
 }
 
@@ -387,13 +374,13 @@ function missileItem(flyingMissile: Readonly<Missile>): ImageItem {
   return imageItem("missile", box);
 }
 
-function zoomViewItems(view: MatchView, flyingMissile: Readonly<Missile>): FrameItem[] {
+function zoomViewItems(view: MatchView, flight: InFlightView): FrameItem[] {
   const dimming: FillRectItem = { kind: "fillRect", colour: ZOOM_DIM_COLOUR, rect: PLAYING_AREA };
   const backdrop = imageItem("backdrop", ZOOM_VIEW);
   const grid = zoomGridItem();
   const zoomedPlayingArea = zoomedPlayingAreaItem(view);
-  const zoomedTrails = zoomedTrailItems(view.trails, flyingMissile);
-  const zoomedMissile = zoomedMissileItem(flyingMissile);
+  const zoomedTrails = zoomedTrailItems(view.trails, flight);
+  const zoomedMissile = zoomedMissileItem(flight.missile);
   const outlines = zoomOutlineItems();
   return [dimming, backdrop, grid, zoomedPlayingArea, ...zoomedTrails, zoomedMissile, ...outlines];
 }
@@ -414,9 +401,9 @@ function zoomedPlayingAreaItem(view: MatchView): GroupItem {
   };
 }
 
-function zoomedTrailItems(roundTrails: MatchView["trails"], flyingMissile: Readonly<Missile>): LinesItem[] {
+function zoomedTrailItems(roundTrails: MatchView["trails"], flight: InFlightView): LinesItem[] {
   const trails = trailItems(roundTrails);
-  const afterglow = afterglowItems(roundTrails, flyingMissile);
+  const afterglow = afterglowItems(roundTrails, flight);
   return [...trails, ...afterglow].map(zoomedLinesItem);
 }
 

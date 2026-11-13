@@ -12,6 +12,7 @@ import {
   isInsidePlayingArea,
   launchMissile,
   shotRecordFor,
+  stepsFlown,
   type Missile,
   type Point,
   type Segment,
@@ -73,8 +74,22 @@ export interface Match extends MatchState {
 
 type DeepReadonly<T> = { readonly [K in keyof T]: DeepReadonly<T[K]> };
 
-export type MatchView = DeepReadonly<MatchState>;
-export type InFlightView = DeepReadonly<InFlightPhase>;
+interface InFlightPhaseView extends InFlightPhase {
+  stepsFlown: number;
+  timedOut: boolean;
+}
+
+type PhaseView = AimingPhase | InFlightPhaseView | RoundOverPhase;
+
+interface MatchViewState extends Omit<MatchState, "phase"> {
+  phase: PhaseView;
+  aimLine: Segment;
+  powerPenalty: number;
+  zoomViewShown: boolean;
+}
+
+export type MatchView = DeepReadonly<MatchViewState>;
+export type InFlightView = DeepReadonly<InFlightPhaseView>;
 export type RoundOverView = DeepReadonly<RoundOverPhase>;
 
 export function createMatch(seed: number, firstRoundLayout?: RoundLayout): Match {
@@ -175,22 +190,38 @@ function launchShot(match: Match): void {
 }
 
 export function matchView(match: Match): MatchView {
-  return match;
+  const side = match.activePlayer;
+  const ship = match.ships[side];
+  const phase = phaseView(match.phase);
+  const aimLine = aimLineFor(ship, BARREL_DISTANCE[side]);
+  const powerPenalty = powerPenaltyFor(ship.aim.power);
+  const zoomViewShown = isZoomViewShown(match.phase);
+  return {
+    phase,
+    activePlayer: side,
+    roundNumber: match.roundNumber,
+    roundStepCount: match.roundStepCount,
+    scores: match.scores,
+    ships: match.ships,
+    planets: match.planets,
+    trails: match.trails,
+    attempts: match.attempts,
+    aimLine,
+    powerPenalty,
+    zoomViewShown,
+  };
 }
 
-export function aimLine(view: MatchView): Segment {
-  const side = view.activePlayer;
-  return aimLineFor(view.ships[side], BARREL_DISTANCE[side]);
+function phaseView(phase: Phase): PhaseView {
+  return phase.kind === "inFlight" ? inFlightView(phase) : phase;
 }
 
-export function isZoomViewShown(view: MatchView): boolean {
-  return view.phase.kind === "inFlight" && !isInsidePlayingArea(view.phase.missile);
+function inFlightView(flight: InFlightPhase): InFlightPhaseView {
+  const flown = stepsFlown(flight.missile);
+  const timedOut = hasTimedOut(flight.missile);
+  return { ...flight, stepsFlown: flown, timedOut };
 }
 
-export function isTimedOut(flight: InFlightView): boolean {
-  return hasTimedOut(flight.missile);
-}
-
-export function powerPenalty(view: MatchView): number {
-  return powerPenaltyFor(view.ships[view.activePlayer].aim.power);
+function isZoomViewShown(phase: Phase): boolean {
+  return phase.kind === "inFlight" && !isInsidePlayingArea(phase.missile);
 }

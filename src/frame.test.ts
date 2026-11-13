@@ -4,7 +4,7 @@
 import { describe, expect, test } from "vitest";
 import { COLOURS } from "./colours";
 import { isInsidePlayingArea, type Segment } from "./core/flight";
-import { adjustAim, aimLine, createMatch, fire, matchView, step, type Match, type RoundLayout } from "./core/match";
+import { adjustAim, createMatch, fire, matchView, step, type Match, type RoundLayout } from "./core/match";
 import type { Planet, Side } from "./core/round";
 import {
   describeAttractFrame,
@@ -151,7 +151,7 @@ describe("aiming frame", () => {
     const frame = frameOf(match);
 
     const lines = frame.filter((item) => item.kind === "lines");
-    const expectedAimLine = aimLine(view);
+    const expectedAimLine = view.aimLine;
     expect(shipSpritesOf(frame)).toEqual(new Set(["leftShip", "rightShip"]));
     expect(lines).toContainEqual(expect.objectContaining({ segments: [expectedAimLine] }));
     expect(textsOf(frame)).toEqual(expect.arrayContaining([angleInfoText(aim), powerInfoText(aim)]));
@@ -169,7 +169,7 @@ describe("aim reticle", () => {
   test("is a dashed glowing line in the active player's colour, ending in a ring", () => {
     const match = emptyMatch(14);
     const view = matchView(match);
-    const expectedAimLine = aimLine(view);
+    const expectedAimLine = view.aimLine;
     const colour = PLAYER_COLOURS[view.activePlayer];
 
     const frame = frameOf(match);
@@ -183,9 +183,9 @@ describe("aim reticle", () => {
   test("grows with the power", () => {
     const match = emptyMatch(15);
     aimAt(match, 90, 50);
-    const shortLine = aimLine(matchView(match));
+    const shortLine = matchView(match).aimLine;
     aimAt(match, 90, 200);
-    const longLine = aimLine(matchView(match));
+    const longLine = matchView(match).aimLine;
 
     const length = (line: typeof shortLine) => Math.hypot(line.to.x - line.from.x, line.to.y - line.from.y);
     expect(length(longLine)).toBeGreaterThan(length(shortLine));
@@ -393,7 +393,7 @@ describe("in-flight frame", () => {
   test("shows the power penalty and the timeout but no aim line or aim info", () => {
     const match = emptyMatch(5);
     const aim = { ...matchView(match).ships[matchView(match).activePlayer].aim };
-    const aimedLine = aimLine(matchView(match));
+    const aimedLine = matchView(match).aimLine;
     fire(match);
 
     const frame = frameOf(match);

@@ -4,13 +4,9 @@
 import { describe, expect, test } from "vitest";
 import {
   adjustAim,
-  aimLine,
   createMatch,
   fire,
-  isTimedOut,
-  isZoomViewShown,
   matchView,
-  powerPenalty,
   step,
   type InFlightView,
   type Match,
@@ -334,7 +330,7 @@ describe("fire", () => {
   test("launches the missile from the start of the aim line", () => {
     const match = createMatch(24);
     adjustAim(match, { angle: 47, power: -20 });
-    const lineStart = aimLine(matchView(match)).from;
+    const lineStart = matchView(match).aimLine.from;
 
     fire(match);
 
@@ -349,7 +345,7 @@ describe("fire", () => {
 
     fire(match);
 
-    expect(powerPenalty(matchView(match))).toBe(650);
+    expect(matchView(match).powerPenalty).toBe(650);
   });
 
   test("aim and fire have no effect while the missile is in flight", () => {
@@ -479,19 +475,19 @@ describe("leaving the playing area", () => {
   test("zoom-view flag is set exactly while the missile is outside the playing area", () => {
     const match = createMatch(51, fixedLayout([]));
     aimAt(match, 0, 100);
-    expect(isZoomViewShown(matchView(match))).toBe(false);
+    expect(matchView(match).zoomViewShown).toBe(false);
     fire(match);
     const flagHistory: boolean[] = [];
 
     while (matchView(match).phase.kind === "inFlight") {
-      expect(isZoomViewShown(matchView(match))).toBe(!isInsidePlayingArea(inFlight(match).missile));
-      flagHistory.push(isZoomViewShown(matchView(match)));
+      expect(matchView(match).zoomViewShown).toBe(!isInsidePlayingArea(inFlight(match).missile));
+      flagHistory.push(matchView(match).zoomViewShown);
       step(match);
     }
 
     expect(flagHistory).toContain(false);
     expect(flagHistory).toContain(true);
-    expect(isZoomViewShown(matchView(match))).toBe(false);
+    expect(matchView(match).zoomViewShown).toBe(false);
   });
 
   test("an off-screen missile keeps flying before timeout until it leaves the tracking area", () => {
@@ -502,9 +498,9 @@ describe("leaving the playing area", () => {
 
     while (matchView(match).phase.kind === "inFlight") {
       step(match);
-      if (matchView(match).phase.kind === "inFlight" && isZoomViewShown(matchView(match))) {
+      if (matchView(match).phase.kind === "inFlight" && matchView(match).zoomViewShown) {
         stepsOffScreenInFlight++;
-        expect(isTimedOut(inFlight(match))).toBe(false);
+        expect(inFlight(match).timedOut).toBe(false);
       }
     }
 
@@ -524,10 +520,10 @@ describe("leaving the playing area", () => {
       step(match);
     }
     expect(inFlight(match).missile.flightStepsLeft).toBe(0);
-    expect(isTimedOut(inFlight(match))).toBe(false);
+    expect(inFlight(match).timedOut).toBe(false);
     step(match);
     expect(inFlight(match).missile.flightStepsLeft).toBe(-1);
-    expect(isTimedOut(inFlight(match))).toBe(true);
+    expect(inFlight(match).timedOut).toBe(true);
   });
 
   test("a timed-out missile inside the playing area keeps flying", () => {
@@ -539,7 +535,7 @@ describe("leaving the playing area", () => {
       step(match);
     }
 
-    expect(isTimedOut(inFlight(match))).toBe(true);
+    expect(inFlight(match).timedOut).toBe(true);
     expect(matchView(match).phase.kind).toBe("inFlight");
     expect(isInsidePlayingArea(inFlight(match).missile)).toBe(true);
   });
@@ -771,5 +767,100 @@ describe("round end and next round", () => {
 
     expect(first.roundNumber).toBe(2);
     expect(play()).toEqual(first);
+  });
+});
+
+describe("matchView", () => {
+  test("while aiming, the aim line runs from the barrel tip along the aim for the power's length", () => {
+    const match = createMatch(61, fixedLayout([]));
+    const side = matchView(match).activePlayer;
+    const ship = activeShip(match);
+    aimAt(match, 180, 120);
+
+    const line = matchView(match).aimLine;
+
+    expect(line.from.x).toBeCloseTo(ship.x, 10);
+    expect(line.from.y).toBeCloseTo(ship.y + BARREL_DISTANCE[side], 10);
+    expect(line.to.x).toBeCloseTo(ship.x, 10);
+    expect(line.to.y).toBeCloseTo(ship.y + BARREL_DISTANCE[side] + 120, 10);
+  });
+
+  test("while aiming, shows the power penalty of the current aim and no zoom view", () => {
+    const match = createMatch(62, fixedLayout([]));
+    aimAt(match, 45, 80);
+
+    const view = matchView(match);
+
+    expect(view.powerPenalty).toBe(400);
+    expect(view.zoomViewShown).toBe(false);
+    expect(view.phase).toEqual({ kind: "aiming" });
+  });
+
+  test("inside the playing area, counts the steps flown and times out after 750 steps", () => {
+    const match = createMatch(63, fixedLayout([]));
+    aimAt(match, 0, 0);
+    fire(match);
+
+    expect(inFlight(match).stepsFlown).toBe(0);
+    for (let i = 0; i < 3; i++) {
+      step(match);
+    }
+    expect(inFlight(match).stepsFlown).toBe(3);
+    expect(inFlight(match).timedOut).toBe(false);
+    expect(matchView(match).zoomViewShown).toBe(false);
+
+    for (let i = 3; i < 751; i++) {
+      step(match);
+    }
+    expect(inFlight(match).stepsFlown).toBe(751);
+    expect(inFlight(match).timedOut).toBe(true);
+    expect(matchView(match).zoomViewShown).toBe(false);
+  });
+
+  test("outside the playing area before timeout, shows the zoom view and keeps the shot's power penalty", () => {
+    const match = createMatch(64, fixedLayout([]));
+    aimAt(match, 0, 100);
+    fire(match);
+    let steps = 0;
+    while (!matchView(match).zoomViewShown) {
+      step(match);
+      steps++;
+    }
+
+    expect(inFlight(match).stepsFlown).toBe(steps);
+    expect(inFlight(match).timedOut).toBe(false);
+    expect(matchView(match).powerPenalty).toBe(500);
+  });
+
+  test("after a hit, shows no zoom view and keeps the shooter's aim line and power penalty", () => {
+    const match = createMatch(65, fixedLayout([]));
+    aimAt(match, opponentAngle(match), 120);
+    const aimedLine = matchView(match).aimLine;
+
+    fire(match);
+    stepUntilShotEnds(match, 1000);
+
+    const view = matchView(match);
+    expect(view.phase.kind).toBe("roundOver");
+    expect(view.zoomViewShown).toBe(false);
+    expect(view.aimLine).toEqual(aimedLine);
+    expect(view.powerPenalty).toBe(600);
+  });
+
+  test("building a view leaves the match unchanged in every phase", () => {
+    const match = createMatch(66, fixedLayout([]));
+    const expectUnchangedByView = () => {
+      const before = structuredClone(match);
+      matchView(match);
+      expect(match).toEqual(before);
+    };
+
+    expectUnchangedByView();
+    aimAt(match, opponentAngle(match), 100);
+    fire(match);
+    step(match);
+    expectUnchangedByView();
+    stepUntilShotEnds(match, 1000);
+    expectUnchangedByView();
   });
 });
