@@ -1251,3 +1251,50 @@ describe("bounce", () => {
     expect(matchView(createMatch(88)).bounce).toBe(false);
   });
 });
+
+describe("impact", () => {
+  function planetInTheWayMatch(seed: number): Match {
+    return createMatch(seed, fixedLayout([planetAt(400, 300, 8, 30)]));
+  }
+
+  test("there is no impact before and during a flight", () => {
+    const match = planetInTheWayMatch(91);
+    aimAt(match, opponentAngle(match), 100);
+
+    expect(matchView(match).impact).toBeUndefined();
+    fire(match);
+    step(match);
+
+    expect(matchView(match).impact).toBeUndefined();
+  });
+
+  test("a planet hit records the impact point for the step it happens in", () => {
+    const match = planetInTheWayMatch(92);
+    aimAt(match, opponentAngle(match), 100);
+    fire(match);
+
+    stepUntilShotEnds(match, 1000);
+
+    expect(matchView(match).phase.kind).toBe("aiming");
+    expect(matchView(match).impact).toEqual(shotEndPoint(match));
+    step(match);
+    expect(matchView(match).impact).toBeUndefined();
+  });
+
+  test("a ship hit records the impact point", () => {
+    const match = createMatch(93, fixedLayout([]));
+
+    hitOpponent(match, 100);
+
+    expect(roundOver(match).result.outcome).toBe("hit");
+    expect(matchView(match).impact).toEqual(shotEndPoint(match));
+  });
+
+  test("a missile leaving the tracking area records no impact", () => {
+    const match = createMatch(94, fixedLayout([]));
+
+    missShot(match);
+
+    expect(matchView(match).impact).toBeUndefined();
+  });
+});

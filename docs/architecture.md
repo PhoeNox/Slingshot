@@ -33,6 +33,7 @@ Pure, seeded, no DOM, canvas, or clock (ADR-0001).
 | `renderer.ts` | Draws `FrameItem`s onto the canvas |
 | `animationCurves.ts` | Afterglow, trail fade, explosion, round banner curves |
 | `screenShake.ts` | Shake offset after hits |
+| `debris.ts` | Cosmetic impact particles: bursts, gravity, splitting on planets, fade-out |
 | `stars.ts` / `starLayer.ts` | Star field generation / drawing |
 | `display.ts` | Fits canvas and overlay to the window |
 | `assets.ts` | Sprite and font loading |

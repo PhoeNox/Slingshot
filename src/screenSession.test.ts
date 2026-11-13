@@ -2,7 +2,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { describe, expect, test } from "vitest";
-import { createMatch, DEFAULT_MATCH_RULES, fire, matchView, step, type Match, type MatchRules, type RoundLayout } from "./core/match";
+import {
+  adjustAim,
+  createMatch,
+  DEFAULT_MATCH_RULES,
+  fire,
+  matchView,
+  step,
+  type Match,
+  type MatchRules,
+  type RoundLayout,
+} from "./core/match";
+import { burstDebris, BURST_COUNT } from "./debris";
 import { describeAttractFrame, describeFrame, type DisplaySettings } from "./frame";
 import {
   createScreenSession,
@@ -32,7 +43,7 @@ function roundOverMatch(): Match {
 }
 
 function sessionOn(...screens: ScreenSession["screen"][]): ScreenSession {
-  const session = createScreenSession();
+  const session = createScreenSession(centredRandom);
   screens.forEach((screen, index) => enterScreen(session, screen, index + 1, DEFAULT_MATCH_RULES));
   return session;
 }
@@ -42,6 +53,7 @@ const SIX_PLANET_RULES: MatchRules = { ...DEFAULT_MATCH_RULES, planetCount: { mi
 const CONTOURS_HIDDEN: DisplaySettings = { gravityWellContours: false };
 
 const extremeRandom = () => 1;
+const centredRandom = () => 0.5;
 
 describe("entering a screen", () => {
   test("starts attract mode behind the main menu", () => {
@@ -59,7 +71,7 @@ describe("entering a screen", () => {
   });
 
   test("starts the match under the given match rules", () => {
-    const session = createScreenSession();
+    const session = createScreenSession(centredRandom);
 
     enterScreen(session, "match", 1, SIX_PLANET_RULES);
 
@@ -68,7 +80,7 @@ describe("entering a screen", () => {
   });
 
   test("keeps attract mode on the default match rules", () => {
-    const session = createScreenSession();
+    const session = createScreenSession(centredRandom);
 
     enterScreen(session, "mainMenu", 1, SIX_PLANET_RULES);
 
@@ -149,7 +161,7 @@ describe("describing the frame", () => {
     const session = sessionOn("match");
 
     expect(describeScreenSessionFrame(session, CONTOURS_HIDDEN)).toEqual(
-      describeFrame(matchView(session.match!), CONTOURS_HIDDEN),
+      describeFrame(matchView(session.match!), CONTOURS_HIDDEN, session.debris),
     );
   });
 
@@ -157,7 +169,7 @@ describe("describing the frame", () => {
     const session = sessionOn("mainMenu", "credits");
 
     expect(describeScreenSessionFrame(session, CONTOURS_HIDDEN)).toEqual(
-      describeAttractFrame(matchView(session.attract!.match), CONTOURS_HIDDEN),
+      describeAttractFrame(matchView(session.attract!.match), CONTOURS_HIDDEN, session.debris),
     );
   });
 });
@@ -184,5 +196,108 @@ describe("screen shake", () => {
     const session = sessionOn("mainMenu");
 
     expect(screenSessionShake(session, false, extremeRandom)).toBe(NO_SHAKE);
+  });
+});
+
+describe("debris", () => {
+  const PLANET_IN_THE_WAY: RoundLayout = { ...FACING_LAYOUT, planets: [{ sprite: 1, mass: 8, radius: 30, x: 400, y: 300 }] };
+
+  function planetHitSession(reducedMotion: boolean): ScreenSession {
+    const session = sessionOn("match");
+    session.match = createMatch(5, structuredClone(PLANET_IN_THE_WAY));
+    fire(session.match);
+    for (let i = 0; i < 1000 && matchView(session.match).impact === undefined; i++) {
+      stepScreenSession(session, reducedMotion);
+    }
+    return session;
+  }
+
+  function playSeededMatch(reducedMotion: boolean): Match {
+    const session = sessionOn("match");
+    const match = session.match!;
+    for (let shot = 0; shot < 6; shot++) {
+      adjustAim(match, { angle: 25 * shot, power: 20 * shot });
+      fire(match);
+      for (let i = 0; i < 1000 && matchView(match).phase.kind === "inFlight"; i++) {
+        stepScreenSession(session, reducedMotion);
+      }
+    }
+    return match;
+  }
+
+  test("a planet hit throws large particles from the impact point", () => {
+    const session = planetHitSession(false);
+    const impact = matchView(session.match!).impact!;
+
+    expect(session.debris).toHaveLength(BURST_COUNT.large);
+    expect(session.debris.every((particle) => particle.size === "large")).toBe(true);
+    expect(session.debris.every((particle) => particle.x === impact.x && particle.y === impact.y)).toBe(true);
+  });
+
+  test("a ship hit throws large particles", () => {
+    const session = sessionOn("match");
+    session.match = createMatch(1, structuredClone(FACING_LAYOUT));
+    fire(session.match);
+    for (let i = 0; i < 1000 && matchView(session.match).phase.kind !== "roundOver"; i++) {
+      stepScreenSession(session, false);
+    }
+
+    expect(session.debris).toHaveLength(BURST_COUNT.large);
+  });
+
+  test("debris keeps flying after the impact", () => {
+    const session = planetHitSession(false);
+    const before = structuredClone(session.debris);
+
+    stepScreenSession(session, false);
+
+    expect(session.debris).not.toEqual(before);
+  });
+
+  test("no debris is thrown under reduced motion", () => {
+    const session = planetHitSession(true);
+
+    expect(matchView(session.match!).impact).toBeDefined();
+    expect(session.debris).toEqual([]);
+  });
+
+  test("debris in flight is cleared once reduced motion is set", () => {
+    const session = planetHitSession(false);
+
+    stepScreenSession(session, true);
+
+    expect(session.debris).toEqual([]);
+  });
+
+  test("seeded matches end in the same state with or without debris", () => {
+    expect(playSeededMatch(false)).toEqual(playSeededMatch(true));
+  });
+
+  test("attract mode throws debris like a match", () => {
+    const session = sessionOn("mainMenu");
+    for (let i = 0; i < 5000 && session.debris.length === 0; i++) {
+      stepScreenSession(session, false);
+    }
+
+    expect(session.debris.length).toBeGreaterThan(0);
+  });
+
+  test("starting and leaving a match clears the debris", () => {
+    const session = planetHitSession(false);
+
+    enterScreen(session, "mainMenu", 2, DEFAULT_MATCH_RULES);
+    expect(session.debris).toEqual([]);
+
+    session.debris = burstDebris({ x: 100, y: 100 }, "large", false, centredRandom);
+    enterScreen(session, "match", 3, DEFAULT_MATCH_RULES);
+    expect(session.debris).toEqual([]);
+  });
+
+  test("the frame draws the debris", () => {
+    const session = planetHitSession(false);
+
+    const dots = describeScreenSessionFrame(session, CONTOURS_HIDDEN).filter((item) => item.kind === "dot");
+
+    expect(dots).toHaveLength(BURST_COUNT.large);
   });
 });

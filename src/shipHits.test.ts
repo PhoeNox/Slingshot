@@ -20,7 +20,7 @@ interface ShotOutcome {
 }
 
 function fireThroughScreenSession(seed: number, angle: number, power: number): ShotOutcome {
-  const session = createScreenSession();
+  const session = createScreenSession(Math.random);
   enterScreen(session, "match", seed, DEFAULT_MATCH_RULES);
   const match = session.match!;
   const ships = structuredClone(matchView(match).ships);

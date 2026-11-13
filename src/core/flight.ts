@@ -20,12 +20,12 @@ export interface Point {
   y: number;
 }
 
-export interface ShotRecord {
-  x: number;
-  y: number;
+export interface Body extends Point {
   vx: number;
   vy: number;
 }
+
+export type ShotRecord = Body;
 
 export interface Missile extends ShotRecord {
   stepsFlown: number;
@@ -41,6 +41,7 @@ export interface Segment {
 export interface FlightStep {
   segment: Segment;
   shotEnded: boolean;
+  hitPlanet: boolean;
   hitShip: Side | undefined;
 }
 
@@ -103,7 +104,7 @@ export function flyMissile(
     || hitSomething
     || isEndedByTimeout(missile);
   const to = { x: missile.x, y: missile.y };
-  return { segment: { from, to }, shotEnded, hitShip };
+  return { segment: { from, to }, shotEnded, hitPlanet, hitShip };
 }
 
 function advanceMissile(missile: Missile, planets: readonly Readonly<Planet>[]): void {
@@ -111,19 +112,23 @@ function advanceMissile(missile: Missile, planets: readonly Readonly<Planet>[]):
   if (missile.flightStepsLeft !== undefined) {
     missile.flightStepsLeft--;
   }
-  for (const planet of planets) {
-    const dx = missile.x - planet.x;
-    const dy = missile.y - planet.y;
-    const distanceSquared = dx * dx + dy * dy;
-    const distanceCubed = distanceSquared * Math.sqrt(distanceSquared);
-    missile.vx -= (GRAVITY * planet.mass * dx) / distanceCubed;
-    missile.vy -= (GRAVITY * planet.mass * dy) / distanceCubed;
-  }
+  applyGravity(missile, planets);
   missile.x += missile.vx;
   missile.y += missile.vy;
 }
 
-function isInsideTrackingArea(point: Readonly<Point>): boolean {
+export function applyGravity(body: Body, planets: readonly Readonly<Planet>[]): void {
+  for (const planet of planets) {
+    const dx = body.x - planet.x;
+    const dy = body.y - planet.y;
+    const distanceSquared = dx * dx + dy * dy;
+    const distanceCubed = distanceSquared * Math.sqrt(distanceSquared);
+    body.vx -= (GRAVITY * planet.mass * dx) / distanceCubed;
+    body.vy -= (GRAVITY * planet.mass * dy) / distanceCubed;
+  }
+}
+
+export function isInsideTrackingArea(point: Readonly<Point>): boolean {
   return point.x >= TRACKING_AREA_LEFT
     && point.x < TRACKING_AREA_RIGHT
     && point.y >= TRACKING_AREA_TOP
@@ -145,20 +150,20 @@ function isEndedByTimeout(missile: Readonly<Missile>): boolean {
   return hasTimedOut(missile) && (missile.bounces || !isInsidePlayingArea(missile));
 }
 
-function reflectOffEdges(missile: Missile, from: Readonly<Point>): void {
-  const crossingX = edgeCrossingFraction(from.x, missile.x, PLAYING_AREA_WIDTH);
-  const crossingY = edgeCrossingFraction(from.y, missile.y, PLAYING_AREA_HEIGHT);
+export function reflectOffEdges(body: Body, from: Readonly<Point>): void {
+  const crossingX = edgeCrossingFraction(from.x, body.x, PLAYING_AREA_WIDTH);
+  const crossingY = edgeCrossingFraction(from.y, body.y, PLAYING_AREA_HEIGHT);
   const crossing = Math.min(crossingX, crossingY);
   if (crossing === Infinity) {
     return;
   }
-  missile.x = from.x + crossing * (missile.x - from.x);
-  missile.y = from.y + crossing * (missile.y - from.y);
+  body.x = from.x + crossing * (body.x - from.x);
+  body.y = from.y + crossing * (body.y - from.y);
   if (crossingX === crossing) {
-    missile.vx = -missile.vx;
+    body.vx = -body.vx;
   }
   if (crossingY === crossing) {
-    missile.vy = -missile.vy;
+    body.vy = -body.vy;
   }
 }
 
@@ -173,26 +178,38 @@ function edgeCrossingFraction(from: number, to: number, extent: number): number 
 }
 
 function stopAtPlanetSurface(missile: Missile, from: Readonly<Point>, planets: readonly Readonly<Planet>[]): boolean {
+  const entry = planetEntryPoint(from, missile, planets);
+  if (entry === undefined) {
+    return false;
+  }
+  missile.x = entry.x;
+  missile.y = entry.y;
+  return true;
+}
+
+export function planetEntryPoint(
+  from: Readonly<Point>,
+  to: Readonly<Point>,
+  planets: readonly Readonly<Planet>[],
+): Point | undefined {
   for (const planet of planets) {
-    const toX = missile.x - planet.x;
-    const toY = missile.y - planet.y;
+    const toX = to.x - planet.x;
+    const toY = to.y - planet.y;
     const radiusSquared = planet.radius * planet.radius;
     if (toX * toX + toY * toY > radiusSquared) {
       continue;
     }
     const fromX = from.x - planet.x;
     const fromY = from.y - planet.y;
-    const dx = missile.x - from.x;
-    const dy = missile.y - from.y;
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
     const a = dx * dx + dy * dy;
     const b = 2 * (fromX * dx + fromY * dy);
     const c = fromX * fromX + fromY * fromY - radiusSquared;
     const entryFraction = (-b - Math.sqrt(b * b - 4 * a * c)) / (2 * a);
-    missile.x = from.x + entryFraction * dx;
-    missile.y = from.y + entryFraction * dy;
-    return true;
+    return { x: from.x + entryFraction * dx, y: from.y + entryFraction * dy };
   }
-  return false;
+  return undefined;
 }
 
 function stopAtShip(

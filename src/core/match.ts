@@ -115,6 +115,7 @@ interface MatchState {
   trails: TrailSegment[];
   attempts: Record<Side, number>;
   zoom: Zoom;
+  impact: Point | undefined;
 }
 
 type DeepReadonly<T> = { readonly [K in keyof T]: DeepReadonly<T[K]> };
@@ -164,6 +165,7 @@ export function createMatch(
     trails: [],
     attempts: { left: 0, right: 0 },
     zoom: { scale: 1, left: 0, top: 0 },
+    impact: undefined,
   };
 }
 
@@ -173,6 +175,7 @@ function drawFirstShooter(rng: Rng): Side {
 
 export function step(match: Match): void {
   match.roundStepCount++;
+  match.impact = undefined;
   if (match.phase.kind === "inFlight") {
     advanceShot(match, match.phase.missile);
   } else if (match.phase.kind === "roundOver") {
@@ -229,6 +232,9 @@ function advanceShot(match: Match, missile: Missile): void {
   const shotNumber = match.attempts.left + match.attempts.right;
   const trailSegment = { shooter: match.activePlayer, shotNumber, ...flightStep.segment };
   match.trails.push(trailSegment);
+  if (flightStep.hitPlanet || flightStep.hitShip !== undefined) {
+    match.impact = flightStep.segment.to;
+  }
   if (flightStep.hitShip !== undefined) {
     endRound(match, flightStep.hitShip);
   } else if (flightStep.shotEnded) {
@@ -339,6 +345,7 @@ export function matchView(match: Match): MatchView {
     aimLine,
     powerPenalty,
     zoom: match.zoom,
+    impact: match.impact,
     bounce: match.rules.bounce,
   };
 }

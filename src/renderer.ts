@@ -9,6 +9,7 @@ import { TEXT_FONT_FAMILY, TITLE_FONT_FAMILY } from "./assets";
 import type { Point } from "./core/flight";
 import type {
   BloomItem,
+  DotItem,
   FillRectItem,
   FrameItem,
   GroupItem,
@@ -83,6 +84,9 @@ function drawItem(context: CanvasRenderingContext2D, sprites: Sprites, item: Fra
       break;
     case "bloom":
       drawBloom(context, item);
+      break;
+    case "dot":
+      drawDot(context, item);
       break;
     case "fillRect":
       fillRect(context, item);
@@ -167,6 +171,16 @@ function drawBloom(context: CanvasRenderingContext2D, item: BloomItem): void {
   context.globalAlpha = item.alpha;
   context.fillStyle = gradient;
   context.fillRect(x - radius, y - radius, 2 * radius, 2 * radius);
+  context.restore();
+}
+
+function drawDot(context: CanvasRenderingContext2D, item: DotItem): void {
+  const { x, y } = item.centre;
+  const half = item.size / 2;
+  context.save();
+  context.globalAlpha = item.alpha;
+  context.fillStyle = item.colour;
+  context.fillRect(x - half, y - half, item.size, item.size);
   context.restore();
 }
 

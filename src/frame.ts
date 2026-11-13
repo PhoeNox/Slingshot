@@ -11,6 +11,7 @@ import type { Missile, Point, Segment } from "./core/flight";
 import type { InFlightView, MatchView, RoundOutcome, RoundOverView, RoundResult, Zoom } from "./core/match";
 import { PLAYING_AREA_HEIGHT, PLAYING_AREA_WIDTH } from "./core/playingArea";
 import type { Aim, Planet, Ship, Side } from "./core/round";
+import { particleAlpha, type Particle, type ParticleSize } from "./debris";
 
 export interface Rect {
   left: number;
@@ -67,6 +68,14 @@ export interface BloomItem {
   alpha: number;
 }
 
+export interface DotItem {
+  kind: "dot";
+  colour: string;
+  centre: Point;
+  size: number;
+  alpha: number;
+}
+
 export interface FillRectItem {
   kind: "fillRect";
   colour: string;
@@ -108,6 +117,7 @@ export type FrameItem =
   | RingItem
   | LinesItem
   | BloomItem
+  | DotItem
   | FillRectItem
   | StrokeRectItem
   | TextItem
@@ -161,6 +171,9 @@ const GRAVITY_WELL_CONTOUR_ALPHA = 0.45;
 
 const MISSILE_SPRITE_SIZE = 25;
 
+const PARTICLE_SIZES: Record<ParticleSize, number> = { large: 3, small: 1.5 };
+const PARTICLE_COLOURS: Record<ParticleSize, string> = { large: COLOURS.lock, small: COLOURS.phosphor };
+
 const HUD_FONT_SIZE = 14;
 const HUD_TOP = 5;
 const ANGLE_INFO_LEFT = 290;
@@ -192,8 +205,12 @@ const ATTRACT_DIM_COLOUR = "rgba(4, 8, 21, 0.55)";
 
 const PLAYING_AREA: Readonly<Rect> = { left: 0, top: 0, width: PLAYING_AREA_WIDTH, height: PLAYING_AREA_HEIGHT };
 
-export function describeFrame(view: MatchView, display: Readonly<DisplaySettings>): FrameItem[] {
-  const scene = sceneItems(view, display);
+export function describeFrame(
+  view: MatchView,
+  display: Readonly<DisplaySettings>,
+  debris: readonly Readonly<Particle>[],
+): FrameItem[] {
+  const scene = sceneItems(view, display, debris);
   const zoomedScene = zoomedSceneItems(scene, view.zoom);
   const border = bounceBorderItems(view.bounce);
   const hud = phaseHudItems(view);
@@ -210,11 +227,26 @@ function bounceBorderItems(bounce: boolean): StrokeRectItem[] {
   return [{ kind: "strokeRect", colour: COLOURS.instrumentDim, rect: outline }];
 }
 
-function sceneItems(view: MatchView, display: Readonly<DisplaySettings>): FrameItem[] {
+function sceneItems(
+  view: MatchView,
+  display: Readonly<DisplaySettings>,
+  debris: readonly Readonly<Particle>[],
+): FrameItem[] {
   const planets = planetItems(view.planets, display);
   const trails = trailItems(view.trails);
+  const particles = debrisItems(debris, 1 / view.zoom.scale);
   const phase = phaseSceneItems(view);
-  return [...planets, ...trails, ...phase];
+  return [...planets, ...trails, ...particles, ...phase];
+}
+
+function debrisItems(debris: readonly Readonly<Particle>[], sizeScale: number): DotItem[] {
+  return debris.map((particle) => ({
+    kind: "dot",
+    colour: PARTICLE_COLOURS[particle.size],
+    centre: { x: particle.x, y: particle.y },
+    size: PARTICLE_SIZES[particle.size] * sizeScale,
+    alpha: particleAlpha(particle),
+  }));
 }
 
 function zoomedSceneItems(scene: FrameItem[], zoom: Readonly<Zoom>): FrameItem[] {
@@ -250,12 +282,17 @@ function playingAreaOutlineItem(transform: Readonly<Transform>): LinesItem {
   };
 }
 
-export function describeAttractFrame(view: MatchView, display: Readonly<DisplaySettings>): FrameItem[] {
+export function describeAttractFrame(
+  view: MatchView,
+  display: Readonly<DisplaySettings>,
+  debris: readonly Readonly<Particle>[],
+): FrameItem[] {
   const planets = planetItems(view.planets, display);
   const trails = trailItems(view.trails);
+  const particles = debrisItems(debris, 1);
   const phase = attractPhaseItems(view);
   const dimming: FillRectItem = { kind: "fillRect", colour: ATTRACT_DIM_COLOUR, rect: PLAYING_AREA };
-  return [...planets, ...trails, ...phase, dimming];
+  return [...planets, ...trails, ...particles, ...phase, dimming];
 }
 
 function attractPhaseItems(view: MatchView): FrameItem[] {

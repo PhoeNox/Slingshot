@@ -19,12 +19,14 @@ import {
   type Zoom,
 } from "./core/match";
 import type { Planet, Side } from "./core/round";
+import { NO_DEBRIS, type Particle } from "./debris";
 import {
   describeAttractFrame,
   describeBackdropFrame,
   describeFrame,
   type BloomItem,
   type DisplaySettings,
+  type DotItem,
   type FrameItem,
   type GroupItem,
   type ImageItem,
@@ -92,15 +94,15 @@ function ringsAround(frame: FrameItem[], planet: Planet): RingItem[] {
 }
 
 function frameOf(match: Match, display = CONTOURS_SHOWN): FrameItem[] {
-  return flatten(describeFrame(matchView(match), display));
+  return flatten(describeFrame(matchView(match), display, NO_DEBRIS));
 }
 
 function frameOfView(view: MatchView): FrameItem[] {
-  return flatten(describeFrame(view, CONTOURS_SHOWN));
+  return flatten(describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS));
 }
 
 function attractFrameOf(match: Match, display = CONTOURS_SHOWN): FrameItem[] {
-  return flatten(describeAttractFrame(matchView(match), display));
+  return flatten(describeAttractFrame(matchView(match), display, NO_DEBRIS));
 }
 
 function flatten(items: FrameItem[]): FrameItem[] {
@@ -627,7 +629,7 @@ describe("in-flight frame", () => {
 
   test("the zoomed scene is one group that maps the zoom view onto the screen", () => {
     const groupTransformsOf = (zoom: Zoom) =>
-      describeFrame(zoomedFlightView(24, zoom), CONTOURS_SHOWN)
+      describeFrame(zoomedFlightView(24, zoom), CONTOURS_SHOWN, NO_DEBRIS)
         .filter((item): item is GroupItem => item.kind === "group")
         .map((item) => item.transform);
 
@@ -639,7 +641,7 @@ describe("in-flight frame", () => {
     const layout = { ...EMPTY_LAYOUT, planets: [{ ...LIGHT_PLANET }] };
     const view = zoomedFlightView(25, CENTRED_HALF_ZOOM, layout);
 
-    const zoomed = flatten(zoomGroupsOf(describeFrame(view, CONTOURS_SHOWN))[0].items);
+    const zoomed = flatten(zoomGroupsOf(describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS))[0].items);
 
     expect(imagesOf(zoomed, "planet1")).toHaveLength(1);
     expect(ringsAround(zoomed, LIGHT_PLANET)).toHaveLength(3);
@@ -680,7 +682,7 @@ describe("in-flight frame", () => {
   test("the HUD is drawn outside the zoom group", () => {
     const view = zoomedFlightView(28, CENTRED_HALF_ZOOM);
 
-    const frame = describeFrame(view, CONTOURS_SHOWN);
+    const frame = describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS);
 
     const zoomed = flatten(zoomGroupsOf(frame)[0].items);
     expect(textsOf(zoomed)).toHaveLength(0);
@@ -691,7 +693,7 @@ describe("in-flight frame", () => {
   test("a faint playing-area outline is drawn on screen where the zoom view puts the playing area", () => {
     const view = zoomedFlightView(29, ABOVE_HALF_ZOOM);
 
-    const outlines = zoomOutlinesOf(describeFrame(view, CONTOURS_SHOWN));
+    const outlines = zoomOutlinesOf(describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS));
 
     expect(outlines).toHaveLength(1);
     expect(outlines[0].alpha).toBeLessThan(1);
@@ -981,5 +983,42 @@ describe("attract frame", () => {
     expect(imagesOf(frame, "explosion")).toHaveLength(1);
     expect(textsOf(frame)).toHaveLength(0);
     expect(strokeRectsOf(frame)).toHaveLength(0);
+  });
+});
+
+describe("debris", () => {
+  const LARGE_PARTICLE: Particle = { x: 120, y: 80, vx: 1, vy: 0, size: "large", stepsLeft: 30 };
+  const SMALL_PARTICLE: Particle = { x: 300, y: 400, vx: 0, vy: 1, size: "small", stepsLeft: 30 };
+  const DEBRIS = [LARGE_PARTICLE, SMALL_PARTICLE];
+
+  function dotsOf(frame: FrameItem[]): DotItem[] {
+    return flatten(frame).filter((item): item is DotItem => item.kind === "dot");
+  }
+
+  test("each particle is drawn as a dot at its position, fading with its remaining lifetime", () => {
+    const dots = dotsOf(describeFrame(matchView(emptyMatch(41)), CONTOURS_SHOWN, DEBRIS));
+
+    expect(dots).toEqual([
+      { kind: "dot", colour: COLOURS.lock, centre: { x: 120, y: 80 }, size: 3, alpha: 0.5 },
+      { kind: "dot", colour: COLOURS.phosphor, centre: { x: 300, y: 400 }, size: 1.5, alpha: 1 },
+    ]);
+  });
+
+  test("no dots are drawn without debris", () => {
+    expect(dotsOf(frameOf(emptyMatch(42)))).toEqual([]);
+  });
+
+  test("debris is drawn inside the zoom group at a constant on-screen size", () => {
+    const view = zoomedFlightView(43, CENTRED_HALF_ZOOM);
+
+    const zoomed = zoomGroupsOf(describeFrame(view, CONTOURS_SHOWN, [LARGE_PARTICLE]))[0].items;
+
+    expect(dotsOf(zoomed)).toEqual([expect.objectContaining({ centre: { x: 120, y: 80 }, size: 6 })]);
+  });
+
+  test("debris is drawn in attract mode", () => {
+    const frame = describeAttractFrame(matchView(emptyMatch(44)), CONTOURS_SHOWN, DEBRIS);
+
+    expect(dotsOf(frame)).toHaveLength(2);
   });
 });

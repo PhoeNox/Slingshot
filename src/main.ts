@@ -54,7 +54,7 @@ async function start(): Promise<void> {
   const sprites = await loadSprites();
   await loadFonts();
 
-  const session = createScreenSession();
+  const session = createScreenSession(Math.random);
   const storedSettings = readStoredSettings(window);
   const settings = parseSettings(storedSettings);
 
