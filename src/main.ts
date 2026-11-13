@@ -9,8 +9,10 @@ import { describeBackdropFrame, describeFrame } from "./frame";
 import { startGameLoop } from "./gameLoop";
 import { bindControls, bindEscape } from "./input";
 import { MAIN_MENU_ITEMS, type Screen } from "./navigation";
-import { drawFrame } from "./renderer";
+import type { Point } from "./core/flight";
+import { drawFrame, drawShakenFrame } from "./renderer";
 import { bindBracketFlash, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, navigateBack, renderMenuItems, showScreen, type ScreenElements } from "./screens";
+import { NO_SHAKE, screenShakeOffset } from "./screenShake";
 import { drawStars, renderStarSprites } from "./starLayer";
 import { generateStars } from "./stars";
 
@@ -91,15 +93,23 @@ async function start(): Promise<void> {
     const view = matchView(session.match);
     return describeFrame(view);
   };
+  const currentShake = (): Readonly<Point> => {
+    if (reducedMotion.matches || session.match === undefined) {
+      return NO_SHAKE;
+    }
+    const view = matchView(session.match);
+    return screenShakeOffset(view, Math.random);
+  };
   const backdropFrame = describeBackdropFrame();
   const stars = generateStars(Math.random);
   const starSprites = renderStarSprites();
   const render = (timeMs: number) => {
     const starTimeMs = reducedMotion.matches ? STATIC_STAR_TIME_MS : timeMs;
     const frame = describeCurrentFrame();
+    const shake = currentShake();
     drawFrame(context, sprites, backdropFrame);
     drawStars(context, starSprites, stars, starTimeMs);
-    drawFrame(context, sprites, frame);
+    drawShakenFrame(context, sprites, frame, shake);
   };
   startGameLoop(stepMatch, render);
 }

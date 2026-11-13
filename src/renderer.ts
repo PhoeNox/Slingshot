@@ -5,8 +5,10 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { TEXT_FONT_FAMILY } from "./assets";
+import { TEXT_FONT_FAMILY, TITLE_FONT_FAMILY } from "./assets";
+import type { Point } from "./core/flight";
 import type {
+  BloomItem,
   FillRectItem,
   FrameItem,
   GroupItem,
@@ -21,12 +23,39 @@ import type {
 
 export type Sprites = Record<SpriteName, HTMLImageElement>;
 
+interface GlowLayer {
+  width: number;
+  alpha: number;
+}
+
 const LINE_WIDTH = 1;
+const LINE_GLOW_LAYERS: readonly GlowLayer[] = [
+  { width: 5, alpha: 0.12 },
+  { width: 2.5, alpha: 0.3 },
+];
+const TEXT_GLOW_LAYERS: readonly GlowLayer[] = [
+  { width: 4, alpha: 0.12 },
+  { width: 2, alpha: 0.25 },
+];
+const FONT_FAMILIES: Record<TextItem["font"], string> = { title: TITLE_FONT_FAMILY, text: TEXT_FONT_FAMILY };
+const BLOOM_EDGE_COLOUR = "rgba(0, 0, 0, 0)";
 
 export function drawFrame(context: CanvasRenderingContext2D, sprites: Sprites, frame: readonly FrameItem[]): void {
   for (const item of frame) {
     drawItem(context, sprites, item);
   }
+}
+
+export function drawShakenFrame(
+  context: CanvasRenderingContext2D,
+  sprites: Sprites,
+  frame: readonly FrameItem[],
+  offset: Readonly<Point>,
+): void {
+  context.save();
+  context.translate(offset.x, offset.y);
+  drawFrame(context, sprites, frame);
+  context.restore();
 }
 
 function drawItem(context: CanvasRenderingContext2D, sprites: Sprites, item: FrameItem): void {
@@ -42,6 +71,9 @@ function drawItem(context: CanvasRenderingContext2D, sprites: Sprites, item: Fra
       break;
     case "lines":
       drawLines(context, item);
+      break;
+    case "bloom":
+      drawBloom(context, item);
       break;
     case "fillRect":
       fillRect(context, item);
@@ -96,13 +128,36 @@ function drawRing(context: CanvasRenderingContext2D, item: RingItem): void {
 function drawLines(context: CanvasRenderingContext2D, item: LinesItem): void {
   context.save();
   context.strokeStyle = item.colour;
-  context.lineWidth = LINE_WIDTH;
+  context.setLineDash(item.dash);
+  context.lineCap = "round";
   context.beginPath();
   for (const segment of item.segments) {
     context.moveTo(segment.from.x, segment.from.y);
     context.lineTo(segment.to.x, segment.to.y);
   }
+  const glowLayers = item.glow ? LINE_GLOW_LAYERS : [];
+  for (const layer of glowLayers) {
+    context.globalAlpha = item.alpha * layer.alpha;
+    context.lineWidth = layer.width;
+    context.stroke();
+  }
+  context.globalAlpha = item.alpha;
+  context.lineWidth = LINE_WIDTH;
   context.stroke();
+  context.restore();
+}
+
+function drawBloom(context: CanvasRenderingContext2D, item: BloomItem): void {
+  const { x, y } = item.centre;
+  const radius = item.radius;
+  const gradient = context.createRadialGradient(x, y, 0, x, y, radius);
+  gradient.addColorStop(0, item.colour);
+  gradient.addColorStop(1, BLOOM_EDGE_COLOUR);
+  context.save();
+  context.globalCompositeOperation = "lighter";
+  context.globalAlpha = item.alpha;
+  context.fillStyle = gradient;
+  context.fillRect(x - radius, y - radius, 2 * radius, 2 * radius);
   context.restore();
 }
 
@@ -125,11 +180,18 @@ function strokeRect(context: CanvasRenderingContext2D, item: StrokeRectItem): vo
 
 function drawText(context: CanvasRenderingContext2D, item: TextItem): void {
   context.save();
-  context.globalAlpha = item.alpha;
   context.fillStyle = item.colour;
-  context.font = `${item.fontSize}px "${TEXT_FONT_FAMILY}"`;
+  context.strokeStyle = item.colour;
+  context.lineJoin = "round";
+  context.font = `${item.fontSize}px "${FONT_FAMILIES[item.font]}"`;
   context.textAlign = item.align;
   context.textBaseline = item.baseline;
+  for (const layer of TEXT_GLOW_LAYERS) {
+    context.globalAlpha = item.alpha * layer.alpha;
+    context.lineWidth = layer.width;
+    context.strokeText(item.text, item.x, item.y);
+  }
+  context.globalAlpha = item.alpha;
   context.fillText(item.text, item.x, item.y);
   context.restore();
 }

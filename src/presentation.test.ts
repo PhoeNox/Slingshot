@@ -5,8 +5,13 @@ import { describe, expect, test } from "vitest";
 import type { RoundResult } from "./core/match";
 import type { Planet } from "./core/round";
 import {
+  afterglowSegments,
+  cornerBrackets,
+  explosionBloom,
   explosionSize,
   gravityWellContourRadii,
+  gridLines,
+  insetRect,
   roundBanner,
   roundOverMessageBox,
   roundOverTitle,
@@ -118,6 +123,83 @@ describe("explosionSize", () => {
   test("the explosion is gone five steps after the hit", () => {
     expect(explosionSize(5)).toBeNull();
     expect(explosionSize(20)).toBeNull();
+  });
+});
+
+describe("explosionBloom", () => {
+  test("the bloom starts at full strength and widens as it fades", () => {
+    const start = explosionBloom(0)!;
+    const later = explosionBloom(4)!;
+
+    expect(start.alpha).toBe(1);
+    expect(later.radius).toBeGreaterThan(start.radius);
+    expect(later.alpha).toBeLessThan(start.alpha);
+  });
+
+  test("the bloom is gone eight steps after the hit", () => {
+    expect(explosionBloom(7)).not.toBeNull();
+    expect(explosionBloom(8)).toBeNull();
+  });
+});
+
+describe("afterglowSegments", () => {
+  const trail = Array.from({ length: 60 }, (_, index) => ({ from: { x: index, y: 0 }, to: { x: index + 1, y: 0 } }));
+
+  test("covers only the segments flown by the current shot", () => {
+    const glow = afterglowSegments(trail, 3);
+
+    expect(glow.map((entry) => entry.segment)).toEqual(trail.slice(57));
+  });
+
+  test("covers at most the last 45 segments", () => {
+    const glow = afterglowSegments(trail, 60);
+
+    expect(glow).toHaveLength(45);
+    expect(glow[0].segment).toBe(trail[15]);
+  });
+
+  test("fades by age, from full at the newest segment", () => {
+    const glow = afterglowSegments(trail, 60);
+
+    expect(glow.at(-1)!.alpha).toBe(1);
+    expect(glow[0].alpha).toBeCloseTo(1 / 45);
+  });
+
+  test("a just-launched shot has no afterglow", () => {
+    expect(afterglowSegments(trail, 0)).toEqual([]);
+  });
+});
+
+describe("panel geometry", () => {
+  const rect = { left: 10, top: 20, width: 100, height: 50 };
+
+  test("insetRect shrinks a rect evenly on all sides", () => {
+    expect(insetRect(rect, 4)).toEqual({ left: 14, top: 24, width: 92, height: 42 });
+  });
+
+  test("cornerBrackets draws two arms pointing inwards from each corner", () => {
+    const brackets = cornerBrackets(rect, 5);
+
+    expect(brackets).toHaveLength(8);
+    expect(brackets.slice(0, 2)).toEqual([
+      { from: { x: 10, y: 20 }, to: { x: 15, y: 20 } },
+      { from: { x: 10, y: 20 }, to: { x: 10, y: 25 } },
+    ]);
+    expect(brackets.slice(6)).toEqual([
+      { from: { x: 110, y: 70 }, to: { x: 105, y: 70 } },
+      { from: { x: 110, y: 70 }, to: { x: 110, y: 65 } },
+    ]);
+  });
+
+  test("gridLines draws interior lines at the given spacing", () => {
+    const grid = gridLines(rect, 25);
+
+    expect(grid).toEqual([
+      { from: { x: 35, y: 20 }, to: { x: 35, y: 70 } },
+      { from: { x: 60, y: 20 }, to: { x: 60, y: 70 } },
+      { from: { x: 85, y: 20 }, to: { x: 85, y: 70 } },
+      { from: { x: 10, y: 45 }, to: { x: 110, y: 45 } },
+    ]);
   });
 });
 

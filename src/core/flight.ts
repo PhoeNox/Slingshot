@@ -134,6 +134,10 @@ export function hasTimedOut(missile: Readonly<Missile>): boolean {
   return missile.flightStepsLeft < 0;
 }
 
+export function stepsFlown(missile: Readonly<Missile>): number {
+  return FLIGHT_TIMEOUT_STEPS - missile.flightStepsLeft;
+}
+
 function isLostAfterTimeout(missile: Readonly<Missile>): boolean {
   return hasTimedOut(missile) && !isInsidePlayingArea(missile);
 }

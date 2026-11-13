@@ -5,7 +5,7 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import type { Point } from "./core/flight";
+import type { Point, Segment } from "./core/flight";
 import type { RoundOutcome, RoundResult } from "./core/match";
 import {
   PLAYING_AREA_HEIGHT,
@@ -43,6 +43,16 @@ export interface BreakdownRow {
   top: number;
 }
 
+export interface FadingSegment {
+  segment: Readonly<Segment>;
+  alpha: number;
+}
+
+export interface Bloom {
+  radius: number;
+  alpha: number;
+}
+
 export interface RoundOverTextTops {
   title: number;
   scoreChange: number;
@@ -63,8 +73,13 @@ const GRAVITY_WELL_CONTOUR_SPACING_PER_SQRT_MASS = 1.5;
 
 const PLAYER_NAMES: Record<Side, string> = { left: "Player 1", right: "Player 2" };
 
+const AFTERGLOW_STEPS = 45;
+
 const EXPLOSION_STEPS = 6;
 const EXPLOSION_SIZE_FACTOR = 100 / 9;
+const BLOOM_STEPS = 8;
+const BLOOM_START_RADIUS = 60;
+const BLOOM_GROWTH_PER_STEP = 15;
 
 const BANNER_START_INTENSITY = 100;
 const BANNER_END_INTENSITY = 30;
@@ -144,12 +159,71 @@ export function strokeOutline(rect: Readonly<Rect>): Rect {
   return { left: rect.left + 0.5, top: rect.top + 0.5, width: rect.width - 1, height: rect.height - 1 };
 }
 
+export function insetRect(rect: Readonly<Rect>, inset: number): Rect {
+  return {
+    left: rect.left + inset,
+    top: rect.top + inset,
+    width: rect.width - 2 * inset,
+    height: rect.height - 2 * inset,
+  };
+}
+
+export function cornerBrackets(rect: Readonly<Rect>, length: number): Segment[] {
+  const right = rect.left + rect.width;
+  const bottom = rect.top + rect.height;
+  const corners = [
+    { x: rect.left, y: rect.top, dx: 1, dy: 1 },
+    { x: right, y: rect.top, dx: -1, dy: 1 },
+    { x: rect.left, y: bottom, dx: 1, dy: -1 },
+    { x: right, y: bottom, dx: -1, dy: -1 },
+  ];
+  return corners.flatMap(({ x, y, dx, dy }) => [
+    { from: { x, y }, to: { x: x + dx * length, y } },
+    { from: { x, y }, to: { x, y: y + dy * length } },
+  ]);
+}
+
+export function gridLines(rect: Readonly<Rect>, spacing: number): Segment[] {
+  const right = rect.left + rect.width;
+  const bottom = rect.top + rect.height;
+  const columnCount = Math.ceil(rect.width / spacing) - 1;
+  const rowCount = Math.ceil(rect.height / spacing) - 1;
+  const columns = Array.from({ length: columnCount }, (_, index) => {
+    const x = rect.left + (index + 1) * spacing;
+    return { from: { x, y: rect.top }, to: { x, y: bottom } };
+  });
+  const rows = Array.from({ length: rowCount }, (_, index) => {
+    const y = rect.top + (index + 1) * spacing;
+    return { from: { x: rect.left, y }, to: { x: right, y } };
+  });
+  return [...columns, ...rows];
+}
+
+export function afterglowSegments(trail: readonly Readonly<Segment>[], stepsFlown: number): FadingSegment[] {
+  const count = Math.min(stepsFlown, AFTERGLOW_STEPS);
+  const recent = trail.slice(trail.length - count);
+  return recent.map((segment, index) => ({
+    segment,
+    alpha: (AFTERGLOW_STEPS - count + index + 1) / AFTERGLOW_STEPS,
+  }));
+}
+
 export function explosionSize(stepsSinceHit: number): number | null {
   const explosionStep = stepsSinceHit + 1;
   if (explosionStep >= EXPLOSION_STEPS) {
     return null;
   }
   return Math.floor(explosionStep * (EXPLOSION_STEPS - explosionStep) * EXPLOSION_SIZE_FACTOR);
+}
+
+export function explosionBloom(stepsSinceHit: number): Bloom | null {
+  if (stepsSinceHit >= BLOOM_STEPS) {
+    return null;
+  }
+  return {
+    radius: BLOOM_START_RADIUS + stepsSinceHit * BLOOM_GROWTH_PER_STEP,
+    alpha: 1 - stepsSinceHit / BLOOM_STEPS,
+  };
 }
 
 export function roundBanner(round: number, stepsIntoRound: number): RoundBanner | null {
@@ -169,6 +243,12 @@ export function zoomViewPoint(point: Readonly<Point>): Point {
     x: ZOOMED_PLAYING_AREA.left + point.x * ZOOM_SCALE,
     y: ZOOMED_PLAYING_AREA.top + point.y * ZOOM_SCALE,
   };
+}
+
+export function zoomViewSegment(segment: Readonly<Segment>): Segment {
+  const from = zoomViewPoint(segment.from);
+  const to = zoomViewPoint(segment.to);
+  return { from, to };
 }
 
 export function zoomedMissileSize(spriteWidth: number, spriteHeight: number): { width: number; height: number } {

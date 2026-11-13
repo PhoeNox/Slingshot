@@ -6,7 +6,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { COLOURS } from "./colours";
-import type { Missile, Point, Segment } from "./core/flight";
+import { stepsFlown, type Missile, type Point, type Segment } from "./core/flight";
 import {
   aimLine,
   isTimedOut,
@@ -20,10 +20,15 @@ import {
 import { PLAYING_AREA_HEIGHT, PLAYING_AREA_WIDTH } from "./core/playingArea";
 import type { Aim, Planet, Ship, Side } from "./core/round";
 import {
+  afterglowSegments,
   angleInfoText,
   centredBox,
+  cornerBrackets,
+  explosionBloom,
   explosionSize,
   gravityWellContourRadii,
+  gridLines,
+  insetRect,
   MESSAGE_LABEL_LEFT,
   MESSAGE_PROMPT_TEXT,
   MESSAGE_TEXT_CENTRE_X,
@@ -50,6 +55,7 @@ import {
   ZOOMED_PLAYING_AREA,
   zoomedMissileSize,
   zoomViewPoint,
+  zoomViewSegment,
   type Rect,
 } from "./presentation";
 
@@ -88,6 +94,17 @@ export interface LinesItem {
   kind: "lines";
   colour: string;
   segments: Segment[];
+  alpha: number;
+  dash: number[];
+  glow: boolean;
+}
+
+export interface BloomItem {
+  kind: "bloom";
+  colour: string;
+  centre: Point;
+  radius: number;
+  alpha: number;
 }
 
 export interface FillRectItem {
@@ -108,6 +125,7 @@ export interface TextItem {
   x: number;
   y: number;
   colour: string;
+  font: "title" | "text";
   fontSize: number;
   align: "left" | "center" | "right";
   baseline: "top" | "middle" | "bottom";
@@ -125,6 +143,7 @@ export type FrameItem =
   | SpriteFrameItem
   | RingItem
   | LinesItem
+  | BloomItem
   | FillRectItem
   | StrokeRectItem
   | TextItem
@@ -132,8 +151,15 @@ export type FrameItem =
 
 const SIDES: readonly Side[] = ["left", "right"];
 
-const SHIP_COLOURS: Record<Side, string> = { left: "rgb(209, 170, 133)", right: "rgb(132, 152, 192)" };
-const TEXT_COLOUR = "#fff";
+const PLAYER_COLOURS: Record<Side, string> = { left: COLOURS.leftPlayer, right: COLOURS.rightPlayer };
+const SOLID: number[] = [];
+
+const TRAIL_ALPHA = 0.6;
+
+const AIM_DASH = [8, 6];
+const AIM_TIP_RADIUS = 5;
+
+const BRACKET_LENGTH = 14;
 
 const GRAVITY_WELL_CONTOUR_ALPHA = 0.45;
 
@@ -149,12 +175,13 @@ const TIMEOUT_INFO_BOTTOM = 594;
 const LEFT_SCORE_LEFT = 5;
 const RIGHT_SCORE_RIGHT = 794;
 
-const MESSAGE_DIM_COLOUR = "rgba(0, 0, 0, 0.69)";
-const MESSAGE_OUTLINE_COLOUR = "rgb(150, 150, 150)";
+const GLASS_COLOUR = "rgba(4, 8, 21, 0.78)";
+const PANEL_OUTLINE_GAP = 4;
+const PANEL_TITLE_FONT_SIZE = 16;
 
-const DIM_COLOUR = "rgba(0, 0, 0, 0.69)";
-const ZOOM_VIEW_OUTLINE_COLOUR = "#fff";
-const ZOOMED_PLAYING_AREA_OUTLINE_COLOUR = "rgb(150, 150, 150)";
+const ZOOM_DIM_COLOUR = "rgba(4, 8, 21, 0.75)";
+const ZOOM_GRID_SPACING = 50;
+const ZOOM_GRID_ALPHA = 0.3;
 
 const BANNER_CENTRE_X = 399;
 const BANNER_CENTRE_Y = 299;
@@ -198,7 +225,16 @@ function hudText(
   align: TextItem["align"],
   baseline: TextItem["baseline"],
 ): TextItem {
-  return { kind: "text", text, x, y, colour, fontSize: HUD_FONT_SIZE, align, baseline, alpha: 1 };
+  return { kind: "text", text, x, y, colour, font: "text", fontSize: HUD_FONT_SIZE, align, baseline, alpha: 1 };
+}
+
+function glowLinesItem(colour: string, segments: Segment[], alpha: number, dash: number[]): LinesItem {
+  return { kind: "lines", colour, segments, alpha, dash, glow: true };
+}
+
+function bracketItem(rect: Readonly<Rect>): LinesItem {
+  const brackets = cornerBrackets(rect, BRACKET_LENGTH);
+  return glowLinesItem(COLOURS.phosphor, brackets, 1, SOLID);
 }
 
 function planetItems(roundPlanets: MatchView["planets"]): FrameItem[] {
@@ -227,8 +263,11 @@ function planetSpriteItem(planet: Readonly<Planet>): ImageItem {
 function trailItems(roundTrails: MatchView["trails"]): LinesItem[] {
   return SIDES.map((side) => ({
     kind: "lines",
-    colour: SHIP_COLOURS[side],
+    colour: PLAYER_COLOURS[side],
     segments: roundTrails.filter((segment) => segment.shooter === side),
+    alpha: TRAIL_ALPHA,
+    dash: SOLID,
+    glow: false,
   }));
 }
 
@@ -267,26 +306,29 @@ function aimingItems(view: MatchView): FrameItem[] {
   const side = view.activePlayer;
   const ships = shipItems(view.ships, SIDES);
   const segment = aimLine(view);
-  const line = aimLineItem(segment, SHIP_COLOURS[side]);
+  const reticle = aimReticleItems(segment, PLAYER_COLOURS[side]);
   const aimInfo = aimInfoItems(view.ships[side].aim);
-  return [...ships, line, ...aimInfo];
+  return [...ships, ...reticle, ...aimInfo];
 }
 
-function aimLineItem(line: Readonly<Segment>, colour: string): LinesItem {
-  return { kind: "lines", colour, segments: [line] };
+function aimReticleItems(line: Readonly<Segment>, colour: string): FrameItem[] {
+  const dashedLine = glowLinesItem(colour, [line], 1, AIM_DASH);
+  const tip: RingItem = { kind: "ring", colour, centre: line.to, radius: AIM_TIP_RADIUS, alpha: 1 };
+  return [dashedLine, tip];
 }
 
 function aimInfoItems(aim: Readonly<Aim>): TextItem[] {
   const angleText = angleInfoText(aim);
   const powerText = powerInfoText(aim);
   return [
-    hudText(angleText, TEXT_COLOUR, ANGLE_INFO_LEFT, HUD_TOP, "left", "top"),
-    hudText(powerText, TEXT_COLOUR, POWER_INFO_LEFT, HUD_TOP, "left", "top"),
+    hudText(angleText, COLOURS.phosphor, ANGLE_INFO_LEFT, HUD_TOP, "left", "top"),
+    hudText(powerText, COLOURS.phosphor, POWER_INFO_LEFT, HUD_TOP, "left", "top"),
   ];
 }
 
 function flightItems(view: MatchView, flight: InFlightView): FrameItem[] {
   const ships = shipItems(view.ships, SIDES);
+  const afterglow = afterglowItems(view.trails, flight.missile);
   const missile = isZoomViewShown(view) ? zoomViewItems(view, flight.missile) : [missileItem(flight.missile)];
   const penalty = powerPenalty(view);
   const timedOut = isTimedOut(flight);
@@ -294,10 +336,17 @@ function flightItems(view: MatchView, flight: InFlightView): FrameItem[] {
   const timeout = timeoutText(flight.missile.flightStepsLeft, timedOut);
   return [
     ...ships,
+    ...afterglow,
     ...missile,
-    hudText(penaltyText, TEXT_COLOUR, POWER_PENALTY_CENTRE_X, HUD_TOP, "center", "top"),
-    hudText(timeout, TEXT_COLOUR, TIMEOUT_INFO_CENTRE_X, TIMEOUT_INFO_BOTTOM, "center", "bottom"),
+    hudText(penaltyText, COLOURS.instrumentDim, POWER_PENALTY_CENTRE_X, HUD_TOP, "center", "top"),
+    hudText(timeout, COLOURS.instrumentDim, TIMEOUT_INFO_CENTRE_X, TIMEOUT_INFO_BOTTOM, "center", "bottom"),
   ];
+}
+
+function afterglowItems(roundTrails: MatchView["trails"], flyingMissile: Readonly<Missile>): LinesItem[] {
+  const flown = stepsFlown(flyingMissile);
+  const fading = afterglowSegments(roundTrails, flown);
+  return fading.map(({ segment, alpha }) => glowLinesItem(COLOURS.phosphor, [segment], alpha, SOLID));
 }
 
 function missileItem(flyingMissile: Readonly<Missile>): ImageItem {
@@ -306,12 +355,20 @@ function missileItem(flyingMissile: Readonly<Missile>): ImageItem {
 }
 
 function zoomViewItems(view: MatchView, flyingMissile: Readonly<Missile>): FrameItem[] {
-  const dimming: FillRectItem = { kind: "fillRect", colour: DIM_COLOUR, rect: PLAYING_AREA };
+  const dimming: FillRectItem = { kind: "fillRect", colour: ZOOM_DIM_COLOUR, rect: PLAYING_AREA };
   const backdrop = imageItem("backdrop", ZOOM_VIEW);
+  const grid = zoomGridItem();
   const zoomedPlayingArea = zoomedPlayingAreaItem(view);
+  const zoomedTrails = zoomedTrailItems(view.trails, flyingMissile);
   const zoomedMissile = zoomedMissileItem(flyingMissile);
   const outlines = zoomOutlineItems();
-  return [dimming, backdrop, zoomedPlayingArea, zoomedMissile, ...outlines];
+  return [dimming, backdrop, grid, zoomedPlayingArea, ...zoomedTrails, zoomedMissile, ...outlines];
+}
+
+function zoomGridItem(): LinesItem {
+  const gridArea = strokeOutline(ZOOM_VIEW);
+  const segments = gridLines(gridArea, ZOOM_GRID_SPACING);
+  return { kind: "lines", colour: COLOURS.instrumentDim, segments, alpha: ZOOM_GRID_ALPHA, dash: SOLID, glow: false };
 }
 
 function zoomedPlayingAreaItem(view: MatchView): GroupItem {
@@ -324,6 +381,17 @@ function zoomedPlayingAreaItem(view: MatchView): GroupItem {
   };
 }
 
+function zoomedTrailItems(roundTrails: MatchView["trails"], flyingMissile: Readonly<Missile>): LinesItem[] {
+  const trails = trailItems(roundTrails);
+  const afterglow = afterglowItems(roundTrails, flyingMissile);
+  return [...trails, ...afterglow].map(zoomedLinesItem);
+}
+
+function zoomedLinesItem(item: LinesItem): LinesItem {
+  const segments = item.segments.map(zoomViewSegment);
+  return { ...item, segments };
+}
+
 function zoomedMissileItem(flyingMissile: Readonly<Missile>): ImageItem {
   const centre = zoomViewPoint(flyingMissile);
   const size = zoomedMissileSize(MISSILE_SPRITE_SIZE, MISSILE_SPRITE_SIZE);
@@ -331,20 +399,22 @@ function zoomedMissileItem(flyingMissile: Readonly<Missile>): ImageItem {
   return imageItem("missile", box);
 }
 
-function zoomOutlineItems(): StrokeRectItem[] {
+function zoomOutlineItems(): FrameItem[] {
   const zoomViewOutline = strokeOutline(ZOOM_VIEW);
   const playingAreaOutline = strokeOutline(ZOOMED_PLAYING_AREA);
+  const brackets = bracketItem(zoomViewOutline);
   return [
-    { kind: "strokeRect", colour: ZOOM_VIEW_OUTLINE_COLOUR, rect: zoomViewOutline },
-    { kind: "strokeRect", colour: ZOOMED_PLAYING_AREA_OUTLINE_COLOUR, rect: playingAreaOutline },
+    { kind: "strokeRect", colour: COLOURS.instrumentDim, rect: zoomViewOutline },
+    { kind: "strokeRect", colour: COLOURS.instrumentDim, rect: playingAreaOutline },
+    brackets,
   ];
 }
 
 function scoreItems(matchScores: MatchView["scores"]): TextItem[] {
   const texts = scoreTexts(matchScores);
   return [
-    hudText(texts.left, SHIP_COLOURS.left, LEFT_SCORE_LEFT, HUD_TOP, "left", "top"),
-    hudText(texts.right, SHIP_COLOURS.right, RIGHT_SCORE_RIGHT, HUD_TOP, "right", "top"),
+    hudText(texts.left, PLAYER_COLOURS.left, LEFT_SCORE_LEFT, HUD_TOP, "left", "top"),
+    hudText(texts.right, PLAYER_COLOURS.right, RIGHT_SCORE_RIGHT, HUD_TOP, "right", "top"),
   ];
 }
 
@@ -359,7 +429,8 @@ function roundBannerItems(round: number, stepsIntoRound: number): TextItem[] {
       text: banner.text,
       x: BANNER_CENTRE_X,
       y: BANNER_CENTRE_Y,
-      colour: TEXT_COLOUR,
+      colour: COLOURS.phosphor,
+      font: "title",
       fontSize: banner.fontSize,
       align: "center",
       baseline: "middle",
@@ -372,9 +443,11 @@ function roundOverItems(roundShips: MatchView["ships"], roundOver: RoundOverView
   const result = roundOver.result;
   const survivingSides = SIDES.filter((side) => side !== result.hitShip);
   const ships = shipItems(roundShips, survivingSides);
-  const explosion = explosionItems(roundShips[result.hitShip], roundOver.stepsSinceRoundOver);
+  const hitShip = roundShips[result.hitShip];
+  const explosion = explosionItems(hitShip, roundOver.stepsSinceRoundOver);
+  const bloom = bloomItems(hitShip, roundOver.stepsSinceRoundOver);
   const message = roundOverMessageItems(result);
-  return [...ships, ...explosion, ...message];
+  return [...ships, ...explosion, ...bloom, ...message];
 }
 
 function explosionItems(ship: Readonly<Ship>, stepsSinceHit: number): ImageItem[] {
@@ -386,29 +459,74 @@ function explosionItems(ship: Readonly<Ship>, stepsSinceHit: number): ImageItem[
   return [imageItem("explosion", box)];
 }
 
+function bloomItems(ship: Readonly<Ship>, stepsSinceHit: number): BloomItem[] {
+  const bloom = explosionBloom(stepsSinceHit);
+  if (bloom === null) {
+    return [];
+  }
+  return [
+    {
+      kind: "bloom",
+      colour: COLOURS.phosphor,
+      centre: { x: ship.x, y: ship.y },
+      radius: bloom.radius,
+      alpha: bloom.alpha,
+    },
+  ];
+}
+
 function roundOverMessageItems(result: Readonly<RoundResult>): FrameItem[] {
   const box = roundOverMessageBox(result.outcome);
-  const outline = strokeOutline(box);
+  const panel = roundOverPanelItems(box);
   const tops = roundOverTextTops(result.outcome);
-  const title = roundOverTitle(result);
+  const title = roundOverTitleItem(result, tops.title);
   const scoreChange = scoreChangeText(result.scoreChange);
   const rows = scoreBreakdownRows(result);
   const rowTexts = rows.flatMap((row) => [
-    hudText(row.label, TEXT_COLOUR, MESSAGE_LABEL_LEFT, row.top, "left", "top"),
-    hudText(row.value, TEXT_COLOUR, MESSAGE_VALUE_RIGHT, row.top, "right", "top"),
+    hudText(row.label, COLOURS.instrumentDim, MESSAGE_LABEL_LEFT, row.top, "left", "top"),
+    hudText(row.value, COLOURS.phosphor, MESSAGE_VALUE_RIGHT, row.top, "right", "top"),
   ]);
+  const shooterColour = PLAYER_COLOURS[result.shooter];
   return [
-    { kind: "fillRect", colour: MESSAGE_DIM_COLOUR, rect: box },
-    { kind: "strokeRect", colour: MESSAGE_OUTLINE_COLOUR, rect: outline },
+    ...panel,
     {
       kind: "group",
       transform: { x: box.left, y: box.top, rotation: 0, scale: 1 },
       items: [
-        hudText(title, TEXT_COLOUR, MESSAGE_TEXT_CENTRE_X, tops.title, "center", "top"),
-        hudText(scoreChange, TEXT_COLOUR, MESSAGE_TEXT_CENTRE_X, tops.scoreChange, "center", "top"),
-        hudText(MESSAGE_PROMPT_TEXT, TEXT_COLOUR, MESSAGE_TEXT_CENTRE_X, tops.prompt, "center", "top"),
+        title,
+        hudText(scoreChange, shooterColour, MESSAGE_TEXT_CENTRE_X, tops.scoreChange, "center", "top"),
+        hudText(MESSAGE_PROMPT_TEXT, COLOURS.instrumentDim, MESSAGE_TEXT_CENTRE_X, tops.prompt, "center", "top"),
         ...rowTexts,
       ],
     },
   ];
+}
+
+function roundOverPanelItems(box: Readonly<Rect>): FrameItem[] {
+  const outerOutline = strokeOutline(box);
+  const innerBox = insetRect(box, PANEL_OUTLINE_GAP);
+  const innerOutline = strokeOutline(innerBox);
+  const brackets = bracketItem(outerOutline);
+  return [
+    { kind: "fillRect", colour: GLASS_COLOUR, rect: box },
+    { kind: "strokeRect", colour: COLOURS.instrumentDim, rect: outerOutline },
+    { kind: "strokeRect", colour: COLOURS.instrumentDim, rect: innerOutline },
+    brackets,
+  ];
+}
+
+function roundOverTitleItem(result: Readonly<RoundResult>, top: number): TextItem {
+  const title = roundOverTitle(result);
+  return {
+    kind: "text",
+    text: title,
+    x: MESSAGE_TEXT_CENTRE_X,
+    y: top,
+    colour: COLOURS.phosphor,
+    font: "title",
+    fontSize: PANEL_TITLE_FONT_SIZE,
+    align: "center",
+    baseline: "top",
+    alpha: 1,
+  };
 }

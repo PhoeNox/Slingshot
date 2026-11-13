@@ -7,7 +7,7 @@ import type { Sprites } from "./renderer";
 export const TEXT_FONT_FAMILY = "Barlow Semi Condensed";
 const TEXT_FONT_SOURCE = "url(data/BarlowSemiCondensed-Medium.ttf)";
 const TEXT_FONT_DESCRIPTORS: FontFaceDescriptors = { weight: "500" };
-const TITLE_FONT_FAMILY = "Michroma";
+export const TITLE_FONT_FAMILY = "Michroma";
 const TITLE_FONT_SOURCE = "url(data/Michroma-Regular.ttf)";
 const PLANET_SPRITES = [1, 2, 3, 4, 5, 6, 7, 8];
 
