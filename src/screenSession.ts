@@ -66,8 +66,8 @@ function stepShownMatch(session: ScreenSession, reducedMotion: boolean): Match |
 
 function advanceDebris(session: ScreenSession, match: Match): void {
   const view = matchView(match);
-  const stepped = stepDebris(session.debris, view.planets, view.bounce, session.random);
-  const burst = view.impact === undefined ? [] : burstDebris(view.impact, "large", view.bounce, session.random);
+  const stepped = stepDebris(session.debris, view.planets, view.rules.bounce, session.random);
+  const burst = view.impact === undefined ? [] : burstDebris(view.impact, "large", view.rules.bounce, session.random);
   session.debris = [...stepped, ...burst];
 }
 

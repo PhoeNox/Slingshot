@@ -1252,8 +1252,8 @@ describe("bounce", () => {
   });
 
   test("the match view reports whether the match bounces", () => {
-    expect(matchView(bounceMatch(88)).bounce).toBe(true);
-    expect(matchView(createMatch(88)).bounce).toBe(false);
+    expect(matchView(bounceMatch(88)).rules.bounce).toBe(true);
+    expect(matchView(createMatch(88)).rules.bounce).toBe(false);
   });
 });
 
@@ -1261,8 +1261,8 @@ describe("planet visibility", () => {
   test("the match view reports the match's planet visibility", () => {
     const hiddenRules: MatchRules = { ...DEFAULT_MATCH_RULES, planetVisibility: "hidden" };
 
-    expect(matchView(createMatch(89, undefined, hiddenRules)).planetVisibility).toBe("hidden");
-    expect(matchView(createMatch(89)).planetVisibility).toBe("always");
+    expect(matchView(createMatch(89, undefined, hiddenRules)).rules.planetVisibility).toBe("hidden");
+    expect(matchView(createMatch(89)).rules.planetVisibility).toBe("always");
   });
 });
 

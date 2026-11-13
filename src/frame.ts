@@ -213,7 +213,7 @@ export function describeFrame(
 ): FrameItem[] {
   const scene = sceneItems(view, display, debris);
   const zoomedScene = zoomedSceneItems(scene, view.zoom);
-  const border = bounceBorderItems(view.bounce);
+  const border = bounceBorderItems(view.rules.bounce);
   const hud = phaseHudItems(view);
   const scores = scoreItems(view.scores);
   const banner = roundBannerItems(view.roundNumber, view.roundStepCount);
@@ -243,7 +243,7 @@ function sceneItems(
 
 function matchPlanetAlpha(view: MatchView): number {
   const stepsSinceRoundOver = view.phase.kind === "roundOver" ? view.phase.stepsSinceRoundOver : undefined;
-  return planetAlpha(view.planetVisibility, view.roundStepCount, stepsSinceRoundOver);
+  return planetAlpha(view.rules.planetVisibility, view.roundStepCount, stepsSinceRoundOver);
 }
 
 function debrisItems(debris: readonly Readonly<Particle>[], sizeScale: number): DotItem[] {

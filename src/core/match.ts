@@ -140,8 +140,7 @@ interface MatchViewState extends Omit<MatchState, "phase"> {
   phase: PhaseView;
   aimLine: Segment;
   powerPenalty: number;
-  bounce: boolean;
-  planetVisibility: PlanetVisibility;
+  rules: MatchRules;
 }
 
 export type MatchView = DeepReadonly<MatchViewState>;
@@ -351,8 +350,7 @@ export function matchView(match: Match): MatchView {
     powerPenalty,
     zoom: match.zoom,
     impact: match.impact,
-    bounce: match.rules.bounce,
-    planetVisibility: match.rules.planetVisibility,
+    rules: match.rules,
   };
 }
 
