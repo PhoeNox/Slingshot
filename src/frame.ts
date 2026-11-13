@@ -142,13 +142,12 @@ const BANNER_CENTRE_Y = 299;
 const PLAYING_AREA: Readonly<Rect> = { left: 0, top: 0, width: PLAYING_AREA_WIDTH, height: PLAYING_AREA_HEIGHT };
 
 export function describeFrame(view: MatchView): FrameItem[] {
-  const backdrop = imageItem("backdrop", PLAYING_AREA);
   const planets = planetItems(view.planets);
   const trails = trailItems(view.trails);
   const phase = phaseItems(view);
   const scores = scoreItems(view.scores);
   const banner = roundBannerItems(view.roundNumber, view.roundStepCount);
-  return [backdrop, ...planets, ...trails, ...phase, ...scores, ...banner];
+  return [...planets, ...trails, ...phase, ...scores, ...banner];
 }
 
 export function describeBackdropFrame(): FrameItem[] {

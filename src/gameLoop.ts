@@ -9,14 +9,14 @@ interface StepClock {
   pendingTime: number;
 }
 
-export function startGameLoop(stepSimulation: () => void, render: () => void): void {
+export function startGameLoop(stepSimulation: () => void, render: (timeMs: number) => void): void {
   const clock: StepClock = { previousTime: undefined, pendingTime: 0 };
   const onAnimationFrame = (time: number) => {
     const dueSteps = takeDueSteps(clock, time);
     for (let i = 0; i < dueSteps; i++) {
       stepSimulation();
     }
-    render();
+    render(time);
     requestAnimationFrame(onAnimationFrame);
   };
   requestAnimationFrame(onAnimationFrame);

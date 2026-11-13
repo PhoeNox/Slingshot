@@ -11,6 +11,10 @@ import { bindControls, bindEscape } from "./input";
 import { MAIN_MENU_ITEMS, type Screen } from "./navigation";
 import { drawFrame } from "./renderer";
 import { bindBracketFlash, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, navigateBack, renderMenuItems, showScreen, type ScreenElements } from "./screens";
+import { drawStars, renderStarSprites } from "./starLayer";
+import { generateStars } from "./stars";
+
+const STATIC_STAR_TIME_MS = 0;
 
 interface MatchSession {
   screen: Screen;
@@ -82,13 +86,19 @@ async function start(): Promise<void> {
   };
   const describeCurrentFrame = () => {
     if (session.match === undefined) {
-      return describeBackdropFrame();
+      return [];
     }
     const view = matchView(session.match);
     return describeFrame(view);
   };
-  const render = () => {
+  const backdropFrame = describeBackdropFrame();
+  const stars = generateStars(Math.random);
+  const starSprites = renderStarSprites();
+  const render = (timeMs: number) => {
+    const starTimeMs = reducedMotion.matches ? STATIC_STAR_TIME_MS : timeMs;
     const frame = describeCurrentFrame();
+    drawFrame(context, sprites, backdropFrame);
+    drawStars(context, starSprites, stars, starTimeMs);
     drawFrame(context, sprites, frame);
   };
   startGameLoop(stepMatch, render);
