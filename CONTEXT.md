@@ -4,7 +4,24 @@ A two-player, turn-based artillery game in which missiles are bent by the gravit
 
 ## Language
 
+### Navigation
+
+**Screen**:
+What the game currently shows: the main menu, the credits, or a match.
+_Avoid_: Scene, state, page
+
+**Main menu**:
+The screen the game opens on; offers Play and Credits.
+_Avoid_: Title screen, start screen
+
+**Credits**:
+The screen naming the original game's authors, the asset sources, and the licences.
+
 ### Match structure
+
+**Match**:
+A series of rounds between two players, started from the main menu and played until abandoned.
+_Avoid_: Game, session
 
 **Round**:
 One planet layout and ship placement, played until a ship is hit.
