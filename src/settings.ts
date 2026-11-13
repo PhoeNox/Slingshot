@@ -3,86 +3,153 @@
 
 import { DEFAULT_MATCH_RULES, type MatchRules, type PlanetCountRange, type PlanetVisibility } from "./core/match";
 
-export interface Settings {
-  gravityWellContours: boolean;
-  planetCount: Readonly<PlanetCountRange>;
-  timeoutSeconds: number | undefined;
-  bounce: boolean;
-  planetVisibility: PlanetVisibility;
+export type SettingKind = "display" | "matchRule";
+
+export interface SettingChoice<T> {
+  value: T;
+  label: string;
 }
 
-export const DEFAULT_SETTINGS: Readonly<Settings> = {
-  gravityWellContours: true,
-  planetCount: DEFAULT_MATCH_RULES.planetCount,
-  timeoutSeconds: DEFAULT_MATCH_RULES.timeoutSeconds,
-  bounce: DEFAULT_MATCH_RULES.bounce,
-  planetVisibility: DEFAULT_MATCH_RULES.planetVisibility,
-};
+export interface SettingRule<T, Kind extends SettingKind> {
+  kind: Kind;
+  defaultValue: T;
+  parse(stored: unknown): T;
+}
+
+export interface ChoiceSettingRule<T, Kind extends SettingKind> extends SettingRule<T, Kind> {
+  choices: readonly SettingChoice<T>[];
+}
+
+export interface RangeSettingRule<Kind extends SettingKind> extends SettingRule<Readonly<PlanetCountRange>, Kind> {
+  choices: readonly SettingChoice<number>[];
+}
 
 const FEWEST_PLANETS = 1;
 const MOST_PLANETS = 6;
 
-export const PLANET_COUNT_CHOICES: readonly number[] = Array.from(
+const PLANET_COUNT_CHOICES: readonly SettingChoice<number>[] = Array.from(
   { length: MOST_PLANETS - FEWEST_PLANETS + 1 },
-  (_, i) => FEWEST_PLANETS + i,
+  (_, i) => planetCountChoice(FEWEST_PLANETS + i),
 );
 
-export const TIMEOUT_CHOICES: readonly (number | undefined)[] = [10, 25, 50, undefined];
+const TIMEOUT_CHOICES: readonly SettingChoice<number | undefined>[] = [
+  { value: 10, label: "10 s" },
+  { value: 25, label: "25 s" },
+  { value: 50, label: "50 s" },
+  { value: undefined, label: "Never" },
+];
 
-export const PLANET_VISIBILITY_CHOICES: readonly PlanetVisibility[] = ["always", "atRoundStart", "hidden"];
+const PLANET_VISIBILITY_CHOICES: readonly SettingChoice<PlanetVisibility>[] = [
+  { value: "always", label: "Always" },
+  { value: "atRoundStart", label: "At round start" },
+  { value: "hidden", label: "Hidden" },
+];
+
+export const SETTING_RULES = {
+  gravityWellContours: toggleSetting("display", true),
+  planetCount: rangeSetting("matchRule", PLANET_COUNT_CHOICES, DEFAULT_MATCH_RULES.planetCount),
+  timeoutSeconds: choiceSetting("matchRule", TIMEOUT_CHOICES, DEFAULT_MATCH_RULES.timeoutSeconds),
+  bounce: toggleSetting("matchRule", DEFAULT_MATCH_RULES.bounce),
+  planetVisibility: choiceSetting("matchRule", PLANET_VISIBILITY_CHOICES, DEFAULT_MATCH_RULES.planetVisibility),
+};
+
+type SettingRules = typeof SETTING_RULES;
+type SettingKey = keyof SettingRules;
+
+export type Settings = { [K in SettingKey]: SettingRules[K]["defaultValue"] };
+
+type MatchRuleKey = { [K in SettingKey]: SettingRules[K]["kind"] extends "matchRule" ? K : never }[SettingKey];
+
+const SETTING_KEYS = Object.keys(SETTING_RULES) as SettingKey[];
+
+const MATCH_RULE_KEYS = SETTING_KEYS.filter((key): key is MatchRuleKey => SETTING_RULES[key].kind === "matchRule");
+
+export const DEFAULT_SETTINGS: Readonly<Settings> = settingsFrom((key) => SETTING_RULES[key].defaultValue);
+
+function toggleSetting<Kind extends SettingKind>(kind: Kind, defaultValue: boolean): SettingRule<boolean, Kind> {
+  return {
+    kind,
+    defaultValue,
+    parse: (stored) => (typeof stored === "boolean" ? stored : defaultValue),
+  };
+}
+
+function choiceSetting<T, Kind extends SettingKind>(
+  kind: Kind,
+  choices: readonly SettingChoice<T>[],
+  defaultValue: T,
+): ChoiceSettingRule<T, Kind> {
+  return {
+    kind,
+    defaultValue,
+    choices,
+    parse: (stored) => {
+      const choice = choices.find((candidate) => storedFormOf(candidate.value) === stored);
+      return choice === undefined ? defaultValue : choice.value;
+    },
+  };
+}
+
+function rangeSetting<Kind extends SettingKind>(
+  kind: Kind,
+  choices: readonly SettingChoice<number>[],
+  defaultValue: Readonly<PlanetCountRange>,
+): RangeSettingRule<Kind> {
+  const isChoice = (value: unknown): value is number => choices.some((choice) => choice.value === value);
+  return {
+    kind,
+    defaultValue,
+    choices,
+    parse: (stored) => {
+      if (!isRecord(stored)) {
+        return defaultValue;
+      }
+      const { min, max } = stored;
+      if (!isChoice(min) || !isChoice(max) || min > max) {
+        return defaultValue;
+      }
+      return { min, max };
+    },
+  };
+}
+
+function planetCountChoice(count: number): SettingChoice<number> {
+  return { value: count, label: String(count) };
+}
 
 export function parseSettings(stored: string | null): Settings {
+  const fields = storedFields(stored);
+  return settingsFrom((key) => SETTING_RULES[key].parse(fields[key]));
+}
+
+function storedFields(stored: string | null): Record<string, unknown> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(stored ?? "");
   } catch {
     parsed = undefined;
   }
-  const fields = isRecord(parsed) ? parsed : {};
-  const gravityWellContours =
-    typeof fields.gravityWellContours === "boolean" ? fields.gravityWellContours : DEFAULT_SETTINGS.gravityWellContours;
-  const planetCount = parsePlanetCount(fields.planetCount);
-  const timeoutSeconds = parseTimeoutSeconds(fields.timeoutSeconds);
-  const bounce = typeof fields.bounce === "boolean" ? fields.bounce : DEFAULT_SETTINGS.bounce;
-  const planetVisibility = isPlanetVisibilityChoice(fields.planetVisibility)
-    ? fields.planetVisibility
-    : DEFAULT_SETTINGS.planetVisibility;
-  return { gravityWellContours, planetCount, timeoutSeconds, bounce, planetVisibility };
+  return isRecord(parsed) ? parsed : {};
 }
 
-function parsePlanetCount(value: unknown): Readonly<PlanetCountRange> {
-  if (!isRecord(value)) {
-    return DEFAULT_SETTINGS.planetCount;
-  }
-  const { min, max } = value;
-  if (!isPlanetCountChoice(min) || !isPlanetCountChoice(max) || min > max) {
-    return DEFAULT_SETTINGS.planetCount;
-  }
-  return { min, max };
+export function serialiseSettings(settings: Readonly<Settings>): string {
+  const entries = SETTING_KEYS.map((key) => [key, storedFormOf(settings[key])]);
+  const stored = Object.fromEntries(entries);
+  return JSON.stringify(stored);
 }
 
-function parseTimeoutSeconds(value: unknown): number | undefined {
-  if (value === null) {
-    return undefined;
-  }
-  return typeof value === "number" && TIMEOUT_CHOICES.includes(value) ? value : DEFAULT_SETTINGS.timeoutSeconds;
+function settingsFrom(valueOf: (key: SettingKey) => unknown): Settings {
+  const entries = SETTING_KEYS.map((key) => [key, valueOf(key)]);
+  return Object.fromEntries(entries) as Settings;
+}
+
+// JSON drops undefined fields, so an absent value such as the never timeout is stored as null.
+function storedFormOf(value: unknown): unknown {
+  return value ?? null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isPlanetCountChoice(value: unknown): value is number {
-  return typeof value === "number" && PLANET_COUNT_CHOICES.includes(value);
-}
-
-function isPlanetVisibilityChoice(value: unknown): value is PlanetVisibility {
-  return PLANET_VISIBILITY_CHOICES.some((choice) => choice === value);
-}
-
-export function serialiseSettings(settings: Readonly<Settings>): string {
-  const stored = { ...settings, timeoutSeconds: settings.timeoutSeconds ?? null };
-  return JSON.stringify(stored);
 }
 
 export function withMinPlanets(range: Readonly<PlanetCountRange>, min: number): PlanetCountRange {
@@ -94,10 +161,7 @@ export function withMaxPlanets(range: Readonly<PlanetCountRange>, max: number): 
 }
 
 export function matchRulesFor(settings: Readonly<Settings>): MatchRules {
-  return {
-    planetCount: settings.planetCount,
-    timeoutSeconds: settings.timeoutSeconds,
-    bounce: settings.bounce,
-    planetVisibility: settings.planetVisibility,
-  };
+  const entries = MATCH_RULE_KEYS.map((key) => [key, settings[key]]);
+  const matchRules = Object.fromEntries(entries) as Pick<Settings, MatchRuleKey>;
+  return matchRules;
 }

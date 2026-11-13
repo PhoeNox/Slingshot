@@ -2,17 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { COLOURS } from "./colours";
-import type { PlanetVisibility } from "./core/match";
 import { backTargetFor, hashFor, moveFocus, resolveHash, type FocusStep, type MenuItem, type Screen } from "./navigation";
 import { scrambleLabel } from "./scramble";
-import {
-  PLANET_COUNT_CHOICES,
-  PLANET_VISIBILITY_CHOICES,
-  TIMEOUT_CHOICES,
-  withMaxPlanets,
-  withMinPlanets,
-  type Settings,
-} from "./settings";
+import { SETTING_RULES, withMaxPlanets, withMinPlanets, type SettingChoice, type Settings } from "./settings";
 
 export interface ScreenElements {
   overlay: HTMLElement;
@@ -43,12 +35,6 @@ const TAB_STEPS: Record<string, FocusStep> = {
   KeyA: -1,
   ArrowRight: 1,
   KeyD: 1,
-};
-
-const PLANET_VISIBILITY_LABELS: Record<PlanetVisibility, string> = {
-  always: "Always",
-  atRoundStart: "At round start",
-  hidden: "Hidden",
 };
 
 const SCRAMBLE_DURATION_MS = 200;
@@ -223,33 +209,24 @@ export function bindPlanetCountSelects(
   settings: Settings,
   saveSettings: (settings: Readonly<Settings>) => void,
 ): void {
-  renderPlanetCountOptions(minSelect);
-  renderPlanetCountOptions(maxSelect);
+  const choices = SETTING_RULES.planetCount.choices;
+  renderChoiceOptions(minSelect, choices);
+  renderChoiceOptions(maxSelect, choices);
   const showPlanetCount = () => {
-    minSelect.value = String(settings.planetCount.min);
-    maxSelect.value = String(settings.planetCount.max);
+    showChoice(minSelect, choices, settings.planetCount.min);
+    showChoice(maxSelect, choices, settings.planetCount.max);
   };
   showPlanetCount();
   minSelect.addEventListener("change", () => {
-    settings.planetCount = withMinPlanets(settings.planetCount, Number(minSelect.value));
+    settings.planetCount = withMinPlanets(settings.planetCount, chosenValue(minSelect, choices));
     showPlanetCount();
     saveSettings(settings);
   });
   maxSelect.addEventListener("change", () => {
-    settings.planetCount = withMaxPlanets(settings.planetCount, Number(maxSelect.value));
+    settings.planetCount = withMaxPlanets(settings.planetCount, chosenValue(maxSelect, choices));
     showPlanetCount();
     saveSettings(settings);
   });
-}
-
-function renderPlanetCountOptions(select: HTMLSelectElement): void {
-  const options = PLANET_COUNT_CHOICES.map(planetCountOption);
-  select.replaceChildren(...options);
-}
-
-function planetCountOption(count: number): HTMLOptionElement {
-  const label = String(count);
-  return new Option(label, label);
 }
 
 export function bindTimeoutSelect(
@@ -257,23 +234,13 @@ export function bindTimeoutSelect(
   settings: Settings,
   saveSettings: (settings: Readonly<Settings>) => void,
 ): void {
-  const options = TIMEOUT_CHOICES.map(timeoutOption);
-  select.replaceChildren(...options);
-  select.value = timeoutOptionValue(settings.timeoutSeconds);
+  const choices = SETTING_RULES.timeoutSeconds.choices;
+  renderChoiceOptions(select, choices);
+  showChoice(select, choices, settings.timeoutSeconds);
   select.addEventListener("change", () => {
-    settings.timeoutSeconds = TIMEOUT_CHOICES.find((seconds) => timeoutOptionValue(seconds) === select.value);
+    settings.timeoutSeconds = chosenValue(select, choices);
     saveSettings(settings);
   });
-}
-
-function timeoutOption(seconds: number | undefined): HTMLOptionElement {
-  const label = seconds === undefined ? "Never" : `${seconds} s`;
-  const value = timeoutOptionValue(seconds);
-  return new Option(label, value);
-}
-
-function timeoutOptionValue(seconds: number | undefined): string {
-  return seconds === undefined ? "never" : String(seconds);
 }
 
 export function bindPlanetVisibilitySelect(
@@ -281,18 +248,30 @@ export function bindPlanetVisibilitySelect(
   settings: Settings,
   saveSettings: (settings: Readonly<Settings>) => void,
 ): void {
-  const options = PLANET_VISIBILITY_CHOICES.map(planetVisibilityOption);
-  select.replaceChildren(...options);
-  select.value = settings.planetVisibility;
+  const choices = SETTING_RULES.planetVisibility.choices;
+  renderChoiceOptions(select, choices);
+  showChoice(select, choices, settings.planetVisibility);
   select.addEventListener("change", () => {
-    settings.planetVisibility = PLANET_VISIBILITY_CHOICES.find((visibility) => visibility === select.value)!;
+    settings.planetVisibility = chosenValue(select, choices);
     saveSettings(settings);
   });
 }
 
-function planetVisibilityOption(visibility: PlanetVisibility): HTMLOptionElement {
-  const label = PLANET_VISIBILITY_LABELS[visibility];
-  return new Option(label, visibility);
+function renderChoiceOptions<T>(select: HTMLSelectElement, choices: readonly SettingChoice<T>[]): void {
+  const options = choices.map(choiceOption);
+  select.replaceChildren(...options);
+}
+
+function choiceOption<T>(choice: SettingChoice<T>): HTMLOptionElement {
+  return new Option(choice.label);
+}
+
+function showChoice<T>(select: HTMLSelectElement, choices: readonly SettingChoice<T>[], value: T): void {
+  select.selectedIndex = choices.findIndex((choice) => choice.value === value);
+}
+
+function chosenValue<T>(select: HTMLSelectElement, choices: readonly SettingChoice<T>[]): T {
+  return choices[select.selectedIndex].value;
 }
 
 export function bindMainMenuButton(button: HTMLButtonElement): void {

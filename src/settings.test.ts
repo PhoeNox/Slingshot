@@ -7,10 +7,8 @@ import {
   DEFAULT_SETTINGS,
   matchRulesFor,
   parseSettings,
-  PLANET_COUNT_CHOICES,
-  PLANET_VISIBILITY_CHOICES,
   serialiseSettings,
-  TIMEOUT_CHOICES,
+  SETTING_RULES,
   withMaxPlanets,
   withMinPlanets,
   type Settings,
@@ -34,6 +32,43 @@ describe("parseSettings", () => {
     { ...DEFAULT_SETTINGS, timeoutSeconds: undefined, bounce: true, planetVisibility: "hidden" },
   ])("reads back serialised settings %j", (settings) => {
     expect(parseSettings(serialiseSettings(settings))).toEqual(settings);
+  });
+
+  const SINGLE_CHOICE_CHANGES: Partial<Settings>[] = [
+    ...[true, false].map((gravityWellContours) => ({ gravityWellContours })),
+    ...[true, false].map((bounce) => ({ bounce })),
+    ...SETTING_RULES.timeoutSeconds.choices.map((choice) => ({ timeoutSeconds: choice.value })),
+    ...SETTING_RULES.planetVisibility.choices.map((choice) => ({ planetVisibility: choice.value })),
+    ...SETTING_RULES.planetCount.choices.map((choice) => ({ planetCount: { min: choice.value, max: choice.value } })),
+  ];
+
+  test.each(SINGLE_CHOICE_CHANGES)("reads back every offered choice, here %j", (change) => {
+    const settings: Settings = { ...DEFAULT_SETTINGS, ...change };
+
+    expect(parseSettings(serialiseSettings(settings))).toEqual(settings);
+  });
+
+  test("reads the stored form of earlier versions, never timeout as null", () => {
+    const stored =
+      '{"gravityWellContours":false,"planetCount":{"min":3,"max":5},"timeoutSeconds":null,"bounce":true,' +
+      '"planetVisibility":"atRoundStart"}';
+
+    expect(parseSettings(stored)).toEqual({
+      gravityWellContours: false,
+      planetCount: { min: 3, max: 5 },
+      timeoutSeconds: undefined,
+      bounce: true,
+      planetVisibility: "atRoundStart",
+    });
+  });
+
+  test("serialises to the stored form of earlier versions", () => {
+    const settings: Settings = { ...DEFAULT_SETTINGS, timeoutSeconds: undefined, planetVisibility: "hidden" };
+
+    expect(serialiseSettings(settings)).toBe(
+      '{"gravityWellContours":true,"planetCount":{"min":2,"max":4},"timeoutSeconds":null,"bounce":false,' +
+        '"planetVisibility":"hidden"}',
+    );
   });
 
   test.each([
@@ -139,8 +174,15 @@ describe("parseSettings", () => {
 });
 
 describe("planet count choices", () => {
-  test("offer 1 to 6 planets", () => {
-    expect(PLANET_COUNT_CHOICES).toEqual([1, 2, 3, 4, 5, 6]);
+  test("offer 1 to 6 planets, labelled by count", () => {
+    expect(SETTING_RULES.planetCount.choices).toEqual([
+      { value: 1, label: "1" },
+      { value: 2, label: "2" },
+      { value: 3, label: "3" },
+      { value: 4, label: "4" },
+      { value: 5, label: "5" },
+      { value: 6, label: "6" },
+    ]);
   });
 
   test("raising the minimum above the maximum raises the maximum to match", () => {
@@ -162,7 +204,12 @@ describe("planet count choices", () => {
 
 describe("timeout choices", () => {
   test("offer 10 s, 25 s, 50 s and never", () => {
-    expect(TIMEOUT_CHOICES).toEqual([10, 25, 50, undefined]);
+    expect(SETTING_RULES.timeoutSeconds.choices).toEqual([
+      { value: 10, label: "10 s" },
+      { value: 25, label: "25 s" },
+      { value: 50, label: "50 s" },
+      { value: undefined, label: "Never" },
+    ]);
   });
 
   test("store never as null so it survives serialisation", () => {
@@ -174,7 +221,25 @@ describe("timeout choices", () => {
 
 describe("planet visibility choices", () => {
   test("offer always, at round start and hidden", () => {
-    expect(PLANET_VISIBILITY_CHOICES).toEqual(["always", "atRoundStart", "hidden"]);
+    expect(SETTING_RULES.planetVisibility.choices).toEqual([
+      { value: "always", label: "Always" },
+      { value: "atRoundStart", label: "At round start" },
+      { value: "hidden", label: "Hidden" },
+    ]);
+  });
+});
+
+describe("setting kinds", () => {
+  test("treat contours as a display setting and the rest as match rules", () => {
+    const kinds = Object.fromEntries(Object.entries(SETTING_RULES).map(([key, rule]) => [key, rule.kind]));
+
+    expect(kinds).toEqual({
+      gravityWellContours: "display",
+      planetCount: "matchRule",
+      timeoutSeconds: "matchRule",
+      bounce: "matchRule",
+      planetVisibility: "matchRule",
+    });
   });
 });
 
