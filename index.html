@@ -33,12 +33,12 @@
                   <span id="planets-label">Planets per round</span>
                   <div class="range">
                     <label class="range-end select-box">
-                      <select id="min-planets-select"></select>
+                      <select data-setting="planetCount" data-range-end="min"></select>
                       <span class="range-caption">min</span>
                     </label>
                     <span class="range-span" aria-hidden="true"></span>
                     <label class="range-end select-box">
-                      <select id="max-planets-select"></select>
+                      <select data-setting="planetCount" data-range-end="max"></select>
                       <span class="range-caption">max</span>
                     </label>
                   </div>
@@ -46,23 +46,23 @@
                 <label class="setting">
                   Planet visibility
                   <span class="select-box">
-                    <select id="planet-visibility-select"></select>
+                    <select data-setting="planetVisibility"></select>
                   </span>
                 </label>
                 <label class="setting">
                   Timeout
                   <span class="select-box">
-                    <select id="timeout-select"></select>
+                    <select data-setting="timeoutSeconds"></select>
                   </span>
                 </label>
                 <label class="setting">
-                  <input id="bounce-checkbox" type="checkbox" />
+                  <input data-setting="bounce" type="checkbox" />
                   Bounce
                 </label>
               </div>
               <div id="display-panel" class="settings-list" role="tabpanel" aria-labelledby="display-tab" hidden>
                 <label class="setting">
-                  <input id="contours-checkbox" type="checkbox" />
+                  <input data-setting="gravityWellContours" type="checkbox" />
                   Gravity-well contours
                 </label>
               </div>

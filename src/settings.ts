@@ -10,17 +10,25 @@ export interface SettingChoice<T> {
   label: string;
 }
 
+export type RangeEnd = keyof PlanetCountRange;
+
 export interface SettingRule<T, Kind extends SettingKind> {
   kind: Kind;
   defaultValue: T;
   parse(stored: unknown): T;
 }
 
+export interface ToggleSettingRule<Kind extends SettingKind> extends SettingRule<boolean, Kind> {
+  control: "toggle";
+}
+
 export interface ChoiceSettingRule<T, Kind extends SettingKind> extends SettingRule<T, Kind> {
+  control: "choice";
   choices: readonly SettingChoice<T>[];
 }
 
 export interface RangeSettingRule<Kind extends SettingKind> extends SettingRule<Readonly<PlanetCountRange>, Kind> {
+  control: "range";
   choices: readonly SettingChoice<number>[];
 }
 
@@ -53,22 +61,28 @@ export const SETTING_RULES = {
   planetVisibility: choiceSetting("matchRule", PLANET_VISIBILITY_CHOICES, DEFAULT_MATCH_RULES.planetVisibility),
 };
 
+export type AnySettingRule =
+  | ToggleSettingRule<SettingKind>
+  | ChoiceSettingRule<unknown, SettingKind>
+  | RangeSettingRule<SettingKind>;
+
 type SettingRules = typeof SETTING_RULES;
-type SettingKey = keyof SettingRules;
+export type SettingKey = keyof SettingRules;
 
 export type Settings = { [K in SettingKey]: SettingRules[K]["defaultValue"] };
 
 type MatchRuleKey = { [K in SettingKey]: SettingRules[K]["kind"] extends "matchRule" ? K : never }[SettingKey];
 
-const SETTING_KEYS = Object.keys(SETTING_RULES) as SettingKey[];
+export const SETTING_KEYS = Object.keys(SETTING_RULES) as SettingKey[];
 
 const MATCH_RULE_KEYS = SETTING_KEYS.filter((key): key is MatchRuleKey => SETTING_RULES[key].kind === "matchRule");
 
 export const DEFAULT_SETTINGS: Readonly<Settings> = settingsFrom((key) => SETTING_RULES[key].defaultValue);
 
-function toggleSetting<Kind extends SettingKind>(kind: Kind, defaultValue: boolean): SettingRule<boolean, Kind> {
+function toggleSetting<Kind extends SettingKind>(kind: Kind, defaultValue: boolean): ToggleSettingRule<Kind> {
   return {
     kind,
+    control: "toggle",
     defaultValue,
     parse: (stored) => (typeof stored === "boolean" ? stored : defaultValue),
   };
@@ -81,6 +95,7 @@ function choiceSetting<T, Kind extends SettingKind>(
 ): ChoiceSettingRule<T, Kind> {
   return {
     kind,
+    control: "choice",
     defaultValue,
     choices,
     parse: (stored) => {
@@ -98,6 +113,7 @@ function rangeSetting<Kind extends SettingKind>(
   const isChoice = (value: unknown): value is number => choices.some((choice) => choice.value === value);
   return {
     kind,
+    control: "range",
     defaultValue,
     choices,
     parse: (stored) => {
@@ -158,6 +174,10 @@ export function withMinPlanets(range: Readonly<PlanetCountRange>, min: number): 
 
 export function withMaxPlanets(range: Readonly<PlanetCountRange>, max: number): PlanetCountRange {
   return { min: Math.min(range.min, max), max };
+}
+
+export function withRangeEnd(range: Readonly<PlanetCountRange>, end: RangeEnd, count: number): PlanetCountRange {
+  return end === "min" ? withMinPlanets(range, count) : withMaxPlanets(range, count);
 }
 
 export function matchRulesFor(settings: Readonly<Settings>): MatchRules {

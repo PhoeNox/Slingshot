@@ -10,7 +10,7 @@ import { startGameLoop } from "./gameLoop";
 import { bindControls, bindEscape } from "./input";
 import { MAIN_MENU_ITEMS, type Screen } from "./navigation";
 import { drawFrame, drawShakenFrame } from "./renderer";
-import { bindBounceCheckbox, bindBracketFlash, bindContoursCheckbox, bindMainMenuButton, bindPlanetCountSelects, bindPlanetVisibilitySelect, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, bindSettingsTabs, bindTimeoutSelect, navigateBack, renderMenuItems, showScreen, traceTitleArc, type ScreenElements } from "./screens";
+import { bindBracketFlash, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, bindSettingControls, bindSettingsTabs, navigateBack, renderMenuItems, showScreen, traceTitleArc, type ScreenElements } from "./screens";
 import { matchRulesFor, parseSettings, serialiseSettings, type Settings } from "./settings";
 import { readStoredSettings, writeStoredSettings } from "./settingsStorage";
 import { createScreenSession, describeScreenSessionFrame, enterScreen, screenSessionShake, stepScreenSession } from "./screenSession";
@@ -37,12 +37,6 @@ async function start(): Promise<void> {
     mainMenu: document.querySelector<HTMLElement>("#main-menu")!,
     settings: document.querySelector<HTMLElement>("#settings")!,
     settingsTabs: document.querySelector<HTMLElement>("#settings .settings-tabs")!,
-    contoursCheckbox: document.querySelector<HTMLInputElement>("#contours-checkbox")!,
-    minPlanetsSelect: document.querySelector<HTMLSelectElement>("#min-planets-select")!,
-    maxPlanetsSelect: document.querySelector<HTMLSelectElement>("#max-planets-select")!,
-    timeoutSelect: document.querySelector<HTMLSelectElement>("#timeout-select")!,
-    planetVisibilitySelect: document.querySelector<HTMLSelectElement>("#planet-visibility-select")!,
-    bounceCheckbox: document.querySelector<HTMLInputElement>("#bounce-checkbox")!,
     credits: document.querySelector<HTMLElement>("#credits")!,
     creditsBackButton: document.querySelector<HTMLButtonElement>("#credits-back-button")!,
     keyHint: document.querySelector<HTMLElement>(".key-hint")!,
@@ -88,11 +82,7 @@ async function start(): Promise<void> {
   bindMainMenuButton(settingsBackButton);
   bindMainMenuButton(elements.creditsBackButton);
   bindSettingsTabs(elements.settingsTabs);
-  bindContoursCheckbox(elements.contoursCheckbox, settings, saveSettings);
-  bindPlanetCountSelects(elements.minPlanetsSelect, elements.maxPlanetsSelect, settings, saveSettings);
-  bindPlanetVisibilitySelect(elements.planetVisibilitySelect, settings, saveSettings);
-  bindTimeoutSelect(elements.timeoutSelect, settings, saveSettings);
-  bindBounceCheckbox(elements.bounceCheckbox, settings, saveSettings);
+  bindSettingControls(elements.settings, settings, saveSettings);
   const enterAndShowScreen = (screen: Screen) => {
     const seed = randomSeed();
     const matchRules = matchRulesFor(settings);

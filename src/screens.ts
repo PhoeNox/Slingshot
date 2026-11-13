@@ -2,25 +2,25 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { COLOURS } from "./colours";
+import type { PlanetCountRange } from "./core/match";
 import { backTargetFor, hashFor, moveFocus, resolveHash, type FocusStep, type MenuItem, type Screen } from "./navigation";
 import { scrambleLabel } from "./scramble";
-import { SETTING_RULES, withMaxPlanets, withMinPlanets, type SettingChoice, type Settings } from "./settings";
+import { SETTING_KEYS, SETTING_RULES, withRangeEnd, type AnySettingRule, type RangeEnd, type SettingChoice, type SettingKey, type Settings } from "./settings";
 
 export interface ScreenElements {
   overlay: HTMLElement;
   mainMenu: HTMLElement;
   settings: HTMLElement;
   settingsTabs: HTMLElement;
-  contoursCheckbox: HTMLInputElement;
-  minPlanetsSelect: HTMLSelectElement;
-  maxPlanetsSelect: HTMLSelectElement;
-  timeoutSelect: HTMLSelectElement;
-  planetVisibilitySelect: HTMLSelectElement;
-  bounceCheckbox: HTMLInputElement;
   credits: HTMLElement;
   creditsBackButton: HTMLButtonElement;
   keyHint: HTMLElement;
   canvas: HTMLCanvasElement;
+}
+
+interface SettingField {
+  read(): unknown;
+  write(value: unknown): void;
 }
 
 const FOCUS_STEPS: Record<string, FocusStep> = {
@@ -179,82 +179,106 @@ function selectTab(tabs: readonly HTMLButtonElement[], selectedTab: HTMLButtonEl
   }
 }
 
-export function bindContoursCheckbox(
-  checkbox: HTMLInputElement,
+export function bindSettingControls(
+  settingsScreen: HTMLElement,
   settings: Settings,
   saveSettings: (settings: Readonly<Settings>) => void,
 ): void {
-  checkbox.checked = settings.gravityWellContours;
-  checkbox.addEventListener("change", () => {
-    settings.gravityWellContours = checkbox.checked;
-    saveSettings(settings);
-  });
+  for (const key of SETTING_KEYS) {
+    const controls = settingControls(settingsScreen, key);
+    const field = settingField(settings, key, saveSettings);
+    bindSettingControl(controls, SETTING_RULES[key], field);
+  }
 }
 
-export function bindBounceCheckbox(
-  checkbox: HTMLInputElement,
-  settings: Settings,
-  saveSettings: (settings: Readonly<Settings>) => void,
-): void {
-  checkbox.checked = settings.bounce;
-  checkbox.addEventListener("change", () => {
-    settings.bounce = checkbox.checked;
-    saveSettings(settings);
-  });
+function settingControls(settingsScreen: HTMLElement, key: SettingKey): HTMLElement[] {
+  const controls = [...settingsScreen.querySelectorAll<HTMLElement>(`[data-setting="${key}"]`)];
+  if (controls.length === 0) {
+    throw new Error(`No settings control for "${key}"`);
+  }
+  return controls;
 }
 
-export function bindPlanetCountSelects(
-  minSelect: HTMLSelectElement,
-  maxSelect: HTMLSelectElement,
+function settingField(
   settings: Settings,
+  key: SettingKey,
   saveSettings: (settings: Readonly<Settings>) => void,
-): void {
-  const choices = SETTING_RULES.planetCount.choices;
-  renderChoiceOptions(minSelect, choices);
-  renderChoiceOptions(maxSelect, choices);
-  const showPlanetCount = () => {
-    showChoice(minSelect, choices, settings.planetCount.min);
-    showChoice(maxSelect, choices, settings.planetCount.max);
+): SettingField {
+  const values: Record<SettingKey, unknown> = settings;
+  return {
+    read: () => values[key],
+    write: (value) => {
+      values[key] = value;
+      saveSettings(settings);
+    },
   };
-  showPlanetCount();
-  minSelect.addEventListener("change", () => {
-    settings.planetCount = withMinPlanets(settings.planetCount, chosenValue(minSelect, choices));
-    showPlanetCount();
-    saveSettings(settings);
-  });
-  maxSelect.addEventListener("change", () => {
-    settings.planetCount = withMaxPlanets(settings.planetCount, chosenValue(maxSelect, choices));
-    showPlanetCount();
-    saveSettings(settings);
-  });
 }
 
-export function bindTimeoutSelect(
-  select: HTMLSelectElement,
-  settings: Settings,
-  saveSettings: (settings: Readonly<Settings>) => void,
-): void {
-  const choices = SETTING_RULES.timeoutSeconds.choices;
-  renderChoiceOptions(select, choices);
-  showChoice(select, choices, settings.timeoutSeconds);
-  select.addEventListener("change", () => {
-    settings.timeoutSeconds = chosenValue(select, choices);
-    saveSettings(settings);
-  });
+function bindSettingControl(controls: readonly HTMLElement[], rule: AnySettingRule, field: SettingField): void {
+  switch (rule.control) {
+    case "toggle":
+      bindToggles(controls as HTMLInputElement[], field);
+      break;
+    case "choice":
+      bindChoiceSelects(controls as HTMLSelectElement[], rule.choices, field);
+      break;
+    case "range":
+      bindRangeSelects(controls as HTMLSelectElement[], rule.choices, field);
+      break;
+  }
 }
 
-export function bindPlanetVisibilitySelect(
-  select: HTMLSelectElement,
-  settings: Settings,
-  saveSettings: (settings: Readonly<Settings>) => void,
+function bindToggles(checkboxes: readonly HTMLInputElement[], field: SettingField): void {
+  for (const checkbox of checkboxes) {
+    checkbox.checked = field.read() === true;
+    checkbox.addEventListener("change", () => {
+      field.write(checkbox.checked);
+    });
+  }
+}
+
+function bindChoiceSelects(
+  selects: readonly HTMLSelectElement[],
+  choices: readonly SettingChoice<unknown>[],
+  field: SettingField,
 ): void {
-  const choices = SETTING_RULES.planetVisibility.choices;
-  renderChoiceOptions(select, choices);
-  showChoice(select, choices, settings.planetVisibility);
-  select.addEventListener("change", () => {
-    settings.planetVisibility = chosenValue(select, choices);
-    saveSettings(settings);
-  });
+  for (const select of selects) {
+    renderChoiceOptions(select, choices);
+    showChoice(select, choices, field.read());
+    select.addEventListener("change", () => {
+      field.write(chosenValue(select, choices));
+    });
+  }
+}
+
+function bindRangeSelects(
+  selects: readonly HTMLSelectElement[],
+  choices: readonly SettingChoice<number>[],
+  field: SettingField,
+): void {
+  const range = () => field.read() as Readonly<PlanetCountRange>;
+  const showRange = () => {
+    for (const select of selects) {
+      showChoice(select, choices, range()[rangeEndOf(select)]);
+    }
+  };
+  for (const select of selects) {
+    renderChoiceOptions(select, choices);
+    select.addEventListener("change", () => {
+      const updatedRange = withRangeEnd(range(), rangeEndOf(select), chosenValue(select, choices));
+      field.write(updatedRange);
+      showRange();
+    });
+  }
+  showRange();
+}
+
+function rangeEndOf(select: HTMLSelectElement): RangeEnd {
+  const end = select.dataset.rangeEnd;
+  if (end !== "min" && end !== "max") {
+    throw new Error(`Range select has no valid data-range-end: "${end}"`);
+  }
+  return end;
 }
 
 function renderChoiceOptions<T>(select: HTMLSelectElement, choices: readonly SettingChoice<T>[]): void {
