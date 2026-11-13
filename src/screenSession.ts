@@ -5,7 +5,7 @@ import { createAttractMode, stepAttractMode, type AttractMode } from "./core/att
 import type { Point } from "./core/flight";
 import { createMatch, matchView, step, type Match, type MatchRules } from "./core/match";
 import { burstDebris, stepDebris, type Particle } from "./debris";
-import { describeAttractFrame, describeFrame, type DisplaySettings, type FrameItem } from "./frame";
+import { describeFrame, type DisplaySettings, type FrameItem } from "./frame";
 import type { Screen } from "./navigation";
 import { NO_SHAKE, screenShakeOffset } from "./screenShake";
 
@@ -74,10 +74,10 @@ function advanceDebris(session: ScreenSession, match: Match): void {
 export function describeScreenSessionFrame(session: ScreenSession, display: Readonly<DisplaySettings>): FrameItem[] {
   if (session.match !== undefined) {
     const view = matchView(session.match);
-    return describeFrame(view, display, session.debris);
+    return describeFrame(view, display, session.debris, "match");
   }
   const attractView = matchView(session.attract!.match);
-  return describeAttractFrame(attractView, display, session.debris);
+  return describeFrame(attractView, display, session.debris, "attract");
 }
 
 export function screenSessionShake(session: ScreenSession, reducedMotion: boolean, random: () => number): Readonly<Point> {

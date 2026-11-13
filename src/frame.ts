@@ -8,9 +8,10 @@
 import { afterglowSegments, explosionBloom, explosionSize, planetAlpha, roundBanner, trailAlpha } from "./animationCurves";
 import { COLOURS } from "./colours";
 import type { Missile, Point, Segment } from "./core/flight";
-import type { InFlightView, MatchView, RoundOutcome, RoundOverView, RoundResult, Zoom } from "./core/match";
+import type { InFlightView, MatchView, RoundOutcome, RoundOverView, RoundResult } from "./core/match";
 import { PLAYING_AREA_HEIGHT, PLAYING_AREA_WIDTH } from "./core/playingArea";
 import type { Aim, Planet, Ship, Side } from "./core/round";
+import { NO_ZOOM, type Zoom } from "./core/zoom";
 import { particleAlpha, type Particle, type ParticleSize } from "./debris";
 
 export interface Rect {
@@ -112,6 +113,8 @@ export interface DisplaySettings {
   gravityWellContours: boolean;
 }
 
+export type Presentation = "match" | "attract";
+
 export type FrameItem =
   | ImageItem
   | SpriteFrameItem
@@ -123,6 +126,13 @@ export type FrameItem =
   | StrokeRectItem
   | TextItem
   | GroupItem;
+
+interface PresentationStyle {
+  zoomed: boolean;
+  hud: boolean;
+  planetFading: boolean;
+  dimmed: boolean;
+}
 
 interface ShipPose {
   rotation: number;
@@ -206,18 +216,30 @@ const ATTRACT_DIM_COLOUR = "rgba(4, 8, 21, 0.55)";
 
 const PLAYING_AREA: Readonly<Rect> = { left: 0, top: 0, width: PLAYING_AREA_WIDTH, height: PLAYING_AREA_HEIGHT };
 
+const PRESENTATION_STYLES: Record<Presentation, Readonly<PresentationStyle>> = {
+  match: { zoomed: true, hud: true, planetFading: true, dimmed: false },
+  attract: { zoomed: false, hud: false, planetFading: false, dimmed: true },
+};
+
 export function describeFrame(
   view: MatchView,
   display: Readonly<DisplaySettings>,
   debris: readonly Readonly<Particle>[],
+  presentation: Presentation,
 ): FrameItem[] {
-  const scene = sceneItems(view, display, debris);
-  const zoomedScene = zoomedSceneItems(scene, view.zoom);
+  const style = PRESENTATION_STYLES[presentation];
+  const scene = sceneItems(view, display, debris, style);
+  const hud = style.hud ? hudItems(view) : [];
+  return [...scene, ...hud];
+}
+
+function hudItems(view: MatchView): FrameItem[] {
   const border = bounceBorderItems(view.rules.bounce);
-  const hud = phaseHudItems(view);
+  const readouts = phaseReadoutItems(view);
+  const message = roundOverMessageItems(view.phase);
   const scores = scoreItems(view.scores);
   const banner = roundBannerItems(view.roundNumber, view.roundStepCount);
-  return [...zoomedScene, ...border, ...hud, ...scores, ...banner];
+  return [...border, ...readouts, ...message, ...scores, ...banner];
 }
 
 function bounceBorderItems(bounce: boolean): StrokeRectItem[] {
@@ -232,18 +254,29 @@ function sceneItems(
   view: MatchView,
   display: Readonly<DisplaySettings>,
   debris: readonly Readonly<Particle>[],
+  style: Readonly<PresentationStyle>,
 ): FrameItem[] {
-  const alpha = matchPlanetAlpha(view);
+  const zoom = style.zoomed ? view.zoom : NO_ZOOM;
+  const alpha = style.planetFading ? matchPlanetAlpha(view) : 1;
   const planets = planetItems(view.planets, display, alpha);
   const trails = trailItems(view.trails);
-  const particles = debrisItems(debris, 1 / view.zoom.scale);
-  const phase = phaseSceneItems(view);
-  return [...planets, ...trails, ...particles, ...phase];
+  const particles = debrisItems(debris, 1 / zoom.scale);
+  const phase = phaseSceneItems(view, zoom, style.hud);
+  const zoomedScene = zoomedSceneItems([...planets, ...trails, ...particles, ...phase], zoom);
+  const dimming = dimmingItems(style.dimmed);
+  return [...zoomedScene, ...dimming];
 }
 
 function matchPlanetAlpha(view: MatchView): number {
   const stepsSinceRoundOver = view.phase.kind === "roundOver" ? view.phase.stepsSinceRoundOver : undefined;
   return planetAlpha(view.rules.planetVisibility, view.roundStepCount, stepsSinceRoundOver);
+}
+
+function dimmingItems(dimmed: boolean): FillRectItem[] {
+  if (!dimmed) {
+    return [];
+  }
+  return [{ kind: "fillRect", colour: ATTRACT_DIM_COLOUR, rect: PLAYING_AREA }];
 }
 
 function debrisItems(debris: readonly Readonly<Particle>[], sizeScale: number): DotItem[] {
@@ -289,58 +322,30 @@ function playingAreaOutlineItem(transform: Readonly<Transform>): LinesItem {
   };
 }
 
-export function describeAttractFrame(
-  view: MatchView,
-  display: Readonly<DisplaySettings>,
-  debris: readonly Readonly<Particle>[],
-): FrameItem[] {
-  const planets = planetItems(view.planets, display, 1);
-  const trails = trailItems(view.trails);
-  const particles = debrisItems(debris, 1);
-  const phase = attractPhaseItems(view);
-  const dimming: FillRectItem = { kind: "fillRect", colour: ATTRACT_DIM_COLOUR, rect: PLAYING_AREA };
-  return [...planets, ...trails, ...particles, ...phase, dimming];
-}
-
-function attractPhaseItems(view: MatchView): FrameItem[] {
-  switch (view.phase.kind) {
-    case "aiming":
-      return shipItems(view.ships, SIDES);
-    case "inFlight":
-      return attractFlightItems(view, view.phase);
-    case "roundOver":
-      return hitSceneItems(view.ships, view.phase);
-  }
-}
-
-function attractFlightItems(view: MatchView, flight: InFlightView): FrameItem[] {
-  return flightSceneItems(view, flight, MISSILE_SPRITE_SIZE);
-}
-
 export function describeBackdropFrame(): FrameItem[] {
   const backdrop = imageItem("backdrop", PLAYING_AREA, 1);
   return [backdrop];
 }
 
-function phaseSceneItems(view: MatchView): FrameItem[] {
+function phaseSceneItems(view: MatchView, zoom: Readonly<Zoom>, aimReticle: boolean): FrameItem[] {
   switch (view.phase.kind) {
     case "aiming":
-      return aimingSceneItems(view);
+      return aimingSceneItems(view, aimReticle);
     case "inFlight":
-      return flightSceneItems(view, view.phase, MISSILE_SPRITE_SIZE / view.zoom.scale);
+      return flightSceneItems(view, view.phase, MISSILE_SPRITE_SIZE / zoom.scale);
     case "roundOver":
       return hitSceneItems(view.ships, view.phase);
   }
 }
 
-function phaseHudItems(view: MatchView): FrameItem[] {
+function phaseReadoutItems(view: MatchView): TextItem[] {
   switch (view.phase.kind) {
     case "aiming":
       return aimInfoItems(view.ships[view.activePlayer].aim);
     case "inFlight":
       return flightHudItems(view.powerPenalty, view.phase);
     case "roundOver":
-      return roundOverMessageItems(view.phase.result);
+      return [];
   }
 }
 
@@ -448,9 +453,9 @@ function shipFrameItem(side: Side, frameLeft: number, alpha: number): SpriteFram
   };
 }
 
-function aimingSceneItems(view: MatchView): FrameItem[] {
+function aimingSceneItems(view: MatchView, aimReticle: boolean): FrameItem[] {
   const ships = shipItems(view.ships, SIDES);
-  const reticle = aimReticleItems(view.aimLine, PLAYER_COLOURS[view.activePlayer]);
+  const reticle = aimReticle ? aimReticleItems(view.aimLine, PLAYER_COLOURS[view.activePlayer]) : [];
   return [...ships, ...reticle];
 }
 
@@ -565,7 +570,14 @@ function bloomItems(ship: Readonly<Ship>, stepsSinceHit: number): BloomItem[] {
   ];
 }
 
-function roundOverMessageItems(result: Readonly<RoundResult>): FrameItem[] {
+function roundOverMessageItems(phase: MatchView["phase"]): FrameItem[] {
+  if (phase.kind !== "roundOver") {
+    return [];
+  }
+  return roundResultMessageItems(phase.result);
+}
+
+function roundResultMessageItems(result: Readonly<RoundResult>): FrameItem[] {
   const box = roundOverMessageBox(result.outcome);
   const panel = roundOverPanelItems(box);
   const tops = roundOverTextTops(result.outcome);

@@ -14,7 +14,7 @@ import {
   type RoundLayout,
 } from "./core/match";
 import { burstDebris, BURST_COUNT } from "./debris";
-import { describeAttractFrame, describeFrame, type DisplaySettings } from "./frame";
+import { describeFrame, type DisplaySettings } from "./frame";
 import {
   createScreenSession,
   describeScreenSessionFrame,
@@ -161,7 +161,7 @@ describe("describing the frame", () => {
     const session = sessionOn("match");
 
     expect(describeScreenSessionFrame(session, CONTOURS_HIDDEN)).toEqual(
-      describeFrame(matchView(session.match!), CONTOURS_HIDDEN, session.debris),
+      describeFrame(matchView(session.match!), CONTOURS_HIDDEN, session.debris, "match"),
     );
   });
 
@@ -169,7 +169,7 @@ describe("describing the frame", () => {
     const session = sessionOn("mainMenu", "credits");
 
     expect(describeScreenSessionFrame(session, CONTOURS_HIDDEN)).toEqual(
-      describeAttractFrame(matchView(session.attract!.match), CONTOURS_HIDDEN, session.debris),
+      describeFrame(matchView(session.attract!.match), CONTOURS_HIDDEN, session.debris, "attract"),
     );
   });
 });
