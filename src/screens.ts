@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { hashFor, resolveHash, type MenuItem, type Screen } from "./navigation";
+import { backTargetFor, hashFor, resolveHash, type MenuItem, type Screen } from "./navigation";
 
 export interface ScreenElements {
   overlay: HTMLElement;
@@ -35,6 +35,20 @@ export function showScreen(elements: ScreenElements, screen: Screen): void {
   }
   if (screen === "match") {
     elements.canvas.focus();
+  }
+}
+
+export function bindMatchMenuButton(button: HTMLButtonElement): void {
+  const mainMenuHash = hashFor("mainMenu");
+  button.addEventListener("click", () => {
+    location.hash = mainMenuHash;
+  });
+}
+
+export function navigateBack(target: Window, screen: Screen): void {
+  const backTarget = backTargetFor(screen);
+  if (backTarget !== undefined) {
+    target.location.hash = hashFor(backTarget);
   }
 }
 

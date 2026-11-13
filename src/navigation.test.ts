@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { describe, expect, test } from "vitest";
-import { hashFor, resolveHash, type Screen } from "./navigation";
+import { backTargetFor, hashFor, resolveHash, type Screen } from "./navigation";
 
 describe("resolveHash", () => {
   test.each<[string, Screen]>([
@@ -22,5 +22,15 @@ describe("resolveHash", () => {
 describe("hashFor", () => {
   test.each<Screen>(["mainMenu", "match", "credits"])("the hash of %s resolves back to it", (screen) => {
     expect(resolveHash(hashFor(screen))).toEqual({ screen, replace: false });
+  });
+});
+
+describe("backTargetFor", () => {
+  test.each<[Screen, Screen | undefined]>([
+    ["match", "mainMenu"],
+    ["credits", "mainMenu"],
+    ["mainMenu", undefined],
+  ])("the back target of %s is %s", (screen, backTarget) => {
+    expect(backTargetFor(screen)).toBe(backTarget);
   });
 });

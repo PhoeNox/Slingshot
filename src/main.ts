@@ -7,12 +7,13 @@ import { adjustAim, createMatch, fire, matchView, step, type AimDelta, type Matc
 import { applyFit, applyOverlayFit, fitPlayingArea } from "./display";
 import { describeBackdropFrame, describeFrame } from "./frame";
 import { startGameLoop } from "./gameLoop";
-import { bindControls } from "./input";
+import { bindControls, bindEscape } from "./input";
 import { MAIN_MENU_ITEMS, type Screen } from "./navigation";
 import { drawFrame } from "./renderer";
-import { bindScreenRoutes, renderMenuItems, showScreen, type ScreenElements } from "./screens";
+import { bindMatchMenuButton, bindScreenRoutes, navigateBack, renderMenuItems, showScreen, type ScreenElements } from "./screens";
 
 interface MatchSession {
+  screen: Screen;
   match: Match | undefined;
 }
 
@@ -32,11 +33,12 @@ async function start(): Promise<void> {
     canvas,
   };
   const menu = document.querySelector<HTMLElement>("#main-menu .menu")!;
+  const matchMenuButton = document.querySelector<HTMLButtonElement>("#match-menu-button")!;
 
   const sprites = await loadSprites();
   await loadFont();
 
-  const session: MatchSession = { match: undefined };
+  const session: MatchSession = { screen: "mainMenu", match: undefined };
 
   const fitStage = () => {
     const fit = fitPlayingArea(stage.clientWidth, stage.clientHeight, window.devicePixelRatio);
@@ -51,8 +53,13 @@ async function start(): Promise<void> {
   const fireMatch = () => fire(session.match!);
   bindControls(window, isMatchActive, adjustMatchAim, fireMatch);
 
+  const navigateBackFromCurrentScreen = () => navigateBack(window, session.screen);
+  bindEscape(window, navigateBackFromCurrentScreen);
+
   renderMenuItems(menu, MAIN_MENU_ITEMS);
+  bindMatchMenuButton(matchMenuButton);
   const enterScreen = (screen: Screen) => {
+    session.screen = screen;
     session.match = screen === "match" ? createRandomMatch() : undefined;
     showScreen(elements, screen);
   };

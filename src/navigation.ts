@@ -21,6 +21,12 @@ const SCREEN_HASHES: Record<Screen, string> = {
   credits: "#/credits",
 };
 
+const BACK_TARGETS: Record<Screen, Screen | undefined> = {
+  mainMenu: undefined,
+  match: "mainMenu",
+  credits: "mainMenu",
+};
+
 export const MAIN_MENU_ITEMS: readonly MenuItem[] = [{ label: "Play", screen: "match" }];
 
 export function resolveHash(hash: string): Route {
@@ -34,4 +40,8 @@ export function resolveHash(hash: string): Route {
 
 export function hashFor(screen: Screen): string {
   return SCREEN_HASHES[screen];
+}
+
+export function backTargetFor(screen: Screen): Screen | undefined {
+  return BACK_TARGETS[screen];
 }

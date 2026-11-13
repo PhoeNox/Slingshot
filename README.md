@@ -4,7 +4,7 @@ A browser port of Slingshot, the two-player, turn-based gravity artillery game: 
 
 **Play it in the browser: <https://phoenox.github.io/Slingshot/>**
 
-Controls: ←/→ or A/D angle · ↑/↓ or W/S power · Shift ×2.5 · Space fire
+Controls: ←/→ or A/D angle · ↑/↓ or W/S power · Shift ×2.5 · Space fire · Escape main menu
 
 ## Development
 

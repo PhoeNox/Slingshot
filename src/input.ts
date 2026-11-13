@@ -81,6 +81,14 @@ export function bindControls(
   target.addEventListener("blur", releaseHeldKey);
 }
 
+export function bindEscape(target: Window, onEscape: () => void): void {
+  target.addEventListener("keydown", (event) => {
+    if (event.code === "Escape") {
+      onEscape();
+    }
+  });
+}
+
 function isHandledKey(code: string): boolean {
   return code in AIM_DIRECTIONS || FIRE_KEYS.has(code);
 }

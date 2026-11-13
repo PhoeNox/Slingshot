@@ -83,6 +83,24 @@ body {
   background: rgba(255, 255, 255, 0.2);
 }
 
+.hint-button {
+  margin-left: 12px;
+  padding: 2px 10px;
+  border: 1px solid #555;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.hint-button:hover,
+.hint-button:focus-visible {
+  outline: none;
+  border-color: #fff;
+  color: #fff;
+}
+
 .key-hint,
 footer {
   margin: 0;
