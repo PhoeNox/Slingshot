@@ -29,14 +29,13 @@ import type {
   TextItem,
   Transform,
 } from "./frameItems";
+import type { RemoteNotice } from "./lockstep";
 
 export interface DisplaySettings {
   gravityWellContours: boolean;
 }
 
 export type Viewer = { kind: "attract" } | { kind: "hotSeat" } | { kind: "remote"; localSide: Side };
-
-export type Notice = "awaitingHost" | "opponentLeft" | "outOfSync" | "versionMismatch";
 
 export const ATTRACT_VIEWER: Viewer = { kind: "attract" };
 export const HOT_SEAT_VIEWER: Viewer = { kind: "hotSeat" };
@@ -141,13 +140,13 @@ const MESSAGE_WAITING_TEXT = "Waiting for opponent to start the next round";
 
 const NOTICE_HEIGHT = 110;
 const NOTICE_DETAIL_TOP = 65;
-const NOTICE_TITLES: Record<Notice, string> = {
+const NOTICE_TITLES: Record<RemoteNotice, string> = {
   awaitingHost: "Waiting for the host…",
   opponentLeft: "Opponent left",
   outOfSync: "Out of sync",
   versionMismatch: "Different game version, reload both",
 };
-const NOTICE_DETAILS: Record<Notice, string> = {
+const NOTICE_DETAILS: Record<RemoteNotice, string> = {
   awaitingHost: "",
   opponentLeft: "Returning to the main menu",
   outOfSync: "Returning to the main menu",
@@ -214,7 +213,7 @@ function turnItems(view: MatchView, localSide: Side | undefined): TextItem[] {
   return [hudText(text, colour, SCREEN_CENTRE_X, TIMEOUT_INFO_BOTTOM, "center", "bottom")];
 }
 
-export function describeRemoteNotice(notice: Notice): FrameItem[] {
+export function describeRemoteNotice(notice: RemoteNotice): FrameItem[] {
   const box = noticeBox();
   const panel = roundOverPanelItems(box);
   const title = panelTitleItem(NOTICE_TITLES[notice], MESSAGE_TITLE_TOP);

@@ -42,7 +42,7 @@ Pure, seeded, no DOM, canvas, or clock (ADR-0001).
 | `input.ts` | Keyboard bindings for aiming, firing, escape |
 | `aimKeyRepeat.ts` | Held-key repeat timing for aim adjustment |
 | `frameItems.ts` | Frame item vocabulary shared by frame description and the renderer: `FrameItem` (sprites, rings, lines, text, rects, groups), `Rect`, `Transform`, `SpriteName` |
-| `frame.ts` | Turns a `MatchView` into `FrameItem` data for a `Viewer` (attract mode, hot seat, or a remote match's local side, giving You/Opponent labels and a turn line), plus remote notices; no drawing, no dependency on the remote match |
+| `frame.ts` | Turns a `MatchView` into `FrameItem` data for a `Viewer` (attract mode, hot seat, or a remote match's local side, giving You/Opponent labels and a turn line), plus the lockstep's `RemoteNotice`s; no drawing, no dependency on the remote match beyond that type |
 | `renderer.ts` | Draws `FrameItem`s onto the canvas |
 | `animationCurves.ts` | Afterglow, trail fade, explosion, round banner curves |
 | `screenShake.ts` | Shake offset after hits |
