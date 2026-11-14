@@ -4,8 +4,8 @@
 import { describe, expect, test } from "vitest";
 import type { FixedRouteScreen, Route, Screen } from "./navigation";
 import type { PeerLink } from "./peerConnection";
-import type { StartRemoteMatch } from "./remoteMatchScreens";
 import { encodeMessage } from "./remoteProtocol";
+import type { StartRemoteMatch } from "./remoteVisit";
 import { createRouteController, type RouteController } from "./routeController";
 import { createScreenSession, type ScreenSession } from "./screenSession";
 import { DEFAULT_SETTINGS } from "./settings";

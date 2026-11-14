@@ -9,7 +9,9 @@ import { describeBackdropFrame } from "./frame";
 import { startGameLoop } from "./gameLoop";
 import { bindControls, bindEscape } from "./input";
 import { MAIN_MENU_ITEMS, PLAY_MENU_ITEMS } from "./navigation";
+import { hostPeerConnection, joinPeerConnection } from "./peerConnection";
 import { bindRemoteMatchScreens, type GuestScreenElements, type HostScreenElements } from "./remoteMatchScreens";
+import type { PeerConnectors } from "./remoteVisit";
 import { drawFrame, drawShakenFrame } from "./renderer";
 import { createRouteController, randomSeed, type RouteAdapters } from "./routeController";
 import { bindBracketFlash, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, bindSettingControls, bindSettingsTabs, navigateBack, navigateTo, renderMenuItems, showScreen, traceTitleArc, type ScreenElements } from "./screens";
@@ -116,10 +118,11 @@ async function start(): Promise<void> {
   }
   bindSettingsTabs(elements.settingsTabs);
   bindSettingControls(elements.settings, settings, saveSettings);
+  const peers: PeerConnectors = { host: hostPeerConnection, join: joinPeerConnection };
   const routeAdapters: RouteAdapters = {
     showScreen: (screen) => showScreen(elements, screen),
     navigateTo: (screen) => navigateTo(window, screen),
-    enterRemoteRoute: bindRemoteMatchScreens(window, hostElements, guestElements),
+    enterRemoteRoute: bindRemoteMatchScreens(window, hostElements, guestElements, peers),
   };
   const routes = createRouteController(session, settings, routeAdapters);
   bindScreenRoutes(window, routes.enterRoute);

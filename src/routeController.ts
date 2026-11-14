@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import type { FixedRouteScreen, Route, Screen } from "./navigation";
-import type { StartRemoteMatch } from "./remoteMatchScreens";
+import type { StartRemoteMatch } from "./remoteVisit";
 import { enterRemoteMatch, enterScreen, stepScreenSession, type ScreenSession } from "./screenSession";
 import { matchRulesFor, type Settings } from "./settings";
 

@@ -32,6 +32,10 @@ export interface GuestReply {
 
 export type ConnectionFactory = () => RTCPeerConnection;
 
+export type HostPeerConnection = () => Promise<HostInvitation>;
+
+export type JoinPeerConnection = (offerCode: string) => Promise<GuestReply>;
+
 interface ConnectionCloser {
   closed: Promise<void>;
   close(): void;
