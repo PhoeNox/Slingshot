@@ -7,12 +7,16 @@ A two-player, turn-based artillery game in which missiles are bent by the gravit
 ### Navigation
 
 **Screen**:
-What the game currently shows: the main menu, the settings, the credits, or a match.
+What the game currently shows: the main menu, the play menu, the settings, the credits, the host or guest screen, or a match.
 _Avoid_: Scene, state, page
 
 **Main menu**:
 The screen the game opens on; offers Play, Settings and Credits.
 _Avoid_: Title screen, start screen
+
+**Play menu**:
+The screen, reached from Play on the main menu, offering a hot-seat match or hosting a remote match; a guest never passes through it and arrives by invitation instead.
+_Avoid_: Mode select, lobby
 
 **Settings**:
 The screen, reached from the main menu, where players choose how future matches are played and how the game is drawn; choices are remembered between visits.

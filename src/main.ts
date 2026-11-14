@@ -8,7 +8,8 @@ import { applyFit, applyOverlayFit, fitPlayingArea } from "./display";
 import { describeBackdropFrame } from "./frame";
 import { startGameLoop } from "./gameLoop";
 import { bindControls, bindEscape } from "./input";
-import { MAIN_MENU_ITEMS, type Screen } from "./navigation";
+import { MAIN_MENU_ITEMS, PLAY_MENU_ITEMS, type Route } from "./navigation";
+import { bindRemoteMatchScreens, type GuestScreenElements, type HostScreenElements } from "./remoteMatchScreens";
 import { drawFrame, drawShakenFrame } from "./renderer";
 import { bindBracketFlash, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, bindSettingControls, bindSettingsTabs, navigateBack, renderMenuItems, showScreen, traceTitleArc, type ScreenElements } from "./screens";
 import { matchRulesFor, parseSettings, serialiseSettings, type Settings } from "./settings";
@@ -35,14 +36,35 @@ async function start(): Promise<void> {
   const elements: ScreenElements = {
     overlay: document.querySelector<HTMLElement>("#overlay")!,
     mainMenu: document.querySelector<HTMLElement>("#main-menu")!,
+    playMenu: document.querySelector<HTMLElement>("#play-menu")!,
     settings: document.querySelector<HTMLElement>("#settings")!,
     settingsTabs: document.querySelector<HTMLElement>("#settings .settings-tabs")!,
     credits: document.querySelector<HTMLElement>("#credits")!,
     creditsBackButton: document.querySelector<HTMLButtonElement>("#credits-back-button")!,
+    host: document.querySelector<HTMLElement>("#host")!,
+    hostBackButton: document.querySelector<HTMLButtonElement>("#host-back-button")!,
+    guest: document.querySelector<HTMLElement>("#guest")!,
+    guestBackButton: document.querySelector<HTMLButtonElement>("#guest-back-button")!,
     keyHint: document.querySelector<HTMLElement>(".key-hint")!,
     canvas,
   };
+  const hostElements: HostScreenElements = {
+    invitationField: document.querySelector<HTMLElement>("#invitation-field")!,
+    invitationLink: document.querySelector<HTMLInputElement>("#invitation-link")!,
+    invitationCopyButton: document.querySelector<HTMLButtonElement>("#invitation-copy-button")!,
+    replyForm: document.querySelector<HTMLFormElement>("#reply-form")!,
+    replyFields: document.querySelector<HTMLFieldSetElement>("#reply-form fieldset")!,
+    replyCodeInput: document.querySelector<HTMLInputElement>("#reply-code-input")!,
+    status: document.querySelector<HTMLElement>("#host-status")!,
+  };
+  const guestElements: GuestScreenElements = {
+    replyCodeField: document.querySelector<HTMLElement>("#reply-code-field")!,
+    replyCode: document.querySelector<HTMLInputElement>("#reply-code")!,
+    replyCodeCopyButton: document.querySelector<HTMLButtonElement>("#reply-code-copy-button")!,
+    status: document.querySelector<HTMLElement>("#guest-status")!,
+  };
   const menu = document.querySelector<HTMLElement>("#main-menu .menu")!;
+  const playMenu = document.querySelector<HTMLElement>("#play-menu .menu")!;
   const matchMenuButton = document.querySelector<HTMLButtonElement>("#match-menu-button")!;
   const settingsBackButton = document.querySelector<HTMLButtonElement>("#settings-back-button")!;
   const titleArc = document.querySelector<SVGPathElement>("#main-menu .title-arc path")!;
@@ -72,6 +94,8 @@ async function start(): Promise<void> {
 
   renderMenuItems(menu, MAIN_MENU_ITEMS);
   bindMenuFocusKeys(menu);
+  renderMenuItems(playMenu, PLAY_MENU_ITEMS);
+  bindMenuFocusKeys(playMenu);
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   const menuButtons = elements.overlay.querySelectorAll<HTMLButtonElement>(".menu button");
   for (const button of menuButtons) {
@@ -81,15 +105,23 @@ async function start(): Promise<void> {
   bindMainMenuButton(matchMenuButton);
   bindMainMenuButton(settingsBackButton);
   bindMainMenuButton(elements.creditsBackButton);
+  bindMainMenuButton(elements.hostBackButton);
+  bindMainMenuButton(elements.guestBackButton);
+  const codeButtons = elements.overlay.querySelectorAll<HTMLButtonElement>(".code-button");
+  for (const button of codeButtons) {
+    bindBracketFlash(button);
+  }
   bindSettingsTabs(elements.settingsTabs);
   bindSettingControls(elements.settings, settings, saveSettings);
-  const enterAndShowScreen = (screen: Screen) => {
+  const enterRemoteRoute = bindRemoteMatchScreens(window, hostElements, guestElements);
+  const enterAndShowRoute = (route: Route) => {
     const seed = randomSeed();
     const matchRules = matchRulesFor(settings);
-    enterScreen(session, screen, seed, matchRules);
-    showScreen(elements, screen);
+    enterScreen(session, route.screen, seed, matchRules);
+    enterRemoteRoute(route);
+    showScreen(elements, route.screen);
   };
-  bindScreenRoutes(window, enterAndShowScreen);
+  bindScreenRoutes(window, enterAndShowRoute);
   traceTitleArc(titleArc, reducedMotion);
 
   const stepSimulation = () => stepScreenSession(session, reducedMotion.matches);

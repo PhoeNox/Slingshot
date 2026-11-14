@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { describe, expect, test } from "vitest";
-import { MAIN_MENU_ITEMS, backTargetFor, hashFor, invitationHash, moveFocus, playsAttractMode, resolveHash, type FixedRouteScreen, type FocusStep, type Screen } from "./navigation";
+import { MAIN_MENU_ITEMS, PLAY_MENU_ITEMS, backTargetFor, hashFor, invitationHash, moveFocus, playsAttractMode, resolveHash, type FixedRouteScreen, type FocusStep, type Screen } from "./navigation";
 
 describe("resolveHash", () => {
   test.each<[string, FixedRouteScreen]>([
     ["#/", "mainMenu"],
     ["", "mainMenu"],
+    ["#/play-menu", "playMenu"],
     ["#/play", "match"],
     ["#/settings", "settings"],
     ["#/credits", "credits"],
@@ -26,7 +27,7 @@ describe("resolveHash", () => {
 });
 
 describe("hashFor", () => {
-  test.each<FixedRouteScreen>(["mainMenu", "match", "settings", "credits", "host"])("the hash of %s resolves back to it", (screen) => {
+  test.each<FixedRouteScreen>(["mainMenu", "playMenu", "match", "settings", "credits", "host"])("the hash of %s resolves back to it", (screen) => {
     expect(resolveHash(hashFor(screen))).toEqual({ screen, replace: false });
   });
 });
@@ -39,6 +40,7 @@ describe("invitationHash", () => {
 
 describe("backTargetFor", () => {
   test.each<[Screen, Screen | undefined]>([
+    ["playMenu", "mainMenu"],
     ["match", "mainMenu"],
     ["settings", "mainMenu"],
     ["credits", "mainMenu"],
@@ -53,6 +55,7 @@ describe("backTargetFor", () => {
 describe("playsAttractMode", () => {
   test.each<[Screen, boolean]>([
     ["mainMenu", true],
+    ["playMenu", true],
     ["settings", true],
     ["credits", false],
     ["match", false],
@@ -62,7 +65,7 @@ describe("playsAttractMode", () => {
     expect(playsAttractMode(screen, false)).toBe(plays);
   });
 
-  test.each<Screen>(["mainMenu", "settings"])("pauses on %s under reduced motion", (screen) => {
+  test.each<Screen>(["mainMenu", "playMenu", "settings"])("pauses on %s under reduced motion", (screen) => {
     expect(playsAttractMode(screen, true)).toBe(false);
   });
 });
@@ -70,9 +73,19 @@ describe("playsAttractMode", () => {
 describe("MAIN_MENU_ITEMS", () => {
   test("offers Play, Settings and Credits in that order", () => {
     expect(MAIN_MENU_ITEMS).toEqual([
-      { label: "Play", screen: "match" },
+      { label: "Play", screen: "playMenu" },
       { label: "Settings", screen: "settings" },
       { label: "Credits", screen: "credits" },
+    ]);
+  });
+});
+
+describe("PLAY_MENU_ITEMS", () => {
+  test("offers Hot-seat, Host remote match and Back in that order", () => {
+    expect(PLAY_MENU_ITEMS).toEqual([
+      { label: "Hot-seat", screen: "match" },
+      { label: "Host remote match", screen: "host" },
+      { label: "Back", screen: "mainMenu" },
     ]);
   });
 });

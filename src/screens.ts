@@ -3,17 +3,22 @@
 
 import { COLOURS } from "./colours";
 import type { PlanetCountRange } from "./core/match";
-import { backTargetFor, hashFor, moveFocus, resolveHash, type FocusStep, type MenuItem, type Screen } from "./navigation";
+import { backTargetFor, hashFor, moveFocus, resolveHash, type FocusStep, type MenuItem, type Route, type Screen } from "./navigation";
 import { scrambleLabel } from "./scramble";
 import { SETTING_KEYS, SETTING_RULES, withRangeEnd, type AnySettingRule, type RangeEnd, type SettingChoice, type SettingKey, type Settings } from "./settings";
 
 export interface ScreenElements {
   overlay: HTMLElement;
   mainMenu: HTMLElement;
+  playMenu: HTMLElement;
   settings: HTMLElement;
   settingsTabs: HTMLElement;
   credits: HTMLElement;
   creditsBackButton: HTMLButtonElement;
+  host: HTMLElement;
+  hostBackButton: HTMLButtonElement;
+  guest: HTMLElement;
+  guestBackButton: HTMLButtonElement;
   keyHint: HTMLElement;
   canvas: HTMLCanvasElement;
 }
@@ -131,17 +136,29 @@ export function showScreen(elements: ScreenElements, screen: Screen): void {
   resetScrambles(elements.overlay);
   elements.overlay.hidden = screen === "match";
   elements.mainMenu.hidden = screen !== "mainMenu";
+  elements.playMenu.hidden = screen !== "playMenu";
   elements.settings.hidden = screen !== "settings";
   elements.credits.hidden = screen !== "credits";
+  elements.host.hidden = screen !== "host";
+  elements.guest.hidden = screen !== "guest";
   elements.keyHint.style.visibility = screen === "match" ? "visible" : "hidden";
   if (screen === "mainMenu") {
     elements.mainMenu.querySelector("button")!.focus();
+  }
+  if (screen === "playMenu") {
+    elements.playMenu.querySelector("button")!.focus();
   }
   if (screen === "settings") {
     elements.settingsTabs.querySelector<HTMLButtonElement>('[aria-selected="true"]')!.focus();
   }
   if (screen === "credits") {
     elements.creditsBackButton.focus();
+  }
+  if (screen === "host") {
+    elements.hostBackButton.focus();
+  }
+  if (screen === "guest") {
+    elements.guestBackButton.focus();
   }
   if (screen === "match") {
     elements.canvas.focus();
@@ -312,14 +329,14 @@ export function navigateBack(target: Window, screen: Screen): void {
   }
 }
 
-export function bindScreenRoutes(target: Window, enterScreen: (screen: Screen) => void): void {
+export function bindScreenRoutes(target: Window, enterRoute: (route: Route) => void): void {
   const applyHash = () => {
     const route = resolveHash(target.location.hash);
     if (route.replace) {
       const canonicalHash = hashFor(route.screen);
       target.history.replaceState(null, "", canonicalHash);
     }
-    enterScreen(route.screen);
+    enterRoute(route);
   };
   target.addEventListener("hashchange", applyHash);
   applyHash();

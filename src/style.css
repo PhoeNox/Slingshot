@@ -353,6 +353,106 @@ body {
   box-shadow: var(--phosphor-glow-strong);
 }
 
+.remote-screen {
+  gap: 6cqh;
+}
+
+.remote-screen h1 {
+  font-size: 5cqh;
+}
+
+.remote-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4cqh;
+  width: 80cqw;
+  font-size: max(14px, 3cqh);
+  text-shadow: var(--phosphor-glow);
+}
+
+.remote-body p {
+  margin: 0;
+}
+
+.remote-note,
+.code-instruction {
+  color: var(--instrument-dim);
+  font-size: 0.85em;
+  text-shadow: none;
+}
+
+.code-field {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.6em;
+  width: 100%;
+}
+
+.code-field[hidden] {
+  display: none;
+}
+
+.code-field fieldset {
+  display: contents;
+}
+
+.code-field label {
+  letter-spacing: 0.1em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.code-row {
+  display: flex;
+  gap: 1em;
+}
+
+.code-row input {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 0.3em 0.6em;
+  border: 1px solid color-mix(in srgb, var(--instrument-dim) 70%, transparent);
+  background: color-mix(in srgb, var(--void) 70%, transparent);
+  color: var(--phosphor);
+  font: normal 0.7em/1.4 var(--title-font);
+  text-shadow: inherit;
+}
+
+.code-row input:focus {
+  outline: 1px solid var(--phosphor);
+  outline-offset: 3px;
+  border-color: var(--phosphor);
+}
+
+.code-row input:disabled {
+  color: var(--instrument-dim);
+}
+
+.code-button {
+  padding: 0.3em 1em;
+  font-size: 0.8em;
+  letter-spacing: 0.1em;
+  text-shadow: var(--phosphor-glow);
+}
+
+.code-button:disabled {
+  color: var(--instrument-dim);
+  cursor: default;
+}
+
+.remote-status {
+  min-height: 1.4em;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.remote-status[data-failed] {
+  color: var(--lock);
+}
+
 .menu {
   display: flex;
   flex-direction: column;
@@ -361,7 +461,8 @@ body {
 }
 
 .menu button,
-.hint-button {
+.hint-button,
+.code-button {
   position: relative;
   border: 1px solid color-mix(in srgb, var(--instrument-dim) 70%, transparent);
   background: color-mix(in srgb, var(--void) 70%, transparent);
@@ -381,7 +482,8 @@ body {
 }
 
 .menu button::before,
-.hint-button::before {
+.hint-button::before,
+.code-button::before {
   content: "";
   position: absolute;
   inset: var(--bracket-travel);
@@ -406,7 +508,9 @@ body {
 
 .menu button:focus,
 .hint-button:hover,
-.hint-button:focus-visible {
+.hint-button:focus-visible,
+.code-button:hover,
+.code-button:focus-visible {
   outline: none;
   border-color: var(--phosphor);
   text-shadow: var(--phosphor-glow-strong);
@@ -414,7 +518,9 @@ body {
 
 .menu button:focus::before,
 .hint-button:hover::before,
-.hint-button:focus-visible::before {
+.hint-button:focus-visible::before,
+.code-button:hover::before,
+.code-button:focus-visible::before {
   inset: var(--bracket-rest);
   opacity: 1;
 }
@@ -433,7 +539,8 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .menu button::before,
-  .hint-button::before {
+  .hint-button::before,
+  .code-button::before {
     inset: var(--bracket-rest);
     transition: none;
   }

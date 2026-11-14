@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-export type Screen = "mainMenu" | "match" | "settings" | "credits" | "host" | "guest";
+export type Screen = "mainMenu" | "playMenu" | "match" | "settings" | "credits" | "host" | "guest";
 
 export type FixedRouteScreen = Exclude<Screen, "guest">;
 
@@ -16,10 +16,11 @@ export interface MenuItem {
   screen: FixedRouteScreen;
 }
 
-const FIXED_ROUTE_SCREENS: readonly FixedRouteScreen[] = ["mainMenu", "match", "settings", "credits", "host"];
+const FIXED_ROUTE_SCREENS: readonly FixedRouteScreen[] = ["mainMenu", "playMenu", "match", "settings", "credits", "host"];
 
 const SCREEN_HASHES: Record<FixedRouteScreen, string> = {
   mainMenu: "#/",
+  playMenu: "#/play-menu",
   match: "#/play",
   settings: "#/settings",
   credits: "#/credits",
@@ -28,10 +29,11 @@ const SCREEN_HASHES: Record<FixedRouteScreen, string> = {
 
 const INVITATION_HASH_PREFIX = "#/join/";
 
-const ATTRACT_PLAYING_SCREENS: ReadonlySet<Screen> = new Set(["mainMenu", "settings"]);
+const ATTRACT_PLAYING_SCREENS: ReadonlySet<Screen> = new Set(["mainMenu", "playMenu", "settings"]);
 
 const BACK_TARGETS: Record<Screen, FixedRouteScreen | undefined> = {
   mainMenu: undefined,
+  playMenu: "mainMenu",
   match: "mainMenu",
   settings: "mainMenu",
   credits: "mainMenu",
@@ -40,9 +42,15 @@ const BACK_TARGETS: Record<Screen, FixedRouteScreen | undefined> = {
 };
 
 export const MAIN_MENU_ITEMS: readonly MenuItem[] = [
-  { label: "Play", screen: "match" },
+  { label: "Play", screen: "playMenu" },
   { label: "Settings", screen: "settings" },
   { label: "Credits", screen: "credits" },
+];
+
+export const PLAY_MENU_ITEMS: readonly MenuItem[] = [
+  { label: "Hot-seat", screen: "match" },
+  { label: "Host remote match", screen: "host" },
+  { label: "Back", screen: "mainMenu" },
 ];
 
 export function resolveHash(hash: string): Route {

@@ -20,6 +20,10 @@
           </div>
           <nav class="menu" aria-label="Main menu"></nav>
         </section>
+        <section id="play-menu" class="overlay-screen" hidden>
+          <h1>Play</h1>
+          <nav class="menu" aria-label="Play"></nav>
+        </section>
         <section id="settings" class="overlay-screen" hidden>
           <h1>Settings</h1>
           <div class="settings-body">
@@ -108,6 +112,50 @@
           </div>
           <nav class="menu" aria-label="Credits">
             <button id="credits-back-button" type="button">Back</button>
+          </nav>
+        </section>
+        <section id="host" class="overlay-screen remote-screen" hidden>
+          <h1>Host remote match</h1>
+          <div class="remote-body">
+            <p class="remote-note">Both players see each other's IP address.</p>
+            <div id="invitation-field" class="code-field" hidden>
+              <label for="invitation-link">Invitation link</label>
+              <div class="code-row">
+                <input id="invitation-link" type="text" readonly spellcheck="false" />
+                <button id="invitation-copy-button" class="code-button" type="button">Copy</button>
+              </div>
+            </div>
+            <form id="reply-form" class="code-field" hidden>
+              <fieldset>
+                <label for="reply-code-input">Reply code</label>
+                <div class="code-row">
+                  <input id="reply-code-input" type="text" required autocomplete="off" spellcheck="false" />
+                  <button class="code-button" type="submit">Connect</button>
+                </div>
+              </fieldset>
+            </form>
+            <p id="host-status" class="remote-status" role="status"></p>
+          </div>
+          <nav class="menu" aria-label="Host remote match">
+            <button id="host-back-button" type="button">Back</button>
+          </nav>
+        </section>
+        <section id="guest" class="overlay-screen remote-screen" hidden>
+          <h1>Join remote match</h1>
+          <div class="remote-body">
+            <p class="remote-note">Both players see each other's IP address.</p>
+            <div id="reply-code-field" class="code-field" hidden>
+              <label for="reply-code">Reply code</label>
+              <div class="code-row">
+                <input id="reply-code" type="text" readonly spellcheck="false" />
+                <button id="reply-code-copy-button" class="code-button" type="button">Copy</button>
+              </div>
+              <p class="code-instruction">Send this back to the host.</p>
+            </div>
+            <p id="guest-status" class="remote-status" role="status"></p>
+          </div>
+          <nav class="menu" aria-label="Join remote match">
+            <button id="guest-back-button" type="button">Back</button>
           </nav>
         </section>
       </div>
