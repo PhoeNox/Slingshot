@@ -34,7 +34,8 @@ import {
 import { nextRoundShooter, powerPenaltyFor, roundResultFor, type RoundResult } from "./scoring";
 import { NO_ZOOM, nextZoom, type Zoom } from "./zoom";
 
-export type { PlanetCountRange, RoundLayout } from "./round";
+export type { Point, ShotRecord } from "./flight";
+export type { Aim, PlanetCountRange, RoundLayout } from "./round";
 export type { RoundOutcome, RoundResult } from "./scoring";
 export type { Zoom } from "./zoom";
 

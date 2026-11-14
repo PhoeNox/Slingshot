@@ -15,6 +15,7 @@ export type RangeEnd = keyof PlanetCountRange;
 export interface SettingRule<T, Kind extends SettingKind> {
   kind: Kind;
   defaultValue: T;
+  accepts(stored: unknown): boolean;
   parse(stored: unknown): T;
 }
 
@@ -84,8 +85,13 @@ function toggleSetting<Kind extends SettingKind>(kind: Kind, defaultValue: boole
     kind,
     control: "toggle",
     defaultValue,
-    parse: (stored) => (typeof stored === "boolean" ? stored : defaultValue),
+    accepts: isBoolean,
+    parse: (stored) => (isBoolean(stored) ? stored : defaultValue),
   };
+}
+
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === "boolean";
 }
 
 function choiceSetting<T, Kind extends SettingKind>(
@@ -93,13 +99,15 @@ function choiceSetting<T, Kind extends SettingKind>(
   choices: readonly SettingChoice<T>[],
   defaultValue: T,
 ): ChoiceSettingRule<T, Kind> {
+  const choiceFor = (stored: unknown) => choices.find((candidate) => storedFormOf(candidate.value) === stored);
   return {
     kind,
     control: "choice",
     defaultValue,
     choices,
+    accepts: (stored) => choiceFor(stored) !== undefined,
     parse: (stored) => {
-      const choice = choices.find((candidate) => storedFormOf(candidate.value) === stored);
+      const choice = choiceFor(stored);
       return choice === undefined ? defaultValue : choice.value;
     },
   };
@@ -111,21 +119,20 @@ function rangeSetting<Kind extends SettingKind>(
   defaultValue: Readonly<PlanetCountRange>,
 ): RangeSettingRule<Kind> {
   const isChoice = (value: unknown): value is number => choices.some((choice) => choice.value === value);
+  const accepts = (stored: unknown): stored is Readonly<PlanetCountRange> => {
+    if (!isRecord(stored)) {
+      return false;
+    }
+    const { min, max } = stored;
+    return isChoice(min) && isChoice(max) && min <= max;
+  };
   return {
     kind,
     control: "range",
     defaultValue,
     choices,
-    parse: (stored) => {
-      if (!isRecord(stored)) {
-        return defaultValue;
-      }
-      const { min, max } = stored;
-      if (!isChoice(min) || !isChoice(max) || min > max) {
-        return defaultValue;
-      }
-      return { min, max };
-    },
+    accepts,
+    parse: (stored) => (accepts(stored) ? { min: stored.min, max: stored.max } : defaultValue),
   };
 }
 
@@ -184,4 +191,17 @@ export function matchRulesFor(settings: Readonly<Settings>): MatchRules {
   const entries = MATCH_RULE_KEYS.map((key) => [key, settings[key]]);
   const matchRules = Object.fromEntries(entries) as Pick<Settings, MatchRuleKey>;
   return matchRules;
+}
+
+export function storedMatchRulesOf(rules: Readonly<MatchRules>): Record<string, unknown> {
+  const entries = MATCH_RULE_KEYS.map((key) => [key, storedFormOf(rules[key])]);
+  return Object.fromEntries(entries);
+}
+
+export function parseStoredMatchRules(stored: unknown): MatchRules | undefined {
+  if (!isRecord(stored) || !MATCH_RULE_KEYS.every((key) => SETTING_RULES[key].accepts(stored[key]))) {
+    return undefined;
+  }
+  const entries = MATCH_RULE_KEYS.map((key) => [key, SETTING_RULES[key].parse(stored[key])]);
+  return Object.fromEntries(entries) as MatchRules;
 }
