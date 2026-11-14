@@ -35,7 +35,7 @@ import { nextRoundShooter, powerPenaltyFor, roundResultFor, type RoundResult } f
 import { NO_ZOOM, nextZoom, type Zoom } from "./zoom";
 
 export type { Point, ShotRecord } from "./flight";
-export type { Aim, PlanetCountRange, RoundLayout } from "./round";
+export type { Aim, PlanetCountRange, RoundLayout, Side } from "./round";
 export type { RoundOutcome, RoundResult } from "./scoring";
 export type { Zoom } from "./zoom";
 
@@ -263,18 +263,22 @@ export function adjustAim(match: Match, delta: AimDelta): void {
   aim.power = Math.min(Math.max(aim.power + delta.power, 0), MAX_POWER);
 }
 
-export function fire(match: Match): void {
+export function fire(match: Match): ShotRecord | undefined {
   if (match.phase.kind === "roundOver") {
     startNextRound(match);
-  } else if (match.phase.kind === "aiming") {
-    launchShot(match);
+    return undefined;
   }
+  if (match.phase.kind === "aiming") {
+    return launchShot(match);
+  }
+  return undefined;
 }
 
-function launchShot(match: Match): void {
+function launchShot(match: Match): ShotRecord {
   const side = match.activePlayer;
   const shot = shotRecordFor(match.ships[side], BARREL_DISTANCE[side]);
   launchShotRecord(match, shot);
+  return shot;
 }
 
 function launchShotRecord(match: Match, shot: Readonly<ShotRecord>): void {
@@ -313,14 +317,20 @@ function expectedShotRecord(match: Readonly<Match>, aim: Readonly<Aim>): ShotRec
 }
 
 function nextShooterShip(match: Readonly<Match>): ShooterShip {
+  const side = nextShooter(match);
   if (match.phase.kind !== "roundOver") {
-    const side = match.activePlayer;
     return { side, ship: match.ships[side] };
   }
-  const side = nextRoundShooter(match.scores, match.activePlayer);
   const rngCopy = { ...match.rng };
   const layout = createRoundLayout(rngCopy, match.rules.planetCount);
   return { side, ship: layout.ships[side] };
+}
+
+export function nextShooter(match: Readonly<Match>): Side {
+  if (match.phase.kind === "roundOver") {
+    return nextRoundShooter(match.scores, match.activePlayer);
+  }
+  return match.activePlayer;
 }
 
 export function previewShot(match: Readonly<Match>, aim: Readonly<Aim>, stepLimit: number): ShotPreview {

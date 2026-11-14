@@ -42,6 +42,7 @@ describe("backTargetFor", () => {
   test.each<[Screen, Screen | undefined]>([
     ["playMenu", "mainMenu"],
     ["match", "mainMenu"],
+    ["remoteMatch", "mainMenu"],
     ["settings", "mainMenu"],
     ["credits", "mainMenu"],
     ["host", "mainMenu"],

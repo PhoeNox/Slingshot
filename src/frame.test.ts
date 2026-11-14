@@ -24,6 +24,7 @@ import { NO_DEBRIS, type Particle } from "./debris";
 import {
   describeBackdropFrame,
   describeFrame,
+  describeRemoteNotice,
   type BloomItem,
   type DisplaySettings,
   type DotItem,
@@ -99,6 +100,10 @@ function frameOf(match: Match, display = CONTOURS_SHOWN): FrameItem[] {
 
 function frameOfView(view: MatchView): FrameItem[] {
   return flatten(describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS, "match"));
+}
+
+function remoteFrameOfView(view: MatchView, localSide: Side): FrameItem[] {
+  return flatten(describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS, "match", localSide));
 }
 
 function attractFrameOf(match: Match, display = CONTOURS_SHOWN): FrameItem[] {
@@ -995,6 +1000,66 @@ describe("round-over message", () => {
     const frame = roundOverFrameOf({ ...HIT, scoreChange: 0 });
 
     expect(textsOf(frame)).toContain("0 added to score");
+  });
+});
+
+describe("remote match HUD", () => {
+  test("names the local player You and the other Opponent", () => {
+    const view = matchView(emptyMatch(16));
+
+    const texts = textsOf(remoteFrameOfView(view, "right"));
+
+    expect(texts).toContain("Opponent  --  0");
+    expect(texts).toContain("0  --  You");
+  });
+
+  test("tells whose turn it is while aiming, in the active player's colour", () => {
+    const view = matchView(emptyMatch(16));
+    const opponent: Side = view.activePlayer === "left" ? "right" : "left";
+
+    const localTurn = textItemOf(remoteFrameOfView(view, view.activePlayer), (text) => text === "Your turn");
+    const opponentTurn = textItemOf(remoteFrameOfView(view, opponent), (text) => text === "Opponent's turn");
+
+    expect(localTurn).toMatchObject({ x: 399, y: 594, align: "center", colour: PLAYER_COLOURS[view.activePlayer] });
+    expect(opponentTurn.colour).toBe(PLAYER_COLOURS[view.activePlayer]);
+  });
+
+  test("shows no turn text in a hot-seat match", () => {
+    const texts = textsOf(frameOf(emptyMatch(16)));
+
+    expect(texts).not.toContain("Your turn");
+    expect(texts).not.toContain("Opponent's turn");
+  });
+
+  test("round-over titles speak from the local player's view", () => {
+    const match = emptyMatch(30);
+    hitOpponent(match);
+    const view = (result: RoundResult) => ({ ...matchView(match), phase: { kind: "roundOver", result, stepsSinceRoundOver: 10 } as RoundOverView });
+
+    expect(textsOf(remoteFrameOfView(view(HIT), "left"))).toContain("You hit opponent");
+    expect(textsOf(remoteFrameOfView(view(HIT), "right"))).toContain("Opponent hit you");
+    expect(textsOf(remoteFrameOfView(view(SELF_HIT), "right"))).toContain("You hit your own ship");
+    expect(textsOf(remoteFrameOfView(view(SELF_HIT), "left"))).toContain("Opponent hit their own ship");
+  });
+});
+
+describe("remote notice", () => {
+  test("shows the reason in a glass panel with the way back", () => {
+    const frame = flatten(describeRemoteNotice("outOfSync"));
+
+    expect(frame.filter((item) => item.kind === "fillRect")).toEqual([
+      expect.objectContaining({ rect: { left: 174, top: 244, width: 450, height: 110 } }),
+    ]);
+    expect(textItemOf(frame, (text) => text === "Out of sync")).toMatchObject({ font: "title", x: 224, y: 28 });
+    expect(textsOf(frame)).toContain("Returning to the main menu");
+  });
+
+  test.each([
+    ["opponentLeft", "Opponent left"],
+    ["versionMismatch", "Different game version, reload both"],
+    ["awaitingHost", "Waiting for the host…"],
+  ] as const)("titles %s as %s", (notice, title) => {
+    expect(textsOf(flatten(describeRemoteNotice(notice)))).toContain(title);
   });
 });
 

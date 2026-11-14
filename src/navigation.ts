@@ -1,9 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-export type Screen = "mainMenu" | "playMenu" | "match" | "settings" | "credits" | "host" | "guest";
+export type Screen = "mainMenu" | "playMenu" | "match" | "remoteMatch" | "settings" | "credits" | "host" | "guest";
 
-export type FixedRouteScreen = Exclude<Screen, "guest">;
+export type RouteScreen = Exclude<Screen, "remoteMatch">;
+
+export type FixedRouteScreen = Exclude<RouteScreen, "guest">;
 
 export type Route =
   | { screen: FixedRouteScreen; replace: boolean }
@@ -35,6 +37,7 @@ const BACK_TARGETS: Record<Screen, FixedRouteScreen | undefined> = {
   mainMenu: undefined,
   playMenu: "mainMenu",
   match: "mainMenu",
+  remoteMatch: "mainMenu",
   settings: "mainMenu",
   credits: "mainMenu",
   host: "mainMenu",
@@ -75,6 +78,10 @@ export function invitationHash(offerCode: string): string {
 
 export function backTargetFor(screen: Screen): FixedRouteScreen | undefined {
   return BACK_TARGETS[screen];
+}
+
+export function showsMatch(screen: Screen): boolean {
+  return screen === "match" || screen === "remoteMatch";
 }
 
 export function playsAttractMode(screen: Screen, reducedMotion: boolean): boolean {

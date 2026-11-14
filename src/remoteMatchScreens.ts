@@ -6,6 +6,8 @@ import { hostPeerConnection, joinPeerConnection, PeerConnectionError, type HostI
 
 export type RemoteRole = "host" | "guest";
 
+export type StartRemoteMatch = (role: RemoteRole, link: PeerLink) => void;
+
 export interface HostScreenElements {
   invitationField: HTMLElement;
   invitationLink: HTMLInputElement;
@@ -70,6 +72,7 @@ export function bindRemoteMatchScreens(
   target: Window,
   host: HostScreenElements,
   guest: GuestScreenElements,
+  startRemoteMatch: StartRemoteMatch,
 ): (route: Route) => void {
   bindCopyButton(target, host.invitationCopyButton, host.invitationLink);
   bindCopyButton(target, guest.replyCodeCopyButton, guest.replyCode);
@@ -80,10 +83,10 @@ export function bindRemoteMatchScreens(
     }
     visit = startVisit();
     if (route.screen === "host") {
-      hostRemoteMatch(target, host, visit);
+      hostRemoteMatch(target, host, visit, startRemoteMatch);
     }
     if (route.screen === "guest") {
-      joinRemoteMatch(guest, visit, route.offerCode);
+      joinRemoteMatch(guest, visit, route.offerCode, startRemoteMatch);
     }
   };
 }
@@ -102,6 +105,11 @@ function isActive(visit: RemoteVisit): boolean {
   return !visit.listeners.signal.aborted;
 }
 
+function handOver(visit: RemoteVisit, role: RemoteRole, link: PeerLink, startRemoteMatch: StartRemoteMatch): void {
+  visit.connection = undefined;
+  startRemoteMatch(role, link);
+}
+
 function adopt(visit: RemoteVisit, connection: Closable): boolean {
   if (!isActive(visit)) {
     connection.close();
@@ -111,7 +119,12 @@ function adopt(visit: RemoteVisit, connection: Closable): boolean {
   return true;
 }
 
-async function hostRemoteMatch(target: Window, elements: HostScreenElements, visit: RemoteVisit): Promise<void> {
+async function hostRemoteMatch(
+  target: Window,
+  elements: HostScreenElements,
+  visit: RemoteVisit,
+  startRemoteMatch: StartRemoteMatch,
+): Promise<void> {
   resetHostScreen(elements);
   showStatus(elements.status, "Preparing invitation…", false);
   try {
@@ -122,7 +135,7 @@ async function hostRemoteMatch(target: Window, elements: HostScreenElements, vis
     showInvitation(target, elements, invitation.offerCode);
     const submitReply = (event: SubmitEvent) => {
       event.preventDefault();
-      acceptReplyCode(elements, visit, invitation);
+      acceptReplyCode(elements, visit, invitation, startRemoteMatch);
     };
     elements.replyForm.addEventListener("submit", submitReply, { signal: visit.listeners.signal });
   } catch (error) {
@@ -130,7 +143,12 @@ async function hostRemoteMatch(target: Window, elements: HostScreenElements, vis
   }
 }
 
-async function acceptReplyCode(elements: HostScreenElements, visit: RemoteVisit, invitation: HostInvitation): Promise<void> {
+async function acceptReplyCode(
+  elements: HostScreenElements,
+  visit: RemoteVisit,
+  invitation: HostInvitation,
+  startRemoteMatch: StartRemoteMatch,
+): Promise<void> {
   const replyCode = elements.replyCodeInput.value.trim();
   elements.replyFields.disabled = true;
   showStatus(elements.status, "Connecting…", false);
@@ -140,7 +158,7 @@ async function acceptReplyCode(elements: HostScreenElements, visit: RemoteVisit,
       return;
     }
     elements.replyForm.hidden = true;
-    showConnected(elements.status, visit, link);
+    handOver(visit, "host", link, startRemoteMatch);
   } catch (error) {
     offerReplyRetry(elements, error);
     reportFailure(elements.status, visit, "host", error);
@@ -156,7 +174,12 @@ function offerReplyRetry(elements: HostScreenElements, error: unknown): void {
   }
 }
 
-async function joinRemoteMatch(elements: GuestScreenElements, visit: RemoteVisit, offerCode: string): Promise<void> {
+async function joinRemoteMatch(
+  elements: GuestScreenElements,
+  visit: RemoteVisit,
+  offerCode: string,
+  startRemoteMatch: StartRemoteMatch,
+): Promise<void> {
   elements.replyCodeField.hidden = true;
   elements.replyCodeCopyButton.textContent = COPY_LABEL;
   showStatus(elements.status, "Preparing reply code…", false);
@@ -171,7 +194,7 @@ async function joinRemoteMatch(elements: GuestScreenElements, visit: RemoteVisit
       return;
     }
     elements.replyCodeField.hidden = true;
-    showConnected(elements.status, visit, link);
+    handOver(visit, "guest", link, startRemoteMatch);
   } catch (error) {
     elements.replyCodeField.hidden = true;
     reportFailure(elements.status, visit, "guest", error);
@@ -200,15 +223,6 @@ function showReplyCode(elements: GuestScreenElements, replyCode: string): void {
   elements.replyCodeField.hidden = false;
   elements.replyCodeCopyButton.focus();
   showStatus(elements.status, "Waiting for the host to connect…", false);
-}
-
-function showConnected(status: HTMLElement, visit: RemoteVisit, link: PeerLink): void {
-  showStatus(status, "Connected", false);
-  link.closed.then(() => {
-    if (isActive(visit)) {
-      showStatus(status, "Connection closed", true);
-    }
-  });
 }
 
 function reportFailure(status: HTMLElement, visit: RemoteVisit, role: RemoteRole, error: unknown): void {

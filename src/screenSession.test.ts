@@ -16,6 +16,7 @@ import {
 } from "./core/match";
 import { burstDebris, BURST_COUNT } from "./debris";
 import { describeFrame, type DisplaySettings } from "./frame";
+import type { RouteScreen } from "./navigation";
 import {
   aimMatch,
   createScreenSession,
@@ -25,7 +26,6 @@ import {
   isMatchActive,
   stepScreenSession,
   type ScreenSession,
-  type ScreenState,
 } from "./screenSession";
 import { NO_SHAKE, screenShakeOffset } from "./screenShake";
 
@@ -46,7 +46,7 @@ function roundOverMatch(): Match {
   return match;
 }
 
-function sessionOn(...screens: ScreenState["screen"][]): ScreenSession {
+function sessionOn(...screens: RouteScreen[]): ScreenSession {
   const session = createScreenSession(1, centredRandom);
   screens.forEach((screen, index) => enterScreen(session, screen, index + 1, DEFAULT_MATCH_RULES));
   return session;
@@ -60,7 +60,7 @@ function shownMatch(session: ScreenSession): Match {
 }
 
 function shownAttract(session: ScreenSession): AttractMode {
-  if (session.state.screen === "match") {
+  if (!("attract" in session.state)) {
     throw new Error("expected attract mode");
   }
   return session.state.attract;

@@ -3,7 +3,7 @@
 
 import { COLOURS } from "./colours";
 import type { PlanetCountRange } from "./core/match";
-import { backTargetFor, hashFor, moveFocus, resolveHash, type FocusStep, type MenuItem, type Route, type Screen } from "./navigation";
+import { backTargetFor, hashFor, moveFocus, resolveHash, showsMatch, type FocusStep, type MenuItem, type Route, type Screen } from "./navigation";
 import { scrambleLabel } from "./scramble";
 import { SETTING_KEYS, SETTING_RULES, withRangeEnd, type AnySettingRule, type RangeEnd, type SettingChoice, type SettingKey, type Settings } from "./settings";
 
@@ -134,14 +134,15 @@ function resetScrambles(overlay: HTMLElement): void {
 
 export function showScreen(elements: ScreenElements, screen: Screen): void {
   resetScrambles(elements.overlay);
-  elements.overlay.hidden = screen === "match";
+  const matchShown = showsMatch(screen);
+  elements.overlay.hidden = matchShown;
   elements.mainMenu.hidden = screen !== "mainMenu";
   elements.playMenu.hidden = screen !== "playMenu";
   elements.settings.hidden = screen !== "settings";
   elements.credits.hidden = screen !== "credits";
   elements.host.hidden = screen !== "host";
   elements.guest.hidden = screen !== "guest";
-  elements.keyHint.style.visibility = screen === "match" ? "visible" : "hidden";
+  elements.keyHint.style.visibility = matchShown ? "visible" : "hidden";
   if (screen === "mainMenu") {
     elements.mainMenu.querySelector("button")!.focus();
   }
@@ -160,7 +161,7 @@ export function showScreen(elements: ScreenElements, screen: Screen): void {
   if (screen === "guest") {
     elements.guestBackButton.focus();
   }
-  if (screen === "match") {
+  if (matchShown) {
     elements.canvas.focus();
   }
 }

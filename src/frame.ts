@@ -13,6 +13,7 @@ import { PLAYING_AREA_HEIGHT, PLAYING_AREA_WIDTH } from "./core/playingArea";
 import type { Aim, Planet, Ship, Side } from "./core/round";
 import { NO_ZOOM, type Zoom } from "./core/zoom";
 import { particleAlpha, type Particle, type ParticleSize } from "./debris";
+import type { RemoteNotice } from "./remoteMatch";
 
 export interface Rect {
   left: number;
@@ -147,6 +148,13 @@ interface BreakdownRow {
   top: number;
 }
 
+interface PlayerLabel {
+  name: string;
+  possessive: string;
+}
+
+type PlayerLabels = Record<Side, PlayerLabel>;
+
 interface RoundOverTextTops {
   title: number;
   scoreChange: number;
@@ -155,7 +163,14 @@ interface RoundOverTextTops {
 
 const SIDES: readonly Side[] = ["left", "right"];
 
-const PLAYER_NAMES: Record<Side, string> = { left: "Player 1", right: "Player 2" };
+const HOT_SEAT_LABELS: PlayerLabels = {
+  left: { name: "Player 1", possessive: "their" },
+  right: { name: "Player 2", possessive: "their" },
+};
+const LOCAL_PLAYER_LABEL: PlayerLabel = { name: "You", possessive: "your" };
+const OPPONENT_LABEL: PlayerLabel = { name: "Opponent", possessive: "their" };
+const LOCAL_TURN_TEXT = "Your turn";
+const OPPONENT_TURN_TEXT = "Opponent's turn";
 const PLAYER_COLOURS: Record<Side, string> = { left: COLOURS.leftPlayer, right: COLOURS.rightPlayer };
 const SOLID: number[] = [];
 
@@ -210,6 +225,21 @@ const MESSAGE_SCORE_CHANGE_TOP = 100;
 const MESSAGE_PROMPT_TOP = 140;
 const MESSAGE_PROMPT_TEXT = "Press Space or Enter for the next round";
 
+const NOTICE_HEIGHT = 110;
+const NOTICE_DETAIL_TOP = 65;
+const NOTICE_TITLES: Record<RemoteNotice, string> = {
+  awaitingHost: "Waiting for the host…",
+  opponentLeft: "Opponent left",
+  outOfSync: "Out of sync",
+  versionMismatch: "Different game version, reload both",
+};
+const NOTICE_DETAILS: Record<RemoteNotice, string> = {
+  awaitingHost: "",
+  opponentLeft: "Returning to the main menu",
+  outOfSync: "Returning to the main menu",
+  versionMismatch: "Returning to the main menu",
+};
+
 const ZOOM_OUTLINE_ALPHA = 0.5;
 
 const ATTRACT_DIM_COLOUR = "rgba(4, 8, 21, 0.55)";
@@ -226,20 +256,65 @@ export function describeFrame(
   display: Readonly<DisplaySettings>,
   debris: readonly Readonly<Particle>[],
   presentation: Presentation,
+  localSide?: Side,
 ): FrameItem[] {
   const style = PRESENTATION_STYLES[presentation];
   const scene = sceneItems(view, display, debris, style);
-  const hud = style.hud ? hudItems(view) : [];
+  const hud = style.hud ? hudItems(view, localSide) : [];
   return [...scene, ...hud];
 }
 
-function hudItems(view: MatchView): FrameItem[] {
+function hudItems(view: MatchView, localSide: Side | undefined): FrameItem[] {
+  const labels = playerLabels(localSide);
   const border = bounceBorderItems(view.rules.bounce);
   const readouts = phaseReadoutItems(view);
-  const message = roundOverMessageItems(view.phase);
-  const scores = scoreItems(view.scores);
+  const turn = turnItems(view, localSide);
+  const message = roundOverMessageItems(view.phase, labels);
+  const scores = scoreItems(view.scores, labels);
   const banner = roundBannerItems(view.roundNumber, view.roundStepCount);
-  return [...border, ...readouts, ...message, ...scores, ...banner];
+  return [...border, ...readouts, ...turn, ...message, ...scores, ...banner];
+}
+
+function playerLabels(localSide: Side | undefined): PlayerLabels {
+  if (localSide === undefined) {
+    return HOT_SEAT_LABELS;
+  }
+  return localSide === "left"
+    ? { left: LOCAL_PLAYER_LABEL, right: OPPONENT_LABEL }
+    : { left: OPPONENT_LABEL, right: LOCAL_PLAYER_LABEL };
+}
+
+function turnItems(view: MatchView, localSide: Side | undefined): TextItem[] {
+  if (localSide === undefined || view.phase.kind !== "aiming") {
+    return [];
+  }
+  const text = view.activePlayer === localSide ? LOCAL_TURN_TEXT : OPPONENT_TURN_TEXT;
+  const colour = PLAYER_COLOURS[view.activePlayer];
+  return [hudText(text, colour, SCREEN_CENTRE_X, TIMEOUT_INFO_BOTTOM, "center", "bottom")];
+}
+
+export function describeRemoteNotice(notice: RemoteNotice): FrameItem[] {
+  const box = noticeBox();
+  const panel = roundOverPanelItems(box);
+  const title = panelTitleItem(NOTICE_TITLES[notice], MESSAGE_TITLE_TOP);
+  const detail = hudText(NOTICE_DETAILS[notice], COLOURS.instrumentDim, MESSAGE_TEXT_CENTRE_X, NOTICE_DETAIL_TOP, "center", "top");
+  return [
+    ...panel,
+    {
+      kind: "group",
+      transform: { x: box.left, y: box.top, rotation: 0, scale: 1 },
+      items: [title, detail],
+    },
+  ];
+}
+
+function noticeBox(): Rect {
+  return {
+    left: SCREEN_CENTRE_X - MESSAGE_WIDTH / 2,
+    top: SCREEN_CENTRE_Y - Math.floor(NOTICE_HEIGHT / 2),
+    width: MESSAGE_WIDTH,
+    height: NOTICE_HEIGHT,
+  };
 }
 
 function bounceBorderItems(bounce: boolean): StrokeRectItem[] {
@@ -506,8 +581,8 @@ function missileItem(flyingMissile: Readonly<Missile>, size: number): ImageItem 
   return imageItem("missile", box, 1);
 }
 
-function scoreItems(matchScores: MatchView["scores"]): TextItem[] {
-  const texts = scoreTexts(matchScores);
+function scoreItems(matchScores: MatchView["scores"], labels: Readonly<PlayerLabels>): TextItem[] {
+  const texts = scoreTexts(matchScores, labels);
   return [
     hudText(texts.left, PLAYER_COLOURS.left, LEFT_SCORE_LEFT, HUD_TOP, "left", "top"),
     hudText(texts.right, PLAYER_COLOURS.right, RIGHT_SCORE_RIGHT, HUD_TOP, "right", "top"),
@@ -570,18 +645,19 @@ function bloomItems(ship: Readonly<Ship>, stepsSinceHit: number): BloomItem[] {
   ];
 }
 
-function roundOverMessageItems(phase: MatchView["phase"]): FrameItem[] {
+function roundOverMessageItems(phase: MatchView["phase"], labels: Readonly<PlayerLabels>): FrameItem[] {
   if (phase.kind !== "roundOver") {
     return [];
   }
-  return roundResultMessageItems(phase.result);
+  return roundResultMessageItems(phase.result, labels);
 }
 
-function roundResultMessageItems(result: Readonly<RoundResult>): FrameItem[] {
+function roundResultMessageItems(result: Readonly<RoundResult>, labels: Readonly<PlayerLabels>): FrameItem[] {
   const box = roundOverMessageBox(result.outcome);
   const panel = roundOverPanelItems(box);
   const tops = roundOverTextTops(result.outcome);
-  const title = roundOverTitleItem(result, tops.title);
+  const titleText = roundOverTitle(result, labels);
+  const title = panelTitleItem(titleText, tops.title);
   const scoreChange = scoreChangeText(result.scoreChange);
   const rows = scoreBreakdownRows(result);
   const rowTexts = rows.flatMap((row) => [
@@ -617,11 +693,10 @@ function roundOverPanelItems(box: Readonly<Rect>): FrameItem[] {
   ];
 }
 
-function roundOverTitleItem(result: Readonly<RoundResult>, top: number): TextItem {
-  const title = roundOverTitle(result);
+function panelTitleItem(text: string, top: number): TextItem {
   return {
     kind: "text",
-    text: title,
+    text,
     x: MESSAGE_TEXT_CENTRE_X,
     y: top,
     colour: COLOURS.phosphor,
@@ -720,10 +795,10 @@ function timeoutText(flightStepsLeft: number, timedOut: boolean): string {
   return timedOut ? "Shot timed out..." : `Timeout in ${flightStepsLeft}`;
 }
 
-function scoreTexts(scores: Readonly<Record<Side, number>>): Record<Side, string> {
+function scoreTexts(scores: Readonly<Record<Side, number>>, labels: Readonly<PlayerLabels>): Record<Side, string> {
   return {
-    left: `${PLAYER_NAMES.left}  --  ${scores.left}`,
-    right: `${scores.right}  --  ${PLAYER_NAMES.right}`,
+    left: `${labels.left.name}  --  ${scores.left}`,
+    right: `${scores.right}  --  ${labels.right.name}`,
   };
 }
 
@@ -746,11 +821,11 @@ function roundOverTextTops(outcome: RoundOutcome): RoundOverTextTops {
   };
 }
 
-function roundOverTitle(result: Readonly<RoundResult>): string {
-  const shooterName = PLAYER_NAMES[result.shooter];
+function roundOverTitle(result: Readonly<RoundResult>, labels: Readonly<PlayerLabels>): string {
+  const shooter = labels[result.shooter];
   return result.outcome === "hit"
-    ? `${shooterName} hit ${PLAYER_NAMES[result.hitShip].toLowerCase()}`
-    : `${shooterName} hit their own ship`;
+    ? `${shooter.name} hit ${labels[result.hitShip].name.toLowerCase()}`
+    : `${shooter.name} hit ${shooter.possessive} own ship`;
 }
 
 function scoreBreakdownRows(result: Readonly<RoundResult>): BreakdownRow[] {
