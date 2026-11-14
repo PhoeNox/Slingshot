@@ -15,14 +15,13 @@ import {
 } from "./core/match";
 import { BURST_COUNT } from "./debris";
 import { ATTRACT_VIEWER, describeFrame, HOT_SEAT_VIEWER, type DisplaySettings } from "./frame";
-import type { RouteScreen } from "./navigation";
 import {
   createScreenSession,
   describeScreenSessionFrame,
-  enterScreen,
   stepScreenSession,
   type ScreenSession,
 } from "./screenSession";
+import { enterScreen, type VisitlessScreen } from "./screenSession.fixtures";
 import { NO_SHAKE, screenShakeOffset } from "./screenShake";
 
 type ViewReached = (view: MatchView) => boolean;
@@ -31,11 +30,11 @@ const MAX_STEPS = 5000;
 const ANGLE_DELTAS = Array.from({ length: 36 }, (_, i) => i * 10);
 const POWER_DELTAS = [0, 50, 100, 150, 200];
 
-function sessionOn(...screens: RouteScreen[]): ScreenSession {
+function sessionOn(...screens: VisitlessScreen[]): ScreenSession {
   return sessionWith(centredRandom, ...screens);
 }
 
-function sessionWith(random: () => number, ...screens: RouteScreen[]): ScreenSession {
+function sessionWith(random: () => number, ...screens: VisitlessScreen[]): ScreenSession {
   const session = createScreenSession(1, random);
   screens.forEach((screen, index) => enterScreen(session, screen, index + 1, DEFAULT_MATCH_RULES));
   return session;

@@ -8,17 +8,49 @@ import { advanceDebris, type Particle } from "./debris";
 import { describeFrame, describeRemoteNotice, type DisplaySettings } from "./frame";
 import type { FrameItem } from "./frameItems";
 import type { RemoteNotice } from "./lockstep";
-import type { RouteScreen, Screen } from "./navigation";
+import type { Route, RouteScreen, Screen } from "./navigation";
 import type { PeerLink } from "./peerConnection";
 import { playAttractMode, playHotSeat, type PlayedMatch } from "./playedMatch";
 import { playRemoteMatch, startRemoteMatch, type RemoteMatch, type RemoteRole } from "./remoteMatch";
+import {
+  startGuestVisit,
+  startHostVisit,
+  type HostVisit,
+  type PeerConnectors,
+  type RemoteVisit,
+  type ShowVisitState,
+  type StartRemoteMatch,
+} from "./remoteVisit";
+import type { ReplyRelay } from "./replyRelay";
 import { NO_SHAKE, screenShakeOffset } from "./screenShake";
+import type { Invitation } from "./visitTransition";
+
+export type ScreenVisit = { role: "host"; visit: HostVisit } | { role: "guest"; visit: RemoteVisit };
 
 export interface ScreenSession {
   screen: Screen;
   played: PlayedMatch;
+  visit: ScreenVisit | undefined;
   debris: Particle[];
   random: () => number;
+}
+
+export interface RouteEntry {
+  route: Route;
+  seed: number;
+  matchRules: Readonly<MatchRules>;
+}
+
+export interface VisitScreens {
+  showHostState: ShowVisitState;
+  showGuestState: ShowVisitState;
+}
+
+export interface VisitPorts {
+  peers: PeerConnectors;
+  relay: ReplyRelay;
+  screens: VisitScreens;
+  showRemoteMatch: () => void;
 }
 
 export type ScreenSessionStep = "stay" | "mainMenu";
@@ -31,21 +63,19 @@ export interface ScreenSessionFrame {
 export function createScreenSession(seed: number, random: () => number): ScreenSession {
   const attract = createAttractMode(seed);
   const played = playAttractMode(attract, "mainMenu");
-  return { screen: "mainMenu", played, debris: [], random };
+  return { screen: "mainMenu", played, visit: undefined, debris: [], random };
 }
 
-export function enterScreen(
-  session: ScreenSession,
-  screen: RouteScreen,
-  seed: number,
-  matchRules: Readonly<MatchRules>,
-): void {
+export function enterRoute(session: ScreenSession, entry: Readonly<RouteEntry>, ports: VisitPorts): void {
+  const screen = entry.route.screen;
   const kept = keptPlayedMatch(session.played, screen);
   if (kept === undefined) {
     leavePlayedMatch(session);
   }
+  leaveVisit(session);
   session.screen = screen;
-  session.played = kept ?? newPlayedMatch(screen, seed, matchRules);
+  session.played = kept ?? newPlayedMatch(screen, entry.seed, entry.matchRules);
+  session.visit = startVisit(session, entry, ports);
 }
 
 function keptPlayedMatch(played: PlayedMatch, screen: RouteScreen): PlayedMatch | undefined {
@@ -61,6 +91,41 @@ function newPlayedMatch(screen: RouteScreen, seed: number, matchRules: Readonly<
   return playAttractMode(attract, screen);
 }
 
+function startVisit(session: ScreenSession, entry: Readonly<RouteEntry>, ports: VisitPorts): ScreenVisit | undefined {
+  const route = entry.route;
+  const handOver: StartRemoteMatch = (role, link) => handOverVisit(session, role, link, entry, ports);
+  if (route.screen === "host") {
+    const visit = startHostVisit(ports.peers.host, ports.relay, ports.screens.showHostState, handOver);
+    return { role: "host", visit };
+  }
+  if (route.screen === "guest") {
+    const invitation: Invitation = { offerCode: route.offerCode, roomSecret: route.roomSecret };
+    const visit = startGuestVisit(ports.peers.join, ports.relay, invitation, ports.screens.showGuestState, handOver);
+    return { role: "guest", visit };
+  }
+  return undefined;
+}
+
+function handOverVisit(
+  session: ScreenSession,
+  role: RemoteRole,
+  link: PeerLink,
+  entry: Readonly<RouteEntry>,
+  ports: VisitPorts,
+): void {
+  session.visit = undefined;
+  enterRemoteMatch(session, role, link, entry.seed, entry.matchRules);
+  ports.showRemoteMatch();
+}
+
+export function submitReplyCode(session: ScreenSession, replyCode: string): Promise<void> {
+  const visit = session.visit;
+  if (visit?.role !== "host") {
+    return Promise.resolve();
+  }
+  return visit.visit.submitReply(replyCode);
+}
+
 export function enterRemoteMatch(
   session: ScreenSession,
   role: RemoteRole,
@@ -69,6 +134,7 @@ export function enterRemoteMatch(
   matchRules: Readonly<MatchRules>,
 ): RemoteMatch {
   leavePlayedMatch(session);
+  leaveVisit(session);
   const remote = startRemoteMatch(role, link, seed, matchRules);
   session.screen = "remoteMatch";
   session.played = playRemoteMatch(remote);
@@ -78,6 +144,11 @@ export function enterRemoteMatch(
 function leavePlayedMatch(session: ScreenSession): void {
   session.played.leave();
   session.debris = [];
+}
+
+function leaveVisit(session: ScreenSession): void {
+  session.visit?.visit.leave();
+  session.visit = undefined;
 }
 
 export function stepScreenSession(session: ScreenSession, reducedMotion: boolean): ScreenSessionStep {

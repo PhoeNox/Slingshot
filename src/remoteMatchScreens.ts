@@ -4,9 +4,7 @@
 import { invitationHash } from "./navigation";
 import type { PeerConnectionFailure } from "./peerConnection";
 import type { RemoteRole } from "./remoteMatch";
-import type { ReplyRelay } from "./replyRelay";
-import { startGuestVisit, startHostVisit, type HostVisit, type PeerConnectors, type RemoteVisit } from "./remoteVisit";
-import type { EnterRemoteRoute } from "./routeController";
+import type { VisitScreens } from "./screenSession";
 import type { Invitation, VisitFailure, VisitState } from "./visitTransition";
 
 export interface HostScreenElements {
@@ -25,6 +23,8 @@ export interface GuestScreenElements {
   replyCodeCopyButton: HTMLButtonElement;
   status: HTMLElement;
 }
+
+export type SubmitReplyCode = (replyCode: string) => void;
 
 const COPY_LABEL = "Copy";
 const COPIED_LABEL = "Copied";
@@ -55,33 +55,18 @@ export function bindRemoteMatchScreens(
   target: Window,
   host: HostScreenElements,
   guest: GuestScreenElements,
-  peers: PeerConnectors,
-  relay: ReplyRelay,
-): EnterRemoteRoute {
+  submitReply: SubmitReplyCode,
+): VisitScreens {
   bindCopyButton(target, host.invitationCopyButton, host.invitationLink);
   bindCopyButton(target, guest.replyCodeCopyButton, guest.replyCode);
-  let visit: RemoteVisit | undefined;
-  let hostVisit: HostVisit | undefined;
   host.replyForm.addEventListener("submit", (event) => {
     event.preventDefault();
     const replyCode = host.replyCodeInput.value.trim();
-    hostVisit?.submitReply(replyCode);
+    submitReply(replyCode);
   });
   const showHostState = (state: VisitState) => showHostScreen(target, host, state);
   const showGuestState = (state: VisitState) => showGuestScreen(guest, state);
-  return (route, startRemoteMatch) => {
-    visit?.leave();
-    visit = undefined;
-    hostVisit = undefined;
-    if (route.screen === "host") {
-      hostVisit = startHostVisit(peers.host, relay, showHostState, startRemoteMatch);
-      visit = hostVisit;
-    }
-    if (route.screen === "guest") {
-      const invitation: Invitation = { offerCode: route.offerCode, roomSecret: route.roomSecret };
-      visit = startGuestVisit(peers.join, relay, invitation, showGuestState, startRemoteMatch);
-    }
-  };
+  return { showHostState, showGuestState };
 }
 
 function showHostScreen(target: Window, elements: HostScreenElements, state: VisitState): void {

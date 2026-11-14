@@ -10,10 +10,10 @@ import type { RemoteMatch, RemoteRole } from "./remoteMatch";
 import {
   createScreenSession,
   enterRemoteMatch,
-  enterScreen,
   stepScreenSession,
   type ScreenSession,
 } from "./screenSession";
+import { enterScreen } from "./screenSession.fixtures";
 import { DEFAULT_SETTINGS, matchRulesFor, type Settings } from "./settings";
 
 interface Endpoint {

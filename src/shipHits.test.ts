@@ -5,7 +5,8 @@ import { describe, expect, test } from "vitest";
 import type { Point } from "./core/flight";
 import { DEFAULT_MATCH_RULES, type MatchView } from "./core/match";
 import type { Side } from "./core/round";
-import { createScreenSession, enterScreen, stepScreenSession, type ScreenSession } from "./screenSession";
+import { createScreenSession, stepScreenSession, type ScreenSession } from "./screenSession";
+import { enterScreen } from "./screenSession.fixtures";
 
 const SEEDS = Array.from({ length: 10 }, (_, i) => i + 1);
 const ANGLES = Array.from({ length: 36 }, (_, i) => i * 10);

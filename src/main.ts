@@ -17,7 +17,7 @@ import { createRouteController, randomSeed, type RouteAdapters } from "./routeCo
 import { bindBracketFlash, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, bindSettingControls, bindSettingsTabs, navigateBack, navigateTo, renderMenuItems, showScreen, traceTitleArc, type ScreenElements } from "./screens";
 import { parseSettings, serialiseSettings, type Settings } from "./settings";
 import { readStoredSettings, writeStoredSettings } from "./settingsStorage";
-import { createScreenSession, describeScreenSessionFrame } from "./screenSession";
+import { createScreenSession, describeScreenSessionFrame, submitReplyCode } from "./screenSession";
 import { drawStars, renderStarSprites } from "./starLayer";
 import { generateStars } from "./stars";
 
@@ -111,10 +111,16 @@ async function start(): Promise<void> {
   bindSettingControls(elements.settings, settings, saveSettings);
   const peers: PeerConnectors = { host: hostPeerConnection, join: joinPeerConnection };
   const relay = nostrReplyRelay();
+  const submitReply = (replyCode: string) => {
+    submitReplyCode(session, replyCode);
+  };
+  const visitScreens = bindRemoteMatchScreens(window, hostElements, guestElements, submitReply);
   const routeAdapters: RouteAdapters = {
     showScreen: (screen) => showScreen(elements, screen),
     navigateTo: (screen) => navigateTo(window, screen),
-    enterRemoteRoute: bindRemoteMatchScreens(window, hostElements, guestElements, peers, relay),
+    peers,
+    relay,
+    visitScreens,
   };
   const routes = createRouteController(session, settings, routeAdapters);
   bindScreenRoutes(window, routes.enterRoute);

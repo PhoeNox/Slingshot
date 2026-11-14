@@ -2,16 +2,24 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import type { FixedRouteScreen, Route, Screen } from "./navigation";
-import type { StartRemoteMatch } from "./remoteVisit";
-import { enterRemoteMatch, enterScreen, stepScreenSession, type ScreenSession } from "./screenSession";
+import type { PeerConnectors } from "./remoteVisit";
+import type { ReplyRelay } from "./replyRelay";
+import {
+  enterRoute as enterSessionRoute,
+  stepScreenSession,
+  type RouteEntry,
+  type ScreenSession,
+  type VisitPorts,
+  type VisitScreens,
+} from "./screenSession";
 import { matchRulesFor, type Settings } from "./settings";
-
-export type EnterRemoteRoute = (route: Route, startRemoteMatch: StartRemoteMatch) => void;
 
 export interface RouteAdapters {
   showScreen: (screen: Screen) => void;
   navigateTo: (screen: FixedRouteScreen) => void;
-  enterRemoteRoute: EnterRemoteRoute;
+  peers: PeerConnectors;
+  relay: ReplyRelay;
+  visitScreens: VisitScreens;
 }
 
 export interface RouteController {
@@ -30,15 +38,17 @@ export function createRouteController(
   settings: Readonly<Settings>,
   adapters: RouteAdapters,
 ): RouteController {
+  const visits: VisitPorts = {
+    peers: adapters.peers,
+    relay: adapters.relay,
+    screens: adapters.visitScreens,
+    showRemoteMatch: () => adapters.showScreen("remoteMatch"),
+  };
   const enterRoute = (route: Route) => {
     const seed = randomSeed(session.random);
     const matchRules = matchRulesFor(settings);
-    const startRemoteMatch: StartRemoteMatch = (role, link) => {
-      enterRemoteMatch(session, role, link, seed, matchRules);
-      adapters.showScreen("remoteMatch");
-    };
-    enterScreen(session, route.screen, seed, matchRules);
-    adapters.enterRemoteRoute(route, startRemoteMatch);
+    const entry: RouteEntry = { route, seed, matchRules };
+    enterSessionRoute(session, entry, visits);
     adapters.showScreen(route.screen);
   };
   const stepSession = (reducedMotion: boolean) => {
