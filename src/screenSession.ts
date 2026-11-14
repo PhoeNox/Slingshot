@@ -27,7 +27,6 @@ import {
   type RemoteRole,
 } from "./remoteMatch";
 import { NO_SHAKE, screenShakeOffset } from "./screenShake";
-import type { Settings } from "./settings";
 
 export type MenuScreen = Exclude<RouteScreen, "match">;
 
@@ -80,10 +79,11 @@ export function enterRemoteMatch(
   session: ScreenSession,
   role: RemoteRole,
   link: PeerLink,
-  settings: Readonly<Settings>,
+  seed: number,
+  matchRules: Readonly<MatchRules>,
 ): void {
   leaveShownRemoteMatch(session);
-  const remote = startRemoteMatch(role, link, settings, session.random);
+  const remote = startRemoteMatch(role, link, seed, matchRules);
   session.debris = [];
   session.state = { screen: "remoteMatch", remote };
 }

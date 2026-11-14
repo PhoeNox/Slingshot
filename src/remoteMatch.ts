@@ -31,7 +31,6 @@ import {
   type RemoteMessage,
   type ShotMessage,
 } from "./remoteProtocol";
-import { matchRulesFor, type Settings } from "./settings";
 
 export type RemoteRole = "host" | "guest";
 
@@ -60,7 +59,6 @@ export interface RemoteMatchStep {
 
 const AIM_SEND_INTERVAL_STEPS = 3;
 const END_NOTICE_STEPS = 90;
-const SEED_RANGE = 2 ** 32;
 
 const REJECTION_ENDS: Record<RejectionReason, RemoteMatchEnd> = {
   malformed: "outOfSync",
@@ -70,14 +68,12 @@ const REJECTION_ENDS: Record<RejectionReason, RemoteMatchEnd> = {
 export function startRemoteMatch(
   role: RemoteRole,
   link: PeerLink,
-  settings: Readonly<Settings>,
-  random: () => number,
+  seed: number,
+  rules: Readonly<MatchRules>,
 ): RemoteMatch {
   if (role === "guest") {
     return listenedRemoteMatch(link, "right");
   }
-  const seed = Math.floor(random() * SEED_RANGE);
-  const rules = matchRulesFor(settings);
   return hostRemoteMatch(link, seed, rules);
 }
 

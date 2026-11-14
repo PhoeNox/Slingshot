@@ -49,7 +49,6 @@ interface EndingCase {
 }
 
 const SEED = 7;
-const SEED_RANGE = 2 ** 32;
 const ROUNDS = 3;
 const MAX_SHOTS = 40;
 const MAX_STEPS = 5000;
@@ -103,20 +102,16 @@ function deliver(channel: FakeChannel): void {
   }
 }
 
-function drawsSeed(): number {
-  return SEED / SEED_RANGE;
-}
-
 function joinedGuest(channel: FakeChannel): ScreenSession {
   const guest = createScreenSession(2, () => 0.5);
-  enterRemoteMatch(guest, "guest", channel.guest.link, DEFAULT_SETTINGS);
+  enterRemoteMatch(guest, "guest", channel.guest.link, SEED, DEFAULT_MATCH_RULES);
   return guest;
 }
 
 function connectedPeers(hostSettings: Readonly<Settings> = DEFAULT_SETTINGS): Peers {
   const channel = fakeChannel();
-  const host = createScreenSession(1, drawsSeed);
-  enterRemoteMatch(host, "host", channel.host.link, hostSettings);
+  const host = createScreenSession(1, () => 0.5);
+  enterRemoteMatch(host, "host", channel.host.link, SEED, matchRulesFor(hostSettings));
   const guest = joinedGuest(channel);
   deliver(channel);
   return { channel, host, guest };
@@ -466,7 +461,7 @@ describe("ending a remote match", () => {
     const peers = connectedPeers();
     const next = fakeChannel();
 
-    enterRemoteMatch(peers.guest, "guest", next.guest.link, DEFAULT_SETTINGS);
+    enterRemoteMatch(peers.guest, "guest", next.guest.link, SEED, DEFAULT_MATCH_RULES);
     deliver(peers.channel);
     await flushPromises();
 

@@ -30,13 +30,13 @@ export function createRouteController(
   settings: Readonly<Settings>,
   adapters: RouteAdapters,
 ): RouteController {
-  const startRemoteMatch: StartRemoteMatch = (role, link) => {
-    enterRemoteMatch(session, role, link, settings);
-    adapters.showScreen("remoteMatch");
-  };
   const enterRoute = (route: Route) => {
     const seed = randomSeed(session.random);
     const matchRules = matchRulesFor(settings);
+    const startRemoteMatch: StartRemoteMatch = (role, link) => {
+      enterRemoteMatch(session, role, link, seed, matchRules);
+      adapters.showScreen("remoteMatch");
+    };
     enterScreen(session, route.screen, seed, matchRules);
     adapters.enterRemoteRoute(route, startRemoteMatch);
     adapters.showScreen(route.screen);
