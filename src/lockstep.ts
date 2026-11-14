@@ -225,7 +225,7 @@ export function fireLockstep(lockstep: Lockstep): LockstepResult {
   return result;
 }
 
-function isLocalTurn(lockstep: Readonly<Lockstep>): boolean {
+export function isLocalTurn(lockstep: Readonly<Lockstep>): boolean {
   return lockstep.end === undefined
     && lockstep.match !== undefined
     && isAimingTurnOf(lockstep.match, lockstep.localSide);

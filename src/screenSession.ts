@@ -3,8 +3,7 @@
 
 import { createAttractMode, type AttractMode } from "./core/attract";
 import type { Point } from "./core/flight";
-import { createMatch, type AimDelta, type Match, type MatchRules, type MatchView } from "./core/match";
-import type { Side } from "./core/round";
+import { createMatch, type Match, type MatchRules, type MatchView } from "./core/match";
 import { advanceDebris, type Particle } from "./debris";
 import { describeFrame, describeRemoteNotice, type DisplaySettings } from "./frame";
 import type { FrameItem } from "./frameItems";
@@ -84,22 +83,6 @@ export function enterRemoteMatch(
   session.debris = [];
   session.state = { screen: "remoteMatch", remote };
   session.played = playRemoteMatch(remote);
-}
-
-export function isMatchActive(session: ScreenSession): boolean {
-  return session.state.screen === "match" || session.state.screen === "remoteMatch";
-}
-
-export function aimingSideOf(session: ScreenSession): Side | undefined {
-  return session.played.aimingSide();
-}
-
-export function aimMatch(session: ScreenSession, delta: AimDelta): void {
-  session.played.aim(delta);
-}
-
-export function fireMatch(session: ScreenSession): void {
-  session.played.fire();
 }
 
 export function stepScreenSession(session: ScreenSession, reducedMotion: boolean): ScreenSessionStep {

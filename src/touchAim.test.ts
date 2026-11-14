@@ -21,12 +21,12 @@ function pointerDown(options: { pointerId?: number; side?: Side | undefined; mat
   return { kind: "pointerDown", pointerId: 1, position: ORIGIN, side: "left", matchActive: true, ...options };
 }
 
-function pointerMove(dx: number, dy: number, options: { pointerId?: number; side?: Side | undefined; matchActive?: boolean } = {}): TouchAimInput {
+function pointerMove(dx: number, dy: number, options: { pointerId?: number; side?: Side | undefined } = {}): TouchAimInput {
   const position = { x: ORIGIN.x + dx, y: ORIGIN.y + dy };
   return { kind: "pointerMove", pointerId: 1, position, side: "left", matchActive: true, ...options };
 }
 
-function pointerUp(options: { pointerId?: number; matchActive?: boolean } = {}): TouchAimInput {
+function pointerUp(options: { pointerId?: number } = {}): TouchAimInput {
   return { kind: "pointerUp", pointerId: 1, matchActive: true, ...options };
 }
 
@@ -74,12 +74,6 @@ describe("tap", () => {
 
   test("a touch started outside a match is ignored", () => {
     const steps = run([pointerDown({ matchActive: false }), pointerUp()]);
-
-    expect(last(steps).fire).toBe(false);
-  });
-
-  test("a release after the match was left does not fire", () => {
-    const steps = run([pointerDown(), pointerUp({ matchActive: false })]);
 
     expect(last(steps).fire).toBe(false);
   });
@@ -210,12 +204,6 @@ describe("aiming side", () => {
 
     expect(totalDelta(steps)).toEqual({ angle: 0, power: 0 });
   });
-
-  test("a drag stops aiming once the aiming side changes", () => {
-    const steps = run([pointerDown(), pointerMove(POWER_STEP_PX * 2, 0, { side: "right" })]);
-
-    expect(totalDelta(steps)).toEqual({ angle: 0, power: 0 });
-  });
 });
 
 describe("cancel", () => {
@@ -240,18 +228,6 @@ describe("cancel", () => {
   test("blur ends the touch without firing", () => {
     const steps = run([pointerDown(), { kind: "blur" }, pointerUp()]);
 
-    expect(last(steps).fire).toBe(false);
-  });
-
-  test("leaving the match mid-drag ends the touch", () => {
-    const steps = run([
-      pointerDown(),
-      pointerMove(0, 0, { matchActive: false }),
-      pointerMove(POWER_STEP_PX * 2, 0),
-      pointerUp(),
-    ]);
-
-    expect(totalDelta(steps)).toEqual({ angle: 0, power: 0 });
     expect(last(steps).fire).toBe(false);
   });
 });

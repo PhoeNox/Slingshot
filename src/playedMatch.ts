@@ -6,6 +6,7 @@ import {
   activeSide,
   adjustAim,
   fire,
+  isAiming,
   matchView,
   startNextRound,
   step,
@@ -26,6 +27,7 @@ export interface PlayedMatchStep {
 export interface PlayedMatch {
   readonly viewer: Readonly<Viewer>;
   readonly shakes: boolean;
+  readonly takesInput: boolean;
   aimingSide: () => Side | undefined;
   aim: (delta: AimDelta) => void;
   fire: () => void;
@@ -45,7 +47,8 @@ export function playHotSeat(match: Match): PlayedMatch {
   return {
     viewer: HOT_SEAT_VIEWER,
     shakes: true,
-    aimingSide: () => activeSide(match),
+    takesInput: true,
+    aimingSide: () => hotSeatAimingSide(match),
     aim: (delta) => adjustAim(match, delta),
     fire: () => fireHotSeat(match),
     step: () => stepHotSeat(match),
@@ -53,6 +56,10 @@ export function playHotSeat(match: Match): PlayedMatch {
     notice: noNotice,
     leave: ignore,
   };
+}
+
+function hotSeatAimingSide(match: Readonly<Match>): Side | undefined {
+  return isAiming(match) ? activeSide(match) : undefined;
 }
 
 function fireHotSeat(match: Match): void {
@@ -71,6 +78,7 @@ export function playAttractMode(attract: AttractMode, screen: Screen): PlayedMat
   return {
     viewer: ATTRACT_VIEWER,
     shakes: false,
+    takesInput: false,
     aimingSide: noSide,
     aim: ignore,
     fire: ignore,

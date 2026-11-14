@@ -8,11 +8,9 @@ import type { PeerLink } from "./peerConnection";
 import { encodeMessage, type RemoteMessage } from "./remoteProtocol";
 import type { RemoteMatch } from "./remoteMatch";
 import {
-  aimMatch,
   createScreenSession,
   enterRemoteMatch,
   enterScreen,
-  fireMatch,
   stepScreenSession,
   type ScreenSession,
 } from "./screenSession";
@@ -186,11 +184,11 @@ function takeShot(peers: Peers, shooter: ScreenSession, wanted: ShotResult): voi
   settle(peers, shooter);
   const match = matchOf(shooter);
   if (match.phase.kind === "roundOver") {
-    fireMatch(shooter);
+    shooter.played.fire();
   }
   const target = findAim(match, wanted);
-  aimMatch(shooter, aimDeltaTo(match, target));
-  fireMatch(shooter);
+  shooter.played.aim(aimDeltaTo(match, target));
+  shooter.played.fire();
   deliver(peers.channel);
 }
 
@@ -288,7 +286,7 @@ describe("playing a remote match", () => {
     const hostBefore = structuredClone(matchView(matchOf(peers.host)));
     const guestBefore = structuredClone(matchView(matchOf(peers.guest)));
 
-    fireMatch(waiting);
+    waiting.played.fire();
     deliver(peers.channel);
 
     expect(matchView(matchOf(peers.host))).toEqual(hostBefore);
@@ -299,7 +297,7 @@ describe("playing a remote match", () => {
     const peers = connectedPeers();
     const { next, waiting } = roundOverOnBoth(peers);
 
-    fireMatch(next);
+    next.played.fire();
     const waitingPhaseBeforeDelivery = matchOf(waiting).phase.kind;
     deliver(peers.channel);
 
@@ -313,9 +311,9 @@ describe("playing a remote match", () => {
     const { next, waiting } = roundOverOnBoth(peers);
     const side = nextShooter(matchOf(next));
 
-    fireMatch(next);
+    next.played.fire();
     deliver(peers.channel);
-    aimMatch(next, { angle: 10, power: 20 });
+    next.played.aim({ angle: 10, power: 20 });
     stepBoth(peers, 3);
 
     expect(matchOf(waiting).ships[side].aim).toEqual(matchOf(next).ships[side].aim);
@@ -328,9 +326,9 @@ describe("playing a remote match", () => {
     const receiver = otherSession(peers, shooter);
     const side = matchOf(shooter).activePlayer;
     const earlierAim = findAim(matchOf(shooter), "hit");
-    aimMatch(shooter, aimDeltaTo(matchOf(shooter), earlierAim));
+    shooter.played.aim(aimDeltaTo(matchOf(shooter), earlierAim));
     stepBoth(peers, 3);
-    fireMatch(shooter);
+    shooter.played.fire();
     deliver(peers.channel);
     settle(peers, shooter);
     settle(peers, receiver);
@@ -338,7 +336,7 @@ describe("playing a remote match", () => {
     settle(peers, receiver);
     settle(peers, shooter);
 
-    aimMatch(shooter, aimDeltaTo(matchOf(shooter), earlierAim));
+    shooter.played.aim(aimDeltaTo(matchOf(shooter), earlierAim));
     stepBoth(peers, 3);
 
     expect(matchOf(shooter).roundNumber).toBe(2);
@@ -371,8 +369,8 @@ describe("playing a remote match", () => {
     const hostBefore = structuredClone(matchView(matchOf(peers.host)));
     const guestBefore = structuredClone(matchView(matchOf(peers.guest)));
 
-    aimMatch(waiting, { angle: 30, power: 50 });
-    fireMatch(waiting);
+    waiting.played.aim({ angle: 30, power: 50 });
+    waiting.played.fire();
     deliver(peers.channel);
 
     expect(matchView(matchOf(peers.host))).toEqual(hostBefore);
@@ -385,7 +383,7 @@ describe("playing a remote match", () => {
     const receiver = otherSession(peers, shooter);
     const side = matchOf(shooter).activePlayer;
 
-    aimMatch(shooter, { angle: 10, power: 20 });
+    shooter.played.aim({ angle: 10, power: 20 });
     stepBoth(peers, 3);
 
     expect(matchOf(receiver).ships[side].aim).toEqual(matchOf(shooter).ships[side].aim);

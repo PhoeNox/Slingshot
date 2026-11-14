@@ -23,8 +23,8 @@ function keyUp(code: string, shiftKey = false): AimKeyInput {
   return { kind: "keyUp", code, shiftKey };
 }
 
-function tick(matchActive = true): AimKeyInput {
-  return { kind: "tick", matchActive };
+function tick(): AimKeyInput {
+  return { kind: "tick", matchActive: true };
 }
 
 function heldAfterPress(code: string, now = 0): AimKeyRepeat {
@@ -110,14 +110,6 @@ describe("stopping repeats", () => {
     const held = heldAfterPress("ArrowDown", 0);
     const step = stepAimKeyRepeat(held, { kind: "blur" }, 100);
     expect(step.repeat.heldCode).toBeUndefined();
-    expect(step.nextTickInMs).toBeUndefined();
-  });
-
-  test("a tick without an active match stops repeats without applying", () => {
-    const held = heldAfterPress("ArrowDown", 0);
-    const step = stepAimKeyRepeat(held, tick(false), REPEAT_DELAY_MS);
-    expect(step.repeat.heldCode).toBeUndefined();
-    expect(step.aimDelta).toBeUndefined();
     expect(step.nextTickInMs).toBeUndefined();
   });
 });

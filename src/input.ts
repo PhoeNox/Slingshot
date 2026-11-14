@@ -1,121 +1,45 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { RELEASED_AIM_KEY_REPEAT, stepAimKeyRepeat, type AimKeyInput, type AimKeyRepeatStep } from "./aimKeyRepeat";
-import type { AimDelta } from "./core/match";
-import type { Side } from "./core/round";
-import { RELEASED_TOUCH_AIM, stepTouchAim, type TouchAimInput } from "./touchAim";
+import type { Point } from "./core/flight";
+import { createPlayerInput, type InputClock, type KeyPress, type KeyRelease, type PlayedMatchSource } from "./playerInput";
 
 const TOUCH_POINTER_TYPES = new Set(["touch", "pen"]);
 
-export function bindControls(
-  target: Window,
-  isMatchActive: () => boolean,
-  adjustAim: (delta: AimDelta) => void,
-  fire: () => void,
-): void {
-  let repeat = RELEASED_AIM_KEY_REPEAT;
-  let timer: number | undefined;
-
-  const apply = (input: AimKeyInput): AimKeyRepeatStep => {
-    const now = target.performance.now();
-    const step = stepAimKeyRepeat(repeat, input, now);
-    repeat = step.repeat;
-    target.clearTimeout(timer);
-    timer = undefined;
-    if (step.nextTickInMs !== undefined) {
-      timer = target.setTimeout(tick, step.nextTickInMs);
-    }
-    if (step.aimDelta) {
-      adjustAim(step.aimDelta);
-    }
-    if (step.fire) {
-      fire();
-    }
-    return step;
+export function bindPlayerInput(target: Window, source: PlayedMatchSource): void {
+  const clock: InputClock = {
+    now: () => target.performance.now(),
+    startTimer: (callback, delayMs) => target.setTimeout(callback, delayMs),
+    cancelTimer: (timer) => target.clearTimeout(timer),
   };
-  const tick = () => {
-    const input: AimKeyInput = { kind: "tick", matchActive: isMatchActive() };
-    apply(input);
-  };
+  const input = createPlayerInput(source, clock);
 
   target.addEventListener("keydown", (event) => {
-    const input: AimKeyInput = {
-      kind: "keyDown",
-      code: event.code,
-      shiftKey: event.shiftKey,
-      repeat: event.repeat,
-      matchActive: isMatchActive(),
-    };
-    const step = apply(input);
-    if (step.consumesKey) {
+    const key: KeyPress = { code: event.code, shiftKey: event.shiftKey, repeat: event.repeat };
+    if (input.keyDown(key)) {
       event.preventDefault();
     }
   });
   target.addEventListener("keyup", (event) => {
-    const input: AimKeyInput = { kind: "keyUp", code: event.code, shiftKey: event.shiftKey };
-    apply(input);
+    const key: KeyRelease = { code: event.code, shiftKey: event.shiftKey };
+    input.keyUp(key);
   });
-  target.addEventListener("blur", () => {
-    const input: AimKeyInput = { kind: "blur" };
-    apply(input);
-  });
-}
-
-export function bindTouchControls(
-  target: Window,
-  isMatchActive: () => boolean,
-  aimingSide: () => Side | undefined,
-  adjustAim: (delta: AimDelta) => void,
-  fire: () => void,
-): void {
-  let touch = RELEASED_TOUCH_AIM;
-
-  const apply = (input: TouchAimInput) => {
-    const step = stepTouchAim(touch, input);
-    touch = step.touch;
-    if (step.aimDelta) {
-      adjustAim(step.aimDelta);
-    }
-    if (step.fire) {
-      fire();
-    }
-  };
-
   target.addEventListener("pointerdown", (event) => {
-    if (!isTouchPointer(event) || startsOnButton(event)) {
-      return;
+    if (isTouchPointer(event) && !startsOnButton(event)) {
+      input.pointerDown(event.pointerId, positionOf(event));
     }
-    const input: TouchAimInput = {
-      kind: "pointerDown",
-      pointerId: event.pointerId,
-      position: { x: event.clientX, y: event.clientY },
-      side: aimingSide(),
-      matchActive: isMatchActive(),
-    };
-    apply(input);
   });
   target.addEventListener("pointermove", (event) => {
-    const input: TouchAimInput = {
-      kind: "pointerMove",
-      pointerId: event.pointerId,
-      position: { x: event.clientX, y: event.clientY },
-      side: aimingSide(),
-      matchActive: isMatchActive(),
-    };
-    apply(input);
+    input.pointerMove(event.pointerId, positionOf(event));
   });
   target.addEventListener("pointerup", (event) => {
-    const input: TouchAimInput = { kind: "pointerUp", pointerId: event.pointerId, matchActive: isMatchActive() };
-    apply(input);
+    input.pointerUp(event.pointerId);
   });
   target.addEventListener("pointercancel", (event) => {
-    const input: TouchAimInput = { kind: "pointerCancel", pointerId: event.pointerId };
-    apply(input);
+    input.pointerCancel(event.pointerId);
   });
   target.addEventListener("blur", () => {
-    const input: TouchAimInput = { kind: "blur" };
-    apply(input);
+    input.blur();
   });
 }
 
@@ -125,6 +49,10 @@ function isTouchPointer(event: PointerEvent): boolean {
 
 function startsOnButton(event: PointerEvent): boolean {
   return event.target instanceof Element && event.target.closest("button") !== null;
+}
+
+function positionOf(event: PointerEvent): Point {
+  return { x: event.clientX, y: event.clientY };
 }
 
 export function bindEscape(target: Window, onEscape: () => void): void {

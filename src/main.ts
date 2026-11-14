@@ -3,11 +3,10 @@
 
 import "./style.css";
 import { loadFonts, loadSprites } from "./assets";
-import type { AimDelta } from "./core/match";
 import { applyFit, applyOverlayFit, fitPlayingArea } from "./display";
 import { describeBackdropFrame } from "./frame";
 import { startGameLoop } from "./gameLoop";
-import { bindControls, bindEscape, bindTouchControls } from "./input";
+import { bindEscape, bindPlayerInput } from "./input";
 import { MAIN_MENU_ITEMS, PLAY_MENU_ITEMS } from "./navigation";
 import { hostPeerConnection, joinPeerConnection } from "./peerConnection";
 import { bindRemoteMatchScreens, type GuestScreenElements, type HostScreenElements } from "./remoteMatchScreens";
@@ -18,14 +17,7 @@ import { createRouteController, randomSeed, type RouteAdapters } from "./routeCo
 import { bindBracketFlash, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, bindSettingControls, bindSettingsTabs, navigateBack, navigateTo, renderMenuItems, showScreen, traceTitleArc, type ScreenElements } from "./screens";
 import { parseSettings, serialiseSettings, type Settings } from "./settings";
 import { readStoredSettings, writeStoredSettings } from "./settingsStorage";
-import {
-  aimingSideOf,
-  aimMatch,
-  createScreenSession,
-  describeScreenSessionFrame,
-  fireMatch,
-  isMatchActive,
-} from "./screenSession";
+import { createScreenSession, describeScreenSessionFrame } from "./screenSession";
 import { drawStars, renderStarSprites } from "./starLayer";
 import { generateStars } from "./stars";
 
@@ -91,12 +83,7 @@ async function start(): Promise<void> {
   window.addEventListener("resize", fitStage);
   fitStage();
 
-  const isSessionMatchActive = () => isMatchActive(session);
-  const aimSessionMatch = (delta: AimDelta) => aimMatch(session, delta);
-  const fireSessionMatch = () => fireMatch(session);
-  bindControls(window, isSessionMatchActive, aimSessionMatch, fireSessionMatch);
-  const sessionAimingSide = () => aimingSideOf(session);
-  bindTouchControls(window, isSessionMatchActive, sessionAimingSide, aimSessionMatch, fireSessionMatch);
+  bindPlayerInput(window, session);
 
   const navigateBackFromCurrentScreen = () => navigateBack(window, session.state.screen);
   bindEscape(window, navigateBackFromCurrentScreen);

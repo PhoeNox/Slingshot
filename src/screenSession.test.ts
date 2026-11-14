@@ -19,12 +19,9 @@ import { ATTRACT_VIEWER, describeFrame, HOT_SEAT_VIEWER, type DisplaySettings } 
 import type { RouteScreen } from "./navigation";
 import { playHotSeat } from "./playedMatch";
 import {
-  aimMatch,
   createScreenSession,
   describeScreenSessionFrame,
   enterScreen,
-  fireMatch,
-  isMatchActive,
   stepScreenSession,
   type ScreenSession,
 } from "./screenSession";
@@ -139,9 +136,9 @@ describe("entering a screen", () => {
 });
 
 describe("aiming and firing", () => {
-  test("reports a match as active only on the match screen", () => {
-    expect(isMatchActive(sessionOn("match"))).toBe(true);
-    expect(isMatchActive(sessionOn("mainMenu"))).toBe(false);
+  test("takes player input only on the match screen", () => {
+    expect(sessionOn("match").played.takesInput).toBe(true);
+    expect(sessionOn("mainMenu").played.takesInput).toBe(false);
   });
 
   test("aims the active match", () => {
@@ -149,7 +146,7 @@ describe("aiming and firing", () => {
     const expected = structuredClone(shownMatch(session));
     adjustAim(expected, { angle: 15, power: -20 });
 
-    aimMatch(session, { angle: 15, power: -20 });
+    session.played.aim({ angle: 15, power: -20 });
 
     expect(shownMatch(session)).toEqual(expected);
   });
@@ -157,7 +154,7 @@ describe("aiming and firing", () => {
   test("fires the active match", () => {
     const session = sessionOn("match");
 
-    fireMatch(session);
+    session.played.fire();
 
     expect(matchView(shownMatch(session)).phase.kind).toBe("inFlight");
   });
@@ -166,7 +163,7 @@ describe("aiming and firing", () => {
     const session = sessionOn("match");
     showMatch(session, roundOverMatch());
 
-    fireMatch(session);
+    session.played.fire();
 
     expect(matchView(shownMatch(session)).phase.kind).toBe("aiming");
     expect(matchView(shownMatch(session)).roundNumber).toBe(2);
@@ -176,8 +173,8 @@ describe("aiming and firing", () => {
     const session = sessionOn("mainMenu");
     const before = structuredClone(session.state);
 
-    aimMatch(session, { angle: 15, power: -20 });
-    fireMatch(session);
+    session.played.aim({ angle: 15, power: -20 });
+    session.played.fire();
 
     expect(session.state).toEqual(before);
   });
@@ -300,7 +297,7 @@ describe("debris", () => {
     const match = shownMatch(session);
     for (let shot = 0; shot < 6; shot++) {
       adjustAim(match, { angle: 25 * shot, power: 20 * shot });
-      fireMatch(session);
+      session.played.fire();
       for (let i = 0; i < 1000 && matchView(match).phase.kind === "inFlight"; i++) {
         stepScreenSession(session, reducedMotion);
       }

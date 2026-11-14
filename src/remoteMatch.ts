@@ -9,6 +9,7 @@ import {
   fireLockstep,
   hostLockstep,
   isEndNoticeOver,
+  isLocalTurn,
   newLockstep,
   receiveLockstep,
   remoteNotice,
@@ -51,7 +52,8 @@ export function playRemoteMatch(remote: RemoteMatch): PlayedMatch {
   return {
     viewer,
     shakes: true,
-    aimingSide: () => remote.localSide,
+    takesInput: true,
+    aimingSide: () => remoteAimingSide(remote),
     aim: (delta) => aimLockstep(remote, delta),
     fire: () => fireRemoteMatch(remote),
     step: () => stepRemoteMatch(remote),
@@ -59,6 +61,10 @@ export function playRemoteMatch(remote: RemoteMatch): PlayedMatch {
     notice: () => remoteNotice(remote),
     leave: () => leaveRemoteMatch(remote),
   };
+}
+
+function remoteAimingSide(remote: Readonly<RemoteMatch>): Side | undefined {
+  return isLocalTurn(remote) ? remote.localSide : undefined;
 }
 
 function leaveRemoteMatch(remote: RemoteMatch): void {

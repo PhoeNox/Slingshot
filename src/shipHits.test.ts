@@ -5,7 +5,7 @@ import { describe, expect, test } from "vitest";
 import type { Point } from "./core/flight";
 import { DEFAULT_MATCH_RULES, matchView, type Match } from "./core/match";
 import type { Side } from "./core/round";
-import { aimMatch, createScreenSession, enterScreen, fireMatch, stepScreenSession, type ScreenSession } from "./screenSession";
+import { createScreenSession, enterScreen, stepScreenSession, type ScreenSession } from "./screenSession";
 
 const SEEDS = Array.from({ length: 10 }, (_, i) => i + 1);
 const ANGLES = Array.from({ length: 36 }, (_, i) => i * 10);
@@ -25,7 +25,7 @@ function fireThroughScreenSession(seed: number, angle: number, power: number): S
   const match = shownMatch(session);
   const ships = structuredClone(matchView(match).ships);
   aimAt(session, angle, power);
-  fireMatch(session);
+  session.played.fire();
   for (let i = 0; i < MAX_FLIGHT_STEPS && matchView(match).phase.kind === "inFlight"; i++) {
     stepScreenSession(session, false);
   }
@@ -46,7 +46,7 @@ function shownMatch(session: ScreenSession): Match {
 function aimAt(session: ScreenSession, angle: number, power: number): void {
   const view = matchView(shownMatch(session));
   const aim = view.ships[view.activePlayer].aim;
-  aimMatch(session, { angle: angle - aim.angle, power: power - aim.power });
+  session.played.aim({ angle: angle - aim.angle, power: power - aim.power });
 }
 
 function distanceToSegment(point: Point, from: Point, to: Point): number {
