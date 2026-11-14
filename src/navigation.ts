@@ -9,7 +9,7 @@ export type FixedRouteScreen = Exclude<RouteScreen, "guest">;
 
 export type Route =
   | { screen: FixedRouteScreen; replace: boolean }
-  | { screen: "guest"; replace: false; offerCode: string };
+  | { screen: "guest"; replace: false; offerCode: string; roomSecret: string };
 
 export type FocusStep = -1 | 1;
 
@@ -30,6 +30,7 @@ const SCREEN_HASHES: Record<FixedRouteScreen, string> = {
 };
 
 const INVITATION_HASH_PREFIX = "#/join/";
+const INVITATION_HASH = /^#\/join\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)$/;
 
 const ATTRACT_PLAYING_SCREENS: ReadonlySet<Screen> = new Set(["mainMenu", "playMenu", "settings"]);
 
@@ -57,8 +58,10 @@ export const PLAY_MENU_ITEMS: readonly MenuItem[] = [
 ];
 
 export function resolveHash(hash: string): Route {
-  if (hash.startsWith(INVITATION_HASH_PREFIX) && hash.length > INVITATION_HASH_PREFIX.length) {
-    return { screen: "guest", replace: false, offerCode: hash.slice(INVITATION_HASH_PREFIX.length) };
+  const invitation = INVITATION_HASH.exec(hash);
+  if (invitation !== null) {
+    const [, offerCode, roomSecret] = invitation;
+    return { screen: "guest", replace: false, offerCode, roomSecret };
   }
   const canonicalHash = hash === "" ? SCREEN_HASHES.mainMenu : hash;
   const screen = FIXED_ROUTE_SCREENS.find((candidate) => SCREEN_HASHES[candidate] === canonicalHash);
@@ -72,8 +75,8 @@ export function hashFor(screen: FixedRouteScreen): string {
   return SCREEN_HASHES[screen];
 }
 
-export function invitationHash(offerCode: string): string {
-  return `${INVITATION_HASH_PREFIX}${offerCode}`;
+export function invitationHash(offerCode: string, roomSecret: string): string {
+  return `${INVITATION_HASH_PREFIX}${offerCode}/${roomSecret}`;
 }
 
 export function backTargetFor(screen: Screen): FixedRouteScreen | undefined {

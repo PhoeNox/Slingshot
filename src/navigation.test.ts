@@ -17,11 +17,11 @@ describe("resolveHash", () => {
     expect(resolveHash(hash)).toEqual({ screen, replace: false });
   });
 
-  test("an invitation resolves to the guest screen and carries its offer code", () => {
-    expect(resolveHash("#/join/a1B2-c_3")).toEqual({ screen: "guest", replace: false, offerCode: "a1B2-c_3" });
+  test("an invitation resolves to the guest screen and carries its offer code and room secret", () => {
+    expect(resolveHash("#/join/a1B2-c_3/s3_Cr-t")).toEqual({ screen: "guest", replace: false, offerCode: "a1B2-c_3", roomSecret: "s3_Cr-t" });
   });
 
-  test.each(["#/foo", "#credits", "#/credits/x", "#/host/x", "#/join", "#/join/"])("unknown hash %j resolves to the main menu with replacement", (hash) => {
+  test.each(["#/foo", "#credits", "#/credits/x", "#/host/x", "#/join", "#/join/", "#/join/a1B2", "#/join/a1B2/", "#/join/a1B2/s3/x", "#/join/a1+B2/s3"])("unknown hash %j resolves to the main menu with replacement", (hash) => {
     expect(resolveHash(hash)).toEqual({ screen: "mainMenu", replace: true });
   });
 });
@@ -33,8 +33,8 @@ describe("hashFor", () => {
 });
 
 describe("invitationHash", () => {
-  test("resolves back to the guest screen with the same offer code", () => {
-    expect(resolveHash(invitationHash("xY_9-z"))).toEqual({ screen: "guest", replace: false, offerCode: "xY_9-z" });
+  test("resolves back to the guest screen with the same offer code and room secret", () => {
+    expect(resolveHash(invitationHash("xY_9-z", "k3-y_"))).toEqual({ screen: "guest", replace: false, offerCode: "xY_9-z", roomSecret: "k3-y_" });
   });
 });
 

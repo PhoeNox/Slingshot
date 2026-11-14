@@ -19,7 +19,7 @@ A push to `main` builds the site and deploys it to GitHub Pages.
 
 ## Credits
 
-Slingshot was created by Jonathan Musther and Bart Mak, with later contributions by Marcus Dreier and Ryan Kavanagh. The original Python/pygame game lives at <https://github.com/ryanakca/slingshot>. The sprites in `public/data/` are taken from it. The Michroma (Vernon Adams) and Barlow Semi Condensed (Jeremy Tribby) fonts in `public/data/` are released under the SIL Open Font License 1.1.
+Slingshot was created by Jonathan Musther and Bart Mak, with later contributions by Marcus Dreier and Ryan Kavanagh. The original Python/pygame game lives at <https://github.com/ryanakca/slingshot>. The sprites in `public/data/` are taken from it. The Michroma (Vernon Adams) and Barlow Semi Condensed (Jeremy Tribby) fonts in `public/data/` are released under the SIL Open Font License 1.1. Remote matches sign their relay messages with [noble-curves](https://github.com/paulmillr/noble-curves) by Paul Miller, released under the MIT License; its licence text ships in `public/licenses/`.
 
 ## Licence
 

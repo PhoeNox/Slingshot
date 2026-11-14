@@ -4,10 +4,12 @@
 import { invitationHash } from "./navigation";
 import type { PeerConnectionFailure } from "./peerConnection";
 import type { RemoteRole } from "./remoteMatch";
+import type { ReplyRelay } from "./replyRelay";
 import {
   startGuestVisit,
   startHostVisit,
   type HostVisit,
+  type Invitation,
   type PeerConnectors,
   type RemoteVisit,
   type VisitFailure,
@@ -62,6 +64,7 @@ export function bindRemoteMatchScreens(
   host: HostScreenElements,
   guest: GuestScreenElements,
   peers: PeerConnectors,
+  relay: ReplyRelay,
 ): EnterRemoteRoute {
   bindCopyButton(target, host.invitationCopyButton, host.invitationLink);
   bindCopyButton(target, guest.replyCodeCopyButton, guest.replyCode);
@@ -79,11 +82,12 @@ export function bindRemoteMatchScreens(
     visit = undefined;
     hostVisit = undefined;
     if (route.screen === "host") {
-      hostVisit = startHostVisit(peers.host, showHostState, startRemoteMatch);
+      hostVisit = startHostVisit(peers.host, relay, showHostState, startRemoteMatch);
       visit = hostVisit;
     }
     if (route.screen === "guest") {
-      visit = startGuestVisit(peers.join, route.offerCode, showGuestState, startRemoteMatch);
+      const invitation: Invitation = { offerCode: route.offerCode, roomSecret: route.roomSecret };
+      visit = startGuestVisit(peers.join, relay, invitation, showGuestState, startRemoteMatch);
     }
   };
 }
@@ -95,7 +99,7 @@ function showHostScreen(target: Window, elements: HostScreenElements, state: Vis
       showStatus(elements.status, "Preparing invitation…", false);
       return;
     case "invitation":
-      showInvitation(target, elements, state.code);
+      showInvitation(target, elements, state.invitation);
       return;
     case "connecting":
       elements.replyFields.disabled = true;
@@ -115,9 +119,12 @@ function showGuestScreen(elements: GuestScreenElements, state: VisitState): void
     case "pending":
       elements.replyCodeField.hidden = true;
       elements.replyCodeCopyButton.textContent = COPY_LABEL;
-      showStatus(elements.status, "Preparing reply code…", false);
+      showStatus(elements.status, "Preparing to join…", false);
       return;
-    case "invitation":
+    case "joining":
+      showStatus(elements.status, "Joining…", false);
+      return;
+    case "replyCode":
       showReplyCode(elements, state.code);
       return;
     case "handedOver":
@@ -145,20 +152,20 @@ function resetHostScreen(elements: HostScreenElements): void {
   elements.replyFields.disabled = false;
 }
 
-function showInvitation(target: Window, elements: HostScreenElements, offerCode: string): void {
-  const hash = invitationHash(offerCode);
+function showInvitation(target: Window, elements: HostScreenElements, invitation: Invitation): void {
+  const hash = invitationHash(invitation.offerCode, invitation.roomSecret);
   elements.invitationLink.value = new URL(hash, target.location.href).href;
   elements.invitationField.hidden = false;
   elements.replyForm.hidden = false;
   elements.invitationCopyButton.focus();
-  showStatus(elements.status, "Waiting for the reply code", false);
+  showStatus(elements.status, "Waiting for the guest to join", false);
 }
 
 function showReplyCode(elements: GuestScreenElements, replyCode: string): void {
   elements.replyCode.value = replyCode;
   elements.replyCodeField.hidden = false;
   elements.replyCodeCopyButton.focus();
-  showStatus(elements.status, "Waiting for the host to connect…", false);
+  showStatus(elements.status, "Couldn't join automatically, send this code to the host", false);
 }
 
 function showFailure(status: HTMLElement, role: RemoteRole, failure: VisitFailure): void {

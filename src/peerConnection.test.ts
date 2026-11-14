@@ -267,19 +267,33 @@ describe("joinPeerConnection", () => {
     expect(connection.channel.sent).toEqual(["hi"]);
   });
 
-  test("fails with could not connect when no channel arrives after the reply code", async () => {
+  test("keeps waiting for the host past the connect timeout", async () => {
+    const connection = new FakeConnection(CHROME_ANSWER.sdp!);
+    const offerCode = await encodeSignalingCode(CHROME_OFFER);
+    const reply = await joinWith(offerCode, connection);
+    const state = settledState(reply.opened);
+
+    await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS);
+    expect(state.settled).toBe(false);
+
+    connection.announceChannel();
+    await expect(reply.opened).resolves.toBeDefined();
+    expect(connection.closed).toBe(false);
+  });
+
+  test("fails with could not connect when the connection fails before the host's channel arrives", async () => {
     const connection = new FakeConnection(CHROME_ANSWER.sdp!);
     const offerCode = await encodeSignalingCode(CHROME_OFFER);
     const reply = await joinWith(offerCode, connection);
     reply.opened.catch(() => undefined);
 
-    await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS);
+    connection.fail();
 
     await expect(reply.opened).rejects.toMatchObject({ reason: "couldNotConnect" });
     expect(connection.closed).toBe(true);
   });
 
-  test("closing a pending reply closes the connection and never reports a timeout", async () => {
+  test("closing a pending reply closes the connection and never settles", async () => {
     const connection = new FakeConnection(CHROME_ANSWER.sdp!);
     const offerCode = await encodeSignalingCode(CHROME_OFFER);
     const reply = await joinWith(offerCode, connection);

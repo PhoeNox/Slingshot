@@ -10,6 +10,7 @@ import {
   type PeerLink,
 } from "./peerConnection";
 import type { RemoteRole } from "./remoteMatch";
+import type { ReplyDelivery, ReplyRelay } from "./replyRelay";
 
 export type StartRemoteMatch = (role: RemoteRole, link: PeerLink) => void;
 
@@ -20,9 +21,16 @@ export interface PeerConnectors {
 
 export type VisitFailure = PeerConnectionFailure | "unexpected";
 
+export interface Invitation {
+  readonly offerCode: string;
+  readonly roomSecret: string;
+}
+
 export type VisitState =
   | { readonly phase: "pending" }
-  | { readonly phase: "invitation"; readonly code: string }
+  | { readonly phase: "invitation"; readonly invitation: Invitation }
+  | { readonly phase: "joining" }
+  | { readonly phase: "replyCode"; readonly code: string }
   | { readonly phase: "connecting" }
   | { readonly phase: "handedOver" }
   | { readonly phase: "failed"; readonly failure: VisitFailure; readonly retry: boolean };
@@ -51,9 +59,17 @@ interface Visit {
 interface HostFlow {
   readonly visit: Visit;
   invitationAwaitingReply: HostInvitation | undefined;
+  room: Closable | undefined;
 }
 
+interface ReplyCodeFallback {
+  cancel(): void;
+}
+
+export const REPLY_FALLBACK_MS = 15_000;
+
 const PENDING: VisitState = { phase: "pending" };
+const JOINING: VisitState = { phase: "joining" };
 const CONNECTING: VisitState = { phase: "connecting" };
 const HANDED_OVER: VisitState = { phase: "handedOver" };
 
@@ -61,12 +77,13 @@ const RETRYABLE_REPLY_FAILURES: ReadonlySet<PeerConnectionFailure> = new Set(["m
 
 export function startHostVisit(
   connectHost: HostPeerConnection,
+  relay: ReplyRelay,
   show: ShowVisitState,
   startRemoteMatch: StartRemoteMatch,
 ): HostVisit {
   const visit = beginVisit(show);
-  const host: HostFlow = { visit, invitationAwaitingReply: undefined };
-  const settled = prepareInvitation(host, connectHost);
+  const host: HostFlow = { visit, invitationAwaitingReply: undefined, room: undefined };
+  const settled = prepareInvitation(host, connectHost, relay, startRemoteMatch);
   const submitReply = (replyCode: string) => acceptReplyCode(host, replyCode, startRemoteMatch);
   const leave = () => leaveHostVisit(host);
   return { settled, submitReply, leave };
@@ -74,12 +91,13 @@ export function startHostVisit(
 
 export function startGuestVisit(
   joinHost: JoinPeerConnection,
-  offerCode: string,
+  relay: ReplyRelay,
+  invitation: Invitation,
   show: ShowVisitState,
   startRemoteMatch: StartRemoteMatch,
 ): RemoteVisit {
   const visit = beginVisit(show);
-  const settled = joinWithReply(visit, joinHost, offerCode, startRemoteMatch);
+  const settled = joinWithReply(visit, joinHost, relay, invitation, startRemoteMatch);
   const leave = () => leaveVisit(visit);
   return { settled, leave };
 }
@@ -95,7 +113,13 @@ function leaveVisit(visit: Visit): void {
 
 function leaveHostVisit(host: HostFlow): void {
   host.invitationAwaitingReply = undefined;
+  closeRoom(host);
   leaveVisit(host.visit);
+}
+
+function closeRoom(host: HostFlow): void {
+  host.room?.close();
+  host.room = undefined;
 }
 
 function showState(visit: Visit, state: VisitState): void {
@@ -119,15 +143,27 @@ function handOver(visit: Visit, role: RemoteRole, link: PeerLink, startRemoteMat
   startRemoteMatch(role, link);
 }
 
-async function prepareInvitation(host: HostFlow, connectHost: HostPeerConnection): Promise<void> {
+async function prepareInvitation(
+  host: HostFlow,
+  connectHost: HostPeerConnection,
+  relay: ReplyRelay,
+  startRemoteMatch: StartRemoteMatch,
+): Promise<void> {
   showState(host.visit, PENDING);
   try {
-    const invitation = await connectHost();
-    if (!adopt(host.visit, invitation)) {
+    const hostInvitation = await connectHost();
+    if (!adopt(host.visit, hostInvitation)) {
       return;
     }
-    host.invitationAwaitingReply = invitation;
-    const invitationState: VisitState = { phase: "invitation", code: invitation.offerCode };
+    host.invitationAwaitingReply = hostInvitation;
+    const room = await relay.awaitReplies((replyCode) => acceptReplyCode(host, replyCode, startRemoteMatch));
+    if (!host.visit.active) {
+      room.close();
+      return;
+    }
+    host.room = room;
+    const invitation: Invitation = { offerCode: hostInvitation.offerCode, roomSecret: room.roomSecret };
+    const invitationState: VisitState = { phase: "invitation", invitation };
     showState(host.visit, invitationState);
   } catch (error) {
     fail(host.visit, error, false);
@@ -143,14 +179,17 @@ async function acceptReplyCode(host: HostFlow, replyCode: string, startRemoteMat
   showState(host.visit, CONNECTING);
   try {
     const link = await invitation.accept(replyCode);
+    closeRoom(host);
     if (!adopt(host.visit, link)) {
       return;
     }
     handOver(host.visit, "host", link, startRemoteMatch);
   } catch (error) {
-    const retry = isRetryableReplyFailure(error);
-    if (retry && host.visit.active) {
+    const retry = isRetryableReplyFailure(error) && host.visit.active;
+    if (retry) {
       host.invitationAwaitingReply = invitation;
+    } else {
+      closeRoom(host);
     }
     fail(host.visit, error, retry);
   }
@@ -159,24 +198,58 @@ async function acceptReplyCode(host: HostFlow, replyCode: string, startRemoteMat
 async function joinWithReply(
   visit: Visit,
   joinHost: JoinPeerConnection,
-  offerCode: string,
+  relay: ReplyRelay,
+  invitation: Invitation,
   startRemoteMatch: StartRemoteMatch,
 ): Promise<void> {
   showState(visit, PENDING);
   try {
-    const reply = await joinHost(offerCode);
+    const reply = await joinHost(invitation.offerCode);
     if (!adopt(visit, reply)) {
       return;
     }
-    const invitationState: VisitState = { phase: "invitation", code: reply.replyCode };
-    showState(visit, invitationState);
-    const link = await reply.opened;
+    showState(visit, JOINING);
+    const delivery = relay.deliverReply(invitation.roomSecret, reply.replyCode);
+    const fallback = scheduleReplyCodeFallback(visit, reply.replyCode, delivery);
+    const link = await openedBeforeFallback(reply.opened, fallback);
     if (!adopt(visit, link)) {
       return;
     }
     handOver(visit, "guest", link, startRemoteMatch);
   } catch (error) {
     fail(visit, error, false);
+  }
+}
+
+function scheduleReplyCodeFallback(visit: Visit, replyCode: string, delivery: Promise<ReplyDelivery>): ReplyCodeFallback {
+  let due = true;
+  const showReplyCode = () => {
+    if (!due) {
+      return;
+    }
+    due = false;
+    clearTimeout(timer);
+    const replyCodeState: VisitState = { phase: "replyCode", code: replyCode };
+    showState(visit, replyCodeState);
+  };
+  const timer = setTimeout(showReplyCode, REPLY_FALLBACK_MS);
+  delivery.then((outcome) => {
+    if (outcome === "unreached") {
+      showReplyCode();
+    }
+  });
+  const cancel = () => {
+    due = false;
+    clearTimeout(timer);
+  };
+  return { cancel };
+}
+
+async function openedBeforeFallback(opened: Promise<PeerLink>, fallback: ReplyCodeFallback): Promise<PeerLink> {
+  try {
+    return await opened;
+  } finally {
+    fallback.cancel();
   }
 }
 

@@ -93,6 +93,11 @@
               <a href="https://openfontlicense.org">SIL Open Font License 1.1</a>.
             </p>
             <p>
+              Remote matches sign their relay messages with
+              <a href="https://github.com/paulmillr/noble-curves">noble-curves</a> by Paul Miller,
+              under the <a href="./licenses/noble-curves.txt">MIT License</a>.
+            </p>
+            <p>
               This browser port is licensed under
               <a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3.0-or-later</a>.
               The original game and its assets are released under
@@ -107,6 +112,7 @@
               Copyright (C) 2009 Marcus Dreier, Copyright (C) 2010 Ryan Kavanagh.
               Michroma font: Copyright 2011 The Michroma Project Authors.
               Barlow Semi Condensed font: Copyright 2017 The Barlow Project Authors.
+              noble-curves: Copyright (c) 2022 Paul Miller.
               Browser port: Copyright (C) 2026 Thomas Eggerling.
             </p>
           </div>
@@ -117,7 +123,7 @@
         <section id="host" class="overlay-screen remote-screen" hidden>
           <h1>Host remote match</h1>
           <div class="remote-body">
-            <p class="remote-note">Both players see each other's IP address.</p>
+            <p class="remote-note">Both players see each other's IP address. Joining passes an encrypted message through public Nostr relays.</p>
             <div id="invitation-field" class="code-field" hidden>
               <label for="invitation-link">Invitation link</label>
               <div class="code-row">
@@ -127,7 +133,7 @@
             </div>
             <form id="reply-form" class="code-field" hidden>
               <fieldset>
-                <label for="reply-code-input">Reply code</label>
+                <label for="reply-code-input">Guest can't join automatically? Paste their code</label>
                 <div class="code-row">
                   <input id="reply-code-input" type="text" required autocomplete="off" spellcheck="false" />
                   <button class="code-button" type="submit">Connect</button>
@@ -143,14 +149,13 @@
         <section id="guest" class="overlay-screen remote-screen" hidden>
           <h1>Join remote match</h1>
           <div class="remote-body">
-            <p class="remote-note">Both players see each other's IP address.</p>
+            <p class="remote-note">Both players see each other's IP address. Joining passes an encrypted message through public Nostr relays.</p>
             <div id="reply-code-field" class="code-field" hidden>
               <label for="reply-code">Reply code</label>
               <div class="code-row">
                 <input id="reply-code" type="text" readonly spellcheck="false" />
                 <button id="reply-code-copy-button" class="code-button" type="button">Copy</button>
               </div>
-              <p class="code-instruction">Send this back to the host.</p>
             </div>
             <p id="guest-status" class="remote-status" role="status"></p>
           </div>

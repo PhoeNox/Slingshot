@@ -33,7 +33,7 @@ const SEED = 7;
 const END_NOTICE_STEPS = 90;
 const MAIN_MENU: Route = { screen: "mainMenu", replace: false };
 const HOST: Route = { screen: "host", replace: false };
-const GUEST: Route = { screen: "guest", replace: false, offerCode: "a1B2-c_3" };
+const GUEST: Route = { screen: "guest", replace: false, offerCode: "a1B2-c_3", roomSecret: "s3_Cr-t" };
 const ROUTES: readonly Route[] = [
   MAIN_MENU,
   { screen: "playMenu", replace: false },

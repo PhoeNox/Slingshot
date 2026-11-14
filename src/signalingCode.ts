@@ -281,12 +281,12 @@ async function inflate(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
   return decoder.decode(buffer);
 }
 
-function toBase64Url(bytes: Uint8Array): string {
+export function toBase64Url(bytes: Uint8Array): string {
   const binary = String.fromCharCode(...bytes);
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 }
 
-function fromBase64Url(code: string): Uint8Array<ArrayBuffer> {
+export function fromBase64Url(code: string): Uint8Array<ArrayBuffer> {
   const base64 = code.replaceAll("-", "+").replaceAll("_", "/");
   const binary = atob(base64);
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));

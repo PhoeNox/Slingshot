@@ -87,7 +87,7 @@ export async function joinPeerConnection(offerCode: string, createConnection: Co
     await connection.setRemoteDescription(offer);
     const answer = await gatherLocalDescription(connection);
     const replyCode = await encodeSignalingCode(answer);
-    const opened = openLink(connection, channelOpened, closer);
+    const opened = openWhenConnected(connection, channelOpened, closer);
     return { replyCode, opened, close: closer.close };
   } catch (error) {
     closer.close();
@@ -112,6 +112,15 @@ async function openLink(
   closer: ConnectionCloser,
 ): Promise<PeerLink> {
   const channel = await openWithinTimeout(channelOpened, closer);
+  return linkOver(connection, channel, closer);
+}
+
+async function openWhenConnected(
+  connection: RTCPeerConnection,
+  channelOpened: Promise<RTCDataChannel>,
+  closer: ConnectionCloser,
+): Promise<PeerLink> {
+  const channel = await openUnlessFailed(connection, channelOpened, closer);
   return linkOver(connection, channel, closer);
 }
 
@@ -176,7 +185,7 @@ function closerFor(connection: RTCPeerConnection): ConnectionCloser {
 function openWithinTimeout(channelOpened: Promise<RTCDataChannel>, closer: ConnectionCloser): Promise<RTCDataChannel> {
   return new Promise((resolve, reject) => {
     const giveUp = () => {
-      const failure = new PeerConnectionError("couldNotConnect", "could not connect (network blocks direct connections)");
+      const failure = couldNotConnect();
       closer.close();
       reject(failure);
     };
@@ -187,6 +196,31 @@ function openWithinTimeout(channelOpened: Promise<RTCDataChannel>, closer: Conne
       resolve(channel);
     });
   });
+}
+
+function openUnlessFailed(
+  connection: RTCPeerConnection,
+  channelOpened: Promise<RTCDataChannel>,
+  closer: ConnectionCloser,
+): Promise<RTCDataChannel> {
+  return new Promise((resolve, reject) => {
+    const giveUpOnFailure = () => {
+      if (connection.connectionState === "failed") {
+        connection.removeEventListener("connectionstatechange", giveUpOnFailure);
+        closer.close();
+        reject(couldNotConnect());
+      }
+    };
+    connection.addEventListener("connectionstatechange", giveUpOnFailure);
+    channelOpened.then((channel) => {
+      connection.removeEventListener("connectionstatechange", giveUpOnFailure);
+      resolve(channel);
+    });
+  });
+}
+
+function couldNotConnect(): PeerConnectionError {
+  return new PeerConnectionError("couldNotConnect", "could not connect (network blocks direct connections)");
 }
 
 function linkOver(connection: RTCPeerConnection, channel: RTCDataChannel, closer: ConnectionCloser): PeerLink {

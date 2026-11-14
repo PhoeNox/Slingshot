@@ -375,8 +375,7 @@ body {
   margin: 0;
 }
 
-.remote-note,
-.code-instruction {
+.remote-note {
   color: var(--instrument-dim);
   font-size: 0.85em;
   text-shadow: none;
