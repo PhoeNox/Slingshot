@@ -5,17 +5,9 @@ import { invitationHash } from "./navigation";
 import type { PeerConnectionFailure } from "./peerConnection";
 import type { RemoteRole } from "./remoteMatch";
 import type { ReplyRelay } from "./replyRelay";
-import {
-  startGuestVisit,
-  startHostVisit,
-  type HostVisit,
-  type Invitation,
-  type PeerConnectors,
-  type RemoteVisit,
-  type VisitFailure,
-  type VisitState,
-} from "./remoteVisit";
+import { startGuestVisit, startHostVisit, type HostVisit, type PeerConnectors, type RemoteVisit } from "./remoteVisit";
 import type { EnterRemoteRoute } from "./routeController";
+import type { Invitation, VisitFailure, VisitState } from "./visitTransition";
 
 export interface HostScreenElements {
   invitationField: HTMLElement;

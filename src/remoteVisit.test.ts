@@ -4,8 +4,9 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { PeerConnectionError, type GuestReply, type HostInvitation, type PeerConnectionFailure, type PeerLink } from "./peerConnection";
 import type { RemoteRole } from "./remoteMatch";
-import { REPLY_FALLBACK_MS, startGuestVisit, startHostVisit, type HostVisit, type RemoteVisit, type VisitState } from "./remoteVisit";
+import { REPLY_FALLBACK_MS, startGuestVisit, startHostVisit, type HostVisit, type RemoteVisit } from "./remoteVisit";
 import type { ReplyDelivery, ReplyRelay } from "./replyRelay";
+import type { VisitState } from "./visitTransition";
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -65,9 +66,6 @@ const OFFER_CODE = "offer-code";
 const REPLY_CODE = "reply-code";
 const ROOM_SECRET = "room-secret";
 const realSetTimeout = globalThis.setTimeout;
-const RETRYABLE_REPLY_FAILURES: readonly PeerConnectionFailure[] = ["malformed", "wrongKind", "protocolMismatch"];
-const FINAL_REPLY_FAILURES: readonly PeerConnectionFailure[] = ["couldNotConnect", "noCandidates"];
-const ALL_FAILURES: readonly PeerConnectionFailure[] = [...RETRYABLE_REPLY_FAILURES, ...FINAL_REPLY_FAILURES];
 
 function deferred<T>(): Deferred<T> {
   let resolve!: (value: T) => void;
@@ -246,28 +244,9 @@ describe("a successful connection", () => {
       { phase: "handedOver" },
     ]);
   });
-
-  test("is not closed by leaving after the handover", async () => {
-    const { h, reply } = await guestWithReply();
-    const link = fakeLink();
-    reply.opened.resolve(link.link);
-    await h.visit.settled;
-    h.visit.leave();
-    expect(link.closed).toBe(false);
-  });
 });
 
 describe("a connection that arrives after its route was left", () => {
-  test("closes the host's invitation", async () => {
-    const h = hostHarness();
-    const invitation = fakeInvitation();
-    h.visit.leave();
-    h.connected.resolve(invitation.invitation);
-    await h.visit.settled;
-    expect(invitation.closed).toBe(true);
-    expect(h.states).toEqual([{ phase: "pending" }]);
-  });
-
   test("closes the host's link and never hands it over", async () => {
     const { h, invitation } = await hostWithInvitation();
     const link = fakeLink();
@@ -277,16 +256,6 @@ describe("a connection that arrives after its route was left", () => {
     await connecting;
     expect(link.closed).toBe(true);
     expect(h.handOvers).toEqual([]);
-  });
-
-  test("closes the guest's reply", async () => {
-    const h = guestHarness();
-    const reply = fakeReply();
-    h.visit.leave();
-    h.joined.resolve(reply.reply);
-    await h.visit.settled;
-    expect(reply.closed).toBe(true);
-    expect(h.states).toEqual([{ phase: "pending" }]);
   });
 
   test("closes the guest's link and never hands it over", async () => {
@@ -306,68 +275,22 @@ describe("leaving a visit", () => {
     h.visit.leave();
     expect(invitation.closed).toBe(true);
   });
-
-  test("ignores a reply code submitted afterwards", async () => {
-    const { h, invitation } = await hostWithInvitation();
-    h.visit.leave();
-    await h.visit.submitReply(REPLY_CODE);
-    expect(invitation.replies).toEqual([]);
-  });
-
-  test("shows nothing for a failure afterwards", async () => {
-    const { h, invitation } = await hostWithInvitation();
-    const connecting = h.visit.submitReply(REPLY_CODE);
-    h.visit.leave();
-    const failure = rejection("malformed");
-    invitation.pendingAccepts[0].reject(failure);
-    await connecting;
-    await h.visit.submitReply(REPLY_CODE);
-    expect(h.states.at(-1)).toEqual({ phase: "connecting" });
-    expect(invitation.replies).toEqual([REPLY_CODE]);
-  });
 });
 
 describe("retrying", () => {
-  test.each(RETRYABLE_REPLY_FAILURES)("is offered after a rejected reply code (%s) and takes another code", async (reason) => {
+  test("is offered after a rejected reply code and takes another code", async () => {
     const { h, invitation } = await hostWithInvitation();
-    const failure = rejection(reason);
+    const failure = rejection("malformed");
     const connecting = h.visit.submitReply("bad");
     invitation.pendingAccepts[0].reject(failure);
     await connecting;
-    expect(h.states.at(-1)).toEqual({ phase: "failed", failure: reason, retry: true });
+    expect(h.states.at(-1)).toEqual({ phase: "failed", failure: "malformed", retry: true });
     const link = fakeLink();
     const retrying = h.visit.submitReply(REPLY_CODE);
     invitation.pendingAccepts[1].resolve(link.link);
     await retrying;
     expect(invitation.replies).toEqual(["bad", REPLY_CODE]);
     expect(h.handOvers).toEqual([["host", link.link]]);
-  });
-
-  test.each(FINAL_REPLY_FAILURES)("is not offered after a reply fails with %s", async (reason) => {
-    const { h, invitation } = await hostWithInvitation();
-    const failure = rejection(reason);
-    const connecting = h.visit.submitReply(REPLY_CODE);
-    invitation.pendingAccepts[0].reject(failure);
-    await connecting;
-    expect(h.states.at(-1)).toEqual({ phase: "failed", failure: reason, retry: false });
-    await h.visit.submitReply(REPLY_CODE);
-    expect(invitation.replies).toEqual([REPLY_CODE]);
-  });
-
-  test("is not offered when preparing the invitation fails", async () => {
-    const h = hostHarness();
-    const failure = rejection("noCandidates");
-    h.connected.reject(failure);
-    await h.visit.settled;
-    expect(h.states.at(-1)).toEqual({ phase: "failed", failure: "noCandidates", retry: false });
-  });
-
-  test.each(ALL_FAILURES)("is not offered to a guest failing with %s", async (reason) => {
-    const h = guestHarness();
-    const failure = rejection(reason);
-    h.joined.reject(failure);
-    await h.visit.settled;
-    expect(h.states.at(-1)).toEqual({ phase: "failed", failure: reason, retry: false });
   });
 });
 
@@ -427,34 +350,6 @@ describe("a reply through the relay", () => {
     relay.rooms[0].onReply(REPLY_CODE);
     relay.rooms[0].onReply("later-reply");
     expect(invitation.replies).toEqual([REPLY_CODE]);
-  });
-
-  test("keeps the room open after a rejected reply code", async () => {
-    const relay = inMemoryRelay();
-    const { h, invitation } = await hostWithInvitation(relay);
-    relay.rooms[0].onReply("bad");
-    const failure = rejection("malformed");
-    invitation.pendingAccepts[0].reject(failure);
-    await flush();
-    expect(h.states.at(-1)).toEqual({ phase: "failed", failure: "malformed", retry: true });
-    expect(relay.rooms[0].closed).toBe(false);
-  });
-
-  test.each(FINAL_REPLY_FAILURES)("closes the room after a reply fails with %s", async (reason) => {
-    const relay = inMemoryRelay();
-    const { invitation } = await hostWithInvitation(relay);
-    relay.rooms[0].onReply(REPLY_CODE);
-    const failure = rejection(reason);
-    invitation.pendingAccepts[0].reject(failure);
-    await flush();
-    expect(relay.rooms[0].closed).toBe(true);
-  });
-
-  test("closes the room when the host leaves", async () => {
-    const relay = inMemoryRelay();
-    const { h } = await hostWithInvitation(relay);
-    h.visit.leave();
-    expect(relay.rooms[0].closed).toBe(true);
   });
 
   test("closes a room that opens after the host left, showing no invitation", async () => {

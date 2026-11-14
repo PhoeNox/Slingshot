@@ -3,14 +3,30 @@
 
 import {
   PeerConnectionError,
+  type GuestReply,
   type HostInvitation,
   type HostPeerConnection,
   type JoinPeerConnection,
-  type PeerConnectionFailure,
   type PeerLink,
 } from "./peerConnection";
 import type { RemoteRole } from "./remoteMatch";
-import type { ReplyDelivery, ReplyRelay } from "./replyRelay";
+import type { ReplyDelivery, ReplyRelay, ReplyRoom } from "./replyRelay";
+import {
+  guestTransition,
+  hostTransition,
+  newGuestProgress,
+  newHostProgress,
+  type GuestAction,
+  type GuestEvent,
+  type GuestProgress,
+  type HostAction,
+  type HostEvent,
+  type HostProgress,
+  type Invitation,
+  type VisitAction,
+  type VisitFailure,
+  type VisitState,
+} from "./visitTransition";
 
 export type StartRemoteMatch = (role: RemoteRole, link: PeerLink) => void;
 
@@ -18,22 +34,6 @@ export interface PeerConnectors {
   host: HostPeerConnection;
   join: JoinPeerConnection;
 }
-
-export type VisitFailure = PeerConnectionFailure | "unexpected";
-
-export interface Invitation {
-  readonly offerCode: string;
-  readonly roomSecret: string;
-}
-
-export type VisitState =
-  | { readonly phase: "pending" }
-  | { readonly phase: "invitation"; readonly invitation: Invitation }
-  | { readonly phase: "joining" }
-  | { readonly phase: "replyCode"; readonly code: string }
-  | { readonly phase: "connecting" }
-  | { readonly phase: "handedOver" }
-  | { readonly phase: "failed"; readonly failure: VisitFailure; readonly retry: boolean };
 
 export type ShowVisitState = (state: VisitState) => void;
 
@@ -46,34 +46,34 @@ export interface HostVisit extends RemoteVisit {
   submitReply(replyCode: string): Promise<void>;
 }
 
-interface Closable {
-  close(): void;
-}
-
-interface Visit {
-  active: boolean;
-  connection: Closable | undefined;
+interface VisitOutlet {
   readonly show: ShowVisitState;
+  readonly startRemoteMatch: StartRemoteMatch;
 }
 
-interface HostFlow {
-  readonly visit: Visit;
-  invitationAwaitingReply: HostInvitation | undefined;
-  room: Closable | undefined;
+interface HostDriver extends VisitOutlet {
+  readonly host: HostProgress;
+  readonly connectHost: HostPeerConnection;
+  readonly relay: ReplyRelay;
 }
 
-interface ReplyCodeFallback {
-  cancel(): void;
+interface GuestDriver extends VisitOutlet {
+  readonly guest: GuestProgress;
+  readonly joinHost: JoinPeerConnection;
+  readonly relay: ReplyRelay;
+  fallbackTimer: ReturnType<typeof setTimeout> | undefined;
+}
+
+interface Arrival<Event> {
+  readonly event: Event;
+  readonly error: unknown;
 }
 
 export const REPLY_FALLBACK_MS = 15_000;
 
-const PENDING: VisitState = { phase: "pending" };
-const JOINING: VisitState = { phase: "joining" };
-const CONNECTING: VisitState = { phase: "connecting" };
-const HANDED_OVER: VisitState = { phase: "handedOver" };
-
-const RETRYABLE_REPLY_FAILURES: ReadonlySet<PeerConnectionFailure> = new Set(["malformed", "wrongKind", "protocolMismatch"]);
+const STARTED = { kind: "started" } as const;
+const LEFT = { kind: "left" } as const;
+const FALLBACK_TIMER_FIRED: GuestEvent = { kind: "fallbackTimerFired" };
 
 export function startHostVisit(
   connectHost: HostPeerConnection,
@@ -81,11 +81,13 @@ export function startHostVisit(
   show: ShowVisitState,
   startRemoteMatch: StartRemoteMatch,
 ): HostVisit {
-  const visit = beginVisit(show);
-  const host: HostFlow = { visit, invitationAwaitingReply: undefined, room: undefined };
-  const settled = prepareInvitation(host, connectHost, relay, startRemoteMatch);
-  const submitReply = (replyCode: string) => acceptReplyCode(host, replyCode, startRemoteMatch);
-  const leave = () => leaveHostVisit(host);
+  const host = newHostProgress();
+  const driver: HostDriver = { host, connectHost, relay, show, startRemoteMatch };
+  const settled = dispatchHost(driver, STARTED);
+  const submitReply = (replyCode: string) => submitReplyCode(driver, replyCode);
+  const leave = () => {
+    dispatchHost(driver, LEFT);
+  };
   return { settled, submitReply, leave };
 }
 
@@ -96,176 +98,157 @@ export function startGuestVisit(
   show: ShowVisitState,
   startRemoteMatch: StartRemoteMatch,
 ): RemoteVisit {
-  const visit = beginVisit(show);
-  const settled = joinWithReply(visit, joinHost, relay, invitation, startRemoteMatch);
-  const leave = () => leaveVisit(visit);
+  const guest = newGuestProgress(invitation);
+  const driver: GuestDriver = { guest, joinHost, relay, show, startRemoteMatch, fallbackTimer: undefined };
+  const settled = dispatchGuest(driver, STARTED);
+  const leave = () => {
+    dispatchGuest(driver, LEFT);
+  };
   return { settled, leave };
 }
 
-function beginVisit(show: ShowVisitState): Visit {
-  return { active: true, connection: undefined, show };
+async function dispatchHost(driver: HostDriver, event: HostEvent, error?: unknown): Promise<void> {
+  const actions = hostTransition(driver.host, event);
+  const performed = actions.map((action) => performHostAction(driver, action, error));
+  await Promise.all(performed);
 }
 
-function leaveVisit(visit: Visit): void {
-  visit.active = false;
-  visit.connection?.close();
+async function dispatchGuest(driver: GuestDriver, event: GuestEvent, error?: unknown): Promise<void> {
+  const actions = guestTransition(driver.guest, event);
+  const performed = actions.map((action) => performGuestAction(driver, action, error));
+  await Promise.all(performed);
 }
 
-function leaveHostVisit(host: HostFlow): void {
-  host.invitationAwaitingReply = undefined;
-  closeRoom(host);
-  leaveVisit(host.visit);
+function submitReplyCode(driver: HostDriver, replyCode: string): Promise<void> {
+  const submitted: HostEvent = { kind: "replySubmitted", replyCode };
+  return dispatchHost(driver, submitted);
 }
 
-function closeRoom(host: HostFlow): void {
-  host.room?.close();
-  host.room = undefined;
-}
-
-function showState(visit: Visit, state: VisitState): void {
-  if (visit.active) {
-    visit.show(state);
+async function performHostAction(driver: HostDriver, action: HostAction, error: unknown): Promise<void> {
+  switch (action.kind) {
+    case "connectHost":
+      return prepareInvitation(driver);
+    case "awaitReplies":
+      return openReplyRoom(driver);
+    case "accept":
+      return acceptReplyCode(driver, action.invitation, action.replyCode);
+    default:
+      return performVisitAction(driver, action, error);
   }
 }
 
-function adopt(visit: Visit, connection: Closable): boolean {
-  if (!visit.active) {
-    connection.close();
-    return false;
+async function performGuestAction(driver: GuestDriver, action: GuestAction, error: unknown): Promise<void> {
+  switch (action.kind) {
+    case "join":
+      return joinOffer(driver, action.offerCode);
+    case "awaitOpened":
+      return awaitOpened(driver, action.reply);
+    case "deliverReply":
+      deliverReply(driver, action.roomSecret, action.replyCode);
+      return;
+    case "startFallbackTimer":
+      driver.fallbackTimer = setTimeout(() => dispatchGuest(driver, FALLBACK_TIMER_FIRED), REPLY_FALLBACK_MS);
+      return;
+    case "cancelFallbackTimer":
+      clearTimeout(driver.fallbackTimer);
+      return;
+    default:
+      return performVisitAction(driver, action, error);
   }
-  visit.connection = connection;
-  return true;
 }
 
-function handOver(visit: Visit, role: RemoteRole, link: PeerLink, startRemoteMatch: StartRemoteMatch): void {
-  visit.connection = undefined;
-  showState(visit, HANDED_OVER);
-  startRemoteMatch(role, link);
+async function performVisitAction(outlet: VisitOutlet, action: VisitAction, error: unknown): Promise<void> {
+  switch (action.kind) {
+    case "show":
+      outlet.show(action.state);
+      return;
+    case "close":
+      action.handle.close();
+      return;
+    case "handOver":
+      outlet.startRemoteMatch(action.role, action.link);
+      return;
+    case "rethrow":
+      throw error;
+  }
 }
 
-async function prepareInvitation(
-  host: HostFlow,
-  connectHost: HostPeerConnection,
-  relay: ReplyRelay,
-  startRemoteMatch: StartRemoteMatch,
-): Promise<void> {
-  showState(host.visit, PENDING);
+async function prepareInvitation(driver: HostDriver): Promise<void> {
+  const preparing = driver.connectHost();
+  const arrival = await arrive<HostEvent, HostInvitation>(
+    preparing,
+    (invitation) => ({ kind: "connected", invitation }),
+    (failure) => ({ kind: "preparationFailed", failure }),
+  );
+  return dispatchHost(driver, arrival.event, arrival.error);
+}
+
+async function openReplyRoom(driver: HostDriver): Promise<void> {
+  const opening = driver.relay.awaitReplies((replyCode) => submitReplyCode(driver, replyCode));
+  const arrival = await arrive<HostEvent, ReplyRoom>(
+    opening,
+    (room) => ({ kind: "roomOpened", room }),
+    (failure) => ({ kind: "preparationFailed", failure }),
+  );
+  return dispatchHost(driver, arrival.event, arrival.error);
+}
+
+async function acceptReplyCode(driver: HostDriver, invitation: HostInvitation, replyCode: string): Promise<void> {
+  const accepting = invitation.accept(replyCode);
+  const arrival = await arrive<HostEvent, PeerLink>(
+    accepting,
+    (link) => ({ kind: "accepted", link }),
+    (failure) => ({ kind: "acceptFailed", failure }),
+  );
+  return dispatchHost(driver, arrival.event, arrival.error);
+}
+
+async function joinOffer(driver: GuestDriver, offerCode: string): Promise<void> {
+  const joining = driver.joinHost(offerCode);
+  const arrival = await arrive<GuestEvent, GuestReply>(
+    joining,
+    (reply) => ({ kind: "joined", reply }),
+    (failure) => ({ kind: "joinFailed", failure }),
+  );
+  return dispatchGuest(driver, arrival.event, arrival.error);
+}
+
+async function awaitOpened(driver: GuestDriver, reply: GuestReply): Promise<void> {
+  const arrival = await arrive<GuestEvent, PeerLink>(
+    reply.opened,
+    (link) => ({ kind: "opened", link }),
+    (failure) => ({ kind: "joinFailed", failure }),
+  );
+  return dispatchGuest(driver, arrival.event, arrival.error);
+}
+
+function deliverReply(driver: GuestDriver, roomSecret: string, replyCode: string): void {
+  const delivering = driver.relay.deliverReply(roomSecret, replyCode);
+  delivering.then((delivery) => reportDelivery(driver, delivery));
+}
+
+function reportDelivery(driver: GuestDriver, delivery: ReplyDelivery): Promise<void> {
+  const delivered: GuestEvent = { kind: "delivered", delivery };
+  return dispatchGuest(driver, delivered);
+}
+
+async function arrive<Event, Value>(
+  pending: Promise<Value>,
+  arrived: (value: Value) => Event,
+  failed: (failure: VisitFailure) => Event,
+): Promise<Arrival<Event>> {
+  let value: Value;
   try {
-    const hostInvitation = await connectHost();
-    if (!adopt(host.visit, hostInvitation)) {
-      return;
-    }
-    host.invitationAwaitingReply = hostInvitation;
-    const room = await relay.awaitReplies((replyCode) => acceptReplyCode(host, replyCode, startRemoteMatch));
-    if (!host.visit.active) {
-      room.close();
-      return;
-    }
-    host.room = room;
-    const invitation: Invitation = { offerCode: hostInvitation.offerCode, roomSecret: room.roomSecret };
-    const invitationState: VisitState = { phase: "invitation", invitation };
-    showState(host.visit, invitationState);
+    value = await pending;
   } catch (error) {
-    fail(host.visit, error, false);
+    const failure = failureOf(error);
+    const failedEvent = failed(failure);
+    return { event: failedEvent, error };
   }
+  const arrivedEvent = arrived(value);
+  return { event: arrivedEvent, error: undefined };
 }
 
-async function acceptReplyCode(host: HostFlow, replyCode: string, startRemoteMatch: StartRemoteMatch): Promise<void> {
-  const invitation = host.invitationAwaitingReply;
-  if (invitation === undefined) {
-    return;
-  }
-  host.invitationAwaitingReply = undefined;
-  showState(host.visit, CONNECTING);
-  try {
-    const link = await invitation.accept(replyCode);
-    closeRoom(host);
-    if (!adopt(host.visit, link)) {
-      return;
-    }
-    handOver(host.visit, "host", link, startRemoteMatch);
-  } catch (error) {
-    const retry = isRetryableReplyFailure(error) && host.visit.active;
-    if (retry) {
-      host.invitationAwaitingReply = invitation;
-    } else {
-      closeRoom(host);
-    }
-    fail(host.visit, error, retry);
-  }
-}
-
-async function joinWithReply(
-  visit: Visit,
-  joinHost: JoinPeerConnection,
-  relay: ReplyRelay,
-  invitation: Invitation,
-  startRemoteMatch: StartRemoteMatch,
-): Promise<void> {
-  showState(visit, PENDING);
-  try {
-    const reply = await joinHost(invitation.offerCode);
-    if (!adopt(visit, reply)) {
-      return;
-    }
-    showState(visit, JOINING);
-    const delivery = relay.deliverReply(invitation.roomSecret, reply.replyCode);
-    const fallback = scheduleReplyCodeFallback(visit, reply.replyCode, delivery);
-    const link = await openedBeforeFallback(reply.opened, fallback);
-    if (!adopt(visit, link)) {
-      return;
-    }
-    handOver(visit, "guest", link, startRemoteMatch);
-  } catch (error) {
-    fail(visit, error, false);
-  }
-}
-
-function scheduleReplyCodeFallback(visit: Visit, replyCode: string, delivery: Promise<ReplyDelivery>): ReplyCodeFallback {
-  let due = true;
-  const showReplyCode = () => {
-    if (!due) {
-      return;
-    }
-    due = false;
-    clearTimeout(timer);
-    const replyCodeState: VisitState = { phase: "replyCode", code: replyCode };
-    showState(visit, replyCodeState);
-  };
-  const timer = setTimeout(showReplyCode, REPLY_FALLBACK_MS);
-  delivery.then((outcome) => {
-    if (outcome === "unreached") {
-      showReplyCode();
-    }
-  });
-  const cancel = () => {
-    due = false;
-    clearTimeout(timer);
-  };
-  return { cancel };
-}
-
-async function openedBeforeFallback(opened: Promise<PeerLink>, fallback: ReplyCodeFallback): Promise<PeerLink> {
-  try {
-    return await opened;
-  } finally {
-    fallback.cancel();
-  }
-}
-
-function isRetryableReplyFailure(error: unknown): boolean {
-  return error instanceof PeerConnectionError && RETRYABLE_REPLY_FAILURES.has(error.reason);
-}
-
-function fail(visit: Visit, error: unknown, retry: boolean): void {
-  const failed = failedState(error, retry);
-  showState(visit, failed);
-  if (!(error instanceof PeerConnectionError)) {
-    throw error;
-  }
-}
-
-function failedState(error: unknown, retry: boolean): VisitState {
-  const failure = error instanceof PeerConnectionError ? error.reason : "unexpected";
-  return { phase: "failed", failure, retry };
+function failureOf(error: unknown): VisitFailure {
+  return error instanceof PeerConnectionError ? error.reason : "unexpected";
 }
