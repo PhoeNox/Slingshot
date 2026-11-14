@@ -2,7 +2,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { stepAttractMode, type AttractMode } from "./core/attract";
-import { adjustAim, fire, matchView, step, type AimDelta, type Match, type MatchView } from "./core/match";
+import {
+  activeSide,
+  adjustAim,
+  fire,
+  matchView,
+  startNextRound,
+  step,
+  type AimDelta,
+  type Match,
+  type MatchView,
+} from "./core/match";
 import type { Side } from "./core/round";
 import { ATTRACT_VIEWER, HOT_SEAT_VIEWER, type Viewer } from "./frame";
 import type { RemoteNotice } from "./lockstep";
@@ -35,14 +45,20 @@ export function playHotSeat(match: Match): PlayedMatch {
   return {
     viewer: HOT_SEAT_VIEWER,
     shakes: true,
-    aimingSide: () => match.activePlayer,
+    aimingSide: () => activeSide(match),
     aim: (delta) => adjustAim(match, delta),
-    fire: () => fire(match),
+    fire: () => fireHotSeat(match),
     step: () => stepHotSeat(match),
     view: () => matchView(match),
     notice: noNotice,
     leave: ignore,
   };
+}
+
+function fireHotSeat(match: Match): void {
+  if (!startNextRound(match)) {
+    fire(match);
+  }
 }
 
 function stepHotSeat(match: Match): PlayedMatchStep {

@@ -2,13 +2,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import {
+  activeSide,
   adjustAim,
+  aimOf,
   createMatch,
   DEFAULT_MATCH_RULES,
   drawRandomInt,
   fire,
-  matchView,
+  hasRoundBeenOverFor,
+  isAiming,
   previewShot,
+  startNextRound,
   step,
   type Match,
 } from "./match";
@@ -40,10 +44,9 @@ export function createAttractMode(seed: number): AttractMode {
 
 export function stepAttractMode(attract: AttractMode): void {
   step(attract.match);
-  const phase = attract.match.phase;
-  if (phase.kind === "roundOver" && phase.stepsSinceRoundOver >= NEXT_ROUND_DELAY_STEPS) {
-    fire(attract.match);
-  } else if (phase.kind === "aiming") {
+  if (hasRoundBeenOverFor(attract.match, NEXT_ROUND_DELAY_STEPS)) {
+    startNextRound(attract.match);
+  } else if (isAiming(attract.match)) {
     playAimingStep(attract);
   }
 }
@@ -60,7 +63,7 @@ function playAimingStep(attract: AttractMode): void {
 }
 
 function aimLongestFlight(match: Match): void {
-  const side = match.activePlayer;
+  const side = activeSide(match);
   const candidates = Array.from({ length: CANDIDATE_COUNT }, () => drawCandidateAim(match, side));
   const flightLengths = candidates.map((aim) => candidateFlightLength(match, aim));
   const longest = Math.max(...flightLengths);
@@ -81,8 +84,7 @@ function candidateFlightLength(match: Match, aim: Readonly<Aim>): number {
 }
 
 function aimAt(match: Match, aim: Readonly<Aim>): void {
-  const view = matchView(match);
-  const current = view.ships[view.activePlayer].aim;
+  const current = aimOf(match, activeSide(match));
   const delta = { angle: aim.angle - current.angle, power: aim.power - current.power };
   adjustAim(match, delta);
 }

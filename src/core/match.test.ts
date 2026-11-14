@@ -10,8 +10,10 @@ import {
   fireReceivedShot,
   matchView,
   nextShooter,
+  opponentOf,
   previewShot,
   showAim,
+  startNextRound,
   step,
   type InFlightView,
   type Match,
@@ -758,7 +760,7 @@ describe("round end and next round", () => {
     expect(matchView(match).phase.kind).toBe("roundOver");
   });
 
-  test("fire during round over starts the next round with a new layout, default aims and cleared trails", () => {
+  test("starting the next round during round over gives a new layout, default aims and cleared trails", () => {
     const match = createMatch(82, fixedLayout([]));
     hitOpponent(match, 100);
     const scoresBefore = { ...matchView(match).scores };
@@ -766,7 +768,7 @@ describe("round end and next round", () => {
       step(match);
     }
 
-    fire(match);
+    startNextRound(match);
 
     expect(matchView(match).phase).toEqual({ kind: "aiming" });
     expect(matchView(match).roundNumber).toBe(2);
@@ -784,7 +786,7 @@ describe("round end and next round", () => {
     const target = inactivePlayer(match);
     hitOpponent(match, 100);
 
-    fire(match);
+    startNextRound(match);
 
     expect(matchView(match).activePlayer).toBe(target);
   });
@@ -794,7 +796,7 @@ describe("round end and next round", () => {
     hitOpponent(match, 100);
     const announced = nextShooter(match);
 
-    fire(match);
+    startNextRound(match);
 
     expect(matchView(match).activePlayer).toBe(announced);
   });
@@ -804,7 +806,7 @@ describe("round end and next round", () => {
     const shooter = matchView(match).activePlayer;
     hitOwnShip(match);
 
-    fire(match);
+    startNextRound(match);
 
     expect(matchView(match).activePlayer).toBe(shooter);
   });
@@ -815,7 +817,7 @@ describe("round end and next round", () => {
     hitOpponentOnAttempt(match, 3, 320);
     expect(matchView(match).scores).toEqual({ left: 0, right: 0 });
 
-    fire(match);
+    startNextRound(match);
 
     expect(matchView(match).activePlayer).not.toBe(shooter);
   });
@@ -826,8 +828,8 @@ describe("round end and next round", () => {
     hitOpponent(first, 100);
     hitOpponent(second, 100);
 
-    fire(first);
-    fire(second);
+    startNextRound(first);
+    startNextRound(second);
 
     expect(matchView(second).ships).toEqual(matchView(first).ships);
     expect(matchView(second).planets).toEqual(matchView(first).planets);
@@ -837,7 +839,7 @@ describe("round end and next round", () => {
     const play = () => {
       const match = createMatch(4242, fixedLayout([]));
       hitOpponent(match, 100);
-      fire(match);
+      startNextRound(match);
       for (let i = 0; i < 300; i++) {
         step(match);
         if (matchView(match).phase.kind === "aiming") {
@@ -852,6 +854,63 @@ describe("round end and next round", () => {
 
     expect(first.roundNumber).toBe(2);
     expect(play()).toEqual(first);
+  });
+});
+
+describe("wrong-phase calls", () => {
+  test("fire during round over launches nothing, does not start the next round and leaves the match unchanged", () => {
+    const match = createMatch(91, fixedLayout([]));
+    hitOpponent(match, 100);
+    const before = structuredClone(match);
+
+    expect(fire(match)).toBeUndefined();
+
+    expect(match).toEqual(before);
+  });
+
+  test("fire while a shot is in flight launches nothing and leaves the match unchanged", () => {
+    const match = createMatch(92, fixedLayout([]));
+    fire(match);
+    const before = structuredClone(match);
+
+    expect(fire(match)).toBeUndefined();
+
+    expect(match).toEqual(before);
+  });
+
+  test("starting the next round while aiming is rejected and leaves the match unchanged", () => {
+    const match = createMatch(93, fixedLayout([]));
+    const before = structuredClone(match);
+
+    expect(startNextRound(match)).toBe(false);
+
+    expect(match).toEqual(before);
+  });
+
+  test("starting the next round while a shot is in flight is rejected and leaves the match unchanged", () => {
+    const match = createMatch(94, fixedLayout([]));
+    fire(match);
+    const before = structuredClone(match);
+
+    expect(startNextRound(match)).toBe(false);
+
+    expect(match).toEqual(before);
+  });
+
+  test("starting the next round during round over is accepted", () => {
+    const match = createMatch(95, fixedLayout([]));
+    hitOpponent(match, 100);
+
+    expect(startNextRound(match)).toBe(true);
+
+    expect(matchView(match).roundNumber).toBe(2);
+  });
+});
+
+describe("opponentOf", () => {
+  test("each side's opponent is the other side", () => {
+    expect(opponentOf("left")).toBe("right");
+    expect(opponentOf("right")).toBe("left");
   });
 });
 
@@ -1024,7 +1083,7 @@ describe("match rules", () => {
       const ownShipBlocker = fixedLayout([planetAt(SHIP_X[shooter], 450, 100, 10)]);
       const match = createMatch(seed, ownShipBlocker, FIVE_TO_SIX_PLANETS);
       hitOwnShip(match);
-      fire(match);
+      startNextRound(match);
       counts.add(matchView(match).planets.length);
     }
 
@@ -1307,9 +1366,7 @@ function playLocally(match: Match, plans: AimPlan[]): { shots: ReceivedShot[]; o
   const shots: ReceivedShot[] = [];
   const outcomes: ShotOutcome[] = [];
   for (const plan of plans) {
-    if (matchView(match).phase.kind === "roundOver") {
-      fire(match);
-    }
+    startNextRound(match);
     const aim = plan(matchView(match).activePlayer);
     aimAt(match, aim.angle, aim.power);
     shots.push(sentShot(match));
@@ -1337,7 +1394,7 @@ function flyShot(match: Match, maxSteps: number): FlownShot {
 
 function nextRoundShot(match: Match, angle: number, power: number): ReceivedShot {
   const nextRound = structuredClone(match);
-  fire(nextRound);
+  startNextRound(nextRound);
   aimAt(nextRound, angle, power);
   return sentShot(nextRound);
 }
@@ -1350,9 +1407,7 @@ describe("fireReceivedShot", () => {
     const { shots, outcomes: localOutcomes } = playLocally(local, SHOT_PLANS);
     const outcomes: ShotOutcome[] = [];
     for (const shot of shots) {
-      if (matchView(remote).phase.kind === "roundOver") {
-        fire(remote);
-      }
+      startNextRound(remote);
       expect(fireReceivedShot(remote, shot.aim, shot.record)).toBe(true);
       outcomes.push(flyShot(remote, 1000).outcome);
     }

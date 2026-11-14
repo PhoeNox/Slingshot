@@ -117,7 +117,7 @@ describe("entering a screen", () => {
 
     enterScreen(session, "mainMenu", 2, SIX_PLANET_RULES);
 
-    expect(shownAttract(session).match.rules).toEqual(DEFAULT_MATCH_RULES);
+    expect(matchView(shownAttract(session).match).rules).toEqual(DEFAULT_MATCH_RULES);
   });
 
   test("drops the match when leaving it", () => {
@@ -160,6 +160,16 @@ describe("aiming and firing", () => {
     fireMatch(session);
 
     expect(matchView(shownMatch(session)).phase.kind).toBe("inFlight");
+  });
+
+  test("fire during a hot-seat round over starts the next round", () => {
+    const session = sessionOn("match");
+    showMatch(session, roundOverMatch());
+
+    fireMatch(session);
+
+    expect(matchView(shownMatch(session)).phase.kind).toBe("aiming");
+    expect(matchView(shownMatch(session)).roundNumber).toBe(2);
   });
 
   test("ignores aim and fire without a match", () => {
@@ -290,7 +300,7 @@ describe("debris", () => {
     const match = shownMatch(session);
     for (let shot = 0; shot < 6; shot++) {
       adjustAim(match, { angle: 25 * shot, power: 20 * shot });
-      fire(match);
+      fireMatch(session);
       for (let i = 0; i < 1000 && matchView(match).phase.kind === "inFlight"; i++) {
         stepScreenSession(session, reducedMotion);
       }

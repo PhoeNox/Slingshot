@@ -30,7 +30,7 @@ describe("attract mode", () => {
   test("plays under the default match rules", () => {
     const attract = createAttractMode(1);
 
-    expect(attract.match.rules).toEqual(DEFAULT_MATCH_RULES);
+    expect(matchView(attract.match).rules).toEqual(DEFAULT_MATCH_RULES);
   });
 
   test("fires a shot after a short aiming pause", () => {

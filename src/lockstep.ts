@@ -3,14 +3,18 @@
 
 import {
   adjustAim,
+  aimOf,
   createMatch,
   fire,
   fireReceivedShot,
   isAimingTurnOf,
+  isAimStreamingStep,
   isRoundOver,
   isShotInFlight,
   nextShooter,
+  opponentOf,
   showAim,
+  startNextRound,
   step,
   type Aim,
   type AimDelta,
@@ -52,7 +56,6 @@ export interface LockstepResult {
   end: RemoteMatchEnd | undefined;
 }
 
-const AIM_SEND_INTERVAL_STEPS = 3;
 const END_NOTICE_STEPS = 90;
 
 const REJECTION_ENDS: Record<RejectionReason, RemoteMatchEnd> = {
@@ -140,7 +143,7 @@ function receiveHello(lockstep: Lockstep, result: LockstepResult, seed: number, 
 }
 
 function opponentSide(lockstep: Readonly<Lockstep>): Side {
-  return lockstep.localSide === "left" ? "right" : "left";
+  return opponentOf(lockstep.localSide);
 }
 
 // Opponent moves apply in the order sent, each only once the local flight has ended,
@@ -185,7 +188,7 @@ function isRoundStartOf(match: Readonly<Match>, side: Side): boolean {
 }
 
 function startRound(lockstep: Lockstep, match: Match): void {
-  fire(match);
+  startNextRound(match);
   lockstep.sentAim = undefined;
 }
 
@@ -215,8 +218,7 @@ export function fireLockstep(lockstep: Lockstep): LockstepResult {
     startRound(lockstep, match);
     result.outgoing.push({ kind: "nextRound" });
   } else if (isLocalTurn(lockstep)) {
-    const { angle, power } = match.ships[lockstep.localSide].aim;
-    const aim = { angle, power };
+    const aim = aimOf(match, lockstep.localSide);
     const shot = fire(match)!;
     result.outgoing.push({ kind: "shot", aim, shot });
   }
@@ -260,16 +262,15 @@ function reportShotOutcome(lockstep: Lockstep, result: LockstepResult, outcome: 
 }
 
 function sendChangedAim(lockstep: Lockstep, result: LockstepResult, match: Readonly<Match>): void {
-  if (!isLocalTurn(lockstep) || match.roundStepCount % AIM_SEND_INTERVAL_STEPS !== 0) {
+  if (!isLocalTurn(lockstep) || !isAimStreamingStep(match)) {
     return;
   }
-  const aim = match.ships[lockstep.localSide].aim;
+  const aim = aimOf(match, lockstep.localSide);
   if (lockstep.sentAim?.angle === aim.angle && lockstep.sentAim.power === aim.power) {
     return;
   }
-  const sentAim = { angle: aim.angle, power: aim.power };
-  lockstep.sentAim = sentAim;
-  result.outgoing.push({ kind: "aim", aim: sentAim });
+  lockstep.sentAim = aim;
+  result.outgoing.push({ kind: "aim", aim });
 }
 
 export function isEndNoticeOver(lockstep: Readonly<Lockstep>): boolean {

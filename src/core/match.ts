@@ -99,6 +99,7 @@ export const DEFAULT_MATCH_RULES: DeepReadonly<MatchRules> = {
 };
 
 const MAX_POWER = 350;
+const AIM_STREAM_INTERVAL_STEPS = 3;
 const FULL_TURN = 360;
 const SHOT_RECORD_TOLERANCE = 1e-6;
 const SHOT_RECORD_FIELDS = ["x", "y", "vx", "vy"] as const;
@@ -229,7 +230,7 @@ function endShot(match: Match): void {
   match.activePlayer = opponentOf(match.activePlayer);
 }
 
-function opponentOf(side: Side): Side {
+export function opponentOf(side: Side): Side {
   return side === "left" ? "right" : "left";
 }
 
@@ -241,7 +242,15 @@ function endRound(match: Match, hitShip: Side): void {
   match.phase = { kind: "roundOver", result, nextShooter: nextRoundFirstShooter, stepsSinceRoundOver: 0 };
 }
 
-function startNextRound(match: Match, shooter: Side): void {
+export function startNextRound(match: Match): boolean {
+  if (match.phase.kind !== "roundOver") {
+    return false;
+  }
+  beginRound(match, match.phase.nextShooter);
+  return true;
+}
+
+function beginRound(match: Match, shooter: Side): void {
   const layout = createRoundLayout(match.rng, match.rules.planetCount);
   match.activePlayer = shooter;
   match.phase = { kind: "aiming" };
@@ -280,15 +289,29 @@ export function isRoundOver(match: Readonly<Match>): boolean {
   return match.phase.kind === "roundOver";
 }
 
+export function hasRoundBeenOverFor(match: Readonly<Match>, steps: number): boolean {
+  return match.phase.kind === "roundOver" && match.phase.stepsSinceRoundOver >= steps;
+}
+
+export function isAiming(match: Readonly<Match>): boolean {
+  return match.phase.kind === "aiming";
+}
+
+export function activeSide(match: Readonly<Match>): Side {
+  return match.activePlayer;
+}
+
+export function aimOf(match: Readonly<Match>, side: Side): Aim {
+  const { angle, power } = match.ships[side].aim;
+  return { angle, power };
+}
+
+export function isAimStreamingStep(match: Readonly<Match>): boolean {
+  return match.roundStepCount % AIM_STREAM_INTERVAL_STEPS === 0;
+}
+
 export function fire(match: Match): ShotRecord | undefined {
-  if (match.phase.kind === "roundOver") {
-    startNextRound(match, match.phase.nextShooter);
-    return undefined;
-  }
-  if (match.phase.kind === "aiming") {
-    return launchShot(match);
-  }
-  return undefined;
+  return match.phase.kind === "aiming" ? launchShot(match) : undefined;
 }
 
 function launchShot(match: Match): ShotRecord {
