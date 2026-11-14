@@ -29,6 +29,7 @@ Pure, seeded, no DOM, canvas, or clock (ADR-0001).
 | `settings.ts` | Setting rule table (control kind, choices, labels, default, display vs match rule per setting) and the Settings type, defaults, parse/serialise of the stored form and match rules derived from it, stored-form match rules for the wire; planet count drag-along |
 | `remoteProtocol.ts` | Remote match wire messages (hello, aim, shot, outcome, leave): JSON encode, never-throwing decode with validation, `PROTOCOL_VERSION`, shot outcome comparison |
 | `signalingCode.ts` | Compact, URL-safe signaling codes: a non-trickle offer or answer reduced to its connection fields (ICE credentials, DTLS fingerprint, setup role, candidates), deflated and base64url-encoded with the protocol version; never-throwing decode back to an SDP from a fixed data-channel template, rejecting garbage, wrong kind and version mismatch |
+| `peerConnection.ts` | Browser `RTCPeerConnection` with one ordered, reliable data channel for host and guest: non-trickle offer and reply codes over public STUN only, a connect timeout and a no-candidates failure as `PeerConnectionError`, and an open link to send and receive text plus a closed signal that fires once; connection factory injectable for tests |
 | `settingsStorage.ts` | Reads and writes the stored settings in `localStorage`, tolerating unavailable storage |
 | `input.ts` | Keyboard bindings for aiming, firing, escape |
 | `aimKeyRepeat.ts` | Held-key repeat timing for aim adjustment |
