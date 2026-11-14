@@ -3,7 +3,7 @@
 
 import { COLOURS } from "./colours";
 import type { PlanetCountRange } from "./core/match";
-import { backTargetFor, hashFor, moveFocus, resolveHash, showsMatch, type FocusStep, type MenuItem, type Route, type Screen } from "./navigation";
+import { backTargetFor, hashFor, moveFocus, resolveHash, showsMatch, type FixedRouteScreen, type FocusStep, type MenuItem, type Route, type Screen } from "./navigation";
 import { scrambleLabel } from "./scramble";
 import { SETTING_KEYS, SETTING_RULES, withRangeEnd, type AnySettingRule, type RangeEnd, type SettingChoice, type SettingKey, type Settings } from "./settings";
 
@@ -326,8 +326,12 @@ export function bindMainMenuButton(button: HTMLButtonElement): void {
 export function navigateBack(target: Window, screen: Screen): void {
   const backTarget = backTargetFor(screen);
   if (backTarget !== undefined) {
-    target.location.hash = hashFor(backTarget);
+    navigateTo(target, backTarget);
   }
+}
+
+export function navigateTo(target: Window, screen: FixedRouteScreen): void {
+  target.location.hash = hashFor(screen);
 }
 
 export function bindScreenRoutes(target: Window, enterRoute: (route: Route) => void): void {

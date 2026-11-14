@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { invitationHash, type Route } from "./navigation";
+import { invitationHash } from "./navigation";
 import { hostPeerConnection, joinPeerConnection, PeerConnectionError, type HostInvitation, type PeerConnectionFailure, type PeerLink } from "./peerConnection";
 import type { RemoteRole } from "./remoteMatch";
+import type { EnterRemoteRoute } from "./routeController";
 
 export type StartRemoteMatch = (role: RemoteRole, link: PeerLink) => void;
 
@@ -71,12 +72,11 @@ export function bindRemoteMatchScreens(
   target: Window,
   host: HostScreenElements,
   guest: GuestScreenElements,
-  startRemoteMatch: StartRemoteMatch,
-): (route: Route) => void {
+): EnterRemoteRoute {
   bindCopyButton(target, host.invitationCopyButton, host.invitationLink);
   bindCopyButton(target, guest.replyCodeCopyButton, guest.replyCode);
   let visit: RemoteVisit | undefined;
-  return (route) => {
+  return (route, startRemoteMatch) => {
     if (visit !== undefined) {
       leaveVisit(visit);
     }

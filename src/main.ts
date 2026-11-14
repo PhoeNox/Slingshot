@@ -8,32 +8,24 @@ import { applyFit, applyOverlayFit, fitPlayingArea } from "./display";
 import { describeBackdropFrame } from "./frame";
 import { startGameLoop } from "./gameLoop";
 import { bindControls, bindEscape } from "./input";
-import { hashFor, MAIN_MENU_ITEMS, PLAY_MENU_ITEMS, type Route } from "./navigation";
-import type { PeerLink } from "./peerConnection";
-import type { RemoteRole } from "./remoteMatch";
+import { MAIN_MENU_ITEMS, PLAY_MENU_ITEMS } from "./navigation";
 import { bindRemoteMatchScreens, type GuestScreenElements, type HostScreenElements } from "./remoteMatchScreens";
 import { drawFrame, drawShakenFrame } from "./renderer";
-import { bindBracketFlash, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, bindSettingControls, bindSettingsTabs, navigateBack, renderMenuItems, showScreen, traceTitleArc, type ScreenElements } from "./screens";
-import { matchRulesFor, parseSettings, serialiseSettings, type Settings } from "./settings";
+import { createRouteController, randomSeed, type RouteAdapters } from "./routeController";
+import { bindBracketFlash, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, bindSettingControls, bindSettingsTabs, navigateBack, navigateTo, renderMenuItems, showScreen, traceTitleArc, type ScreenElements } from "./screens";
+import { parseSettings, serialiseSettings, type Settings } from "./settings";
 import { readStoredSettings, writeStoredSettings } from "./settingsStorage";
 import {
   aimMatch,
   createScreenSession,
   describeScreenSessionFrame,
-  enterRemoteMatch,
-  enterScreen,
   fireMatch,
   isMatchActive,
-  stepScreenSession,
 } from "./screenSession";
 import { drawStars, renderStarSprites } from "./starLayer";
 import { generateStars } from "./stars";
 
 const STATIC_STAR_TIME_MS = 0;
-
-function randomSeed(): number {
-  return Math.floor(Math.random() * 2 ** 32);
-}
 
 function saveSettings(settings: Readonly<Settings>): void {
   const serialised = serialiseSettings(settings);
@@ -83,7 +75,7 @@ async function start(): Promise<void> {
   const sprites = await loadSprites();
   await loadFonts();
 
-  const session = createScreenSession(randomSeed(), Math.random);
+  const session = createScreenSession(randomSeed(Math.random), Math.random);
   const storedSettings = readStoredSettings(window);
   const settings = parseSettings(storedSettings);
 
@@ -124,28 +116,16 @@ async function start(): Promise<void> {
   }
   bindSettingsTabs(elements.settingsTabs);
   bindSettingControls(elements.settings, settings, saveSettings);
-  const startRemoteMatch = (role: RemoteRole, link: PeerLink) => {
-    enterRemoteMatch(session, role, link, settings);
-    showScreen(elements, "remoteMatch");
+  const routeAdapters: RouteAdapters = {
+    showScreen: (screen) => showScreen(elements, screen),
+    navigateTo: (screen) => navigateTo(window, screen),
+    enterRemoteRoute: bindRemoteMatchScreens(window, hostElements, guestElements),
   };
-  const enterRemoteRoute = bindRemoteMatchScreens(window, hostElements, guestElements, startRemoteMatch);
-  const enterAndShowRoute = (route: Route) => {
-    const seed = randomSeed();
-    const matchRules = matchRulesFor(settings);
-    enterScreen(session, route.screen, seed, matchRules);
-    enterRemoteRoute(route);
-    showScreen(elements, route.screen);
-  };
-  bindScreenRoutes(window, enterAndShowRoute);
+  const routes = createRouteController(session, settings, routeAdapters);
+  bindScreenRoutes(window, routes.enterRoute);
   traceTitleArc(titleArc, reducedMotion);
 
-  const mainMenuHash = hashFor("mainMenu");
-  const stepSimulation = () => {
-    const sessionStep = stepScreenSession(session, reducedMotion.matches);
-    if (sessionStep === "mainMenu") {
-      location.hash = mainMenuHash;
-    }
-  };
+  const stepSimulation = () => routes.stepSession(reducedMotion.matches);
   const backdropFrame = describeBackdropFrame();
   const stars = generateStars(Math.random);
   const starSprites = renderStarSprites();
