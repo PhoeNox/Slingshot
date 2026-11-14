@@ -14,7 +14,9 @@ import {
   type MatchView,
 } from "./core/match";
 import { BURST_COUNT } from "./debris";
-import { ATTRACT_VIEWER, describeFrame, HOT_SEAT_VIEWER, type DisplaySettings } from "./frame";
+import type { Point } from "./core/flight";
+import { ATTRACT_VIEWER, describeBackdropFrame, describeFrame, HOT_SEAT_VIEWER, type DisplaySettings } from "./frame";
+import type { FrameItem, FrameLayer, GroupItem } from "./frameItems";
 import {
   createScreenSession,
   describeScreenSessionFrame,
@@ -23,8 +25,14 @@ import {
 } from "./screenSession";
 import { enterScreen, type VisitlessScreen } from "./screenSession.fixtures";
 import { NO_SHAKE, screenShakeOffset } from "./screenShake";
+import { generateStars } from "./stars";
 
 type ViewReached = (view: MatchView) => boolean;
+
+interface PlayedFrame {
+  items: FrameItem[];
+  shake: Readonly<Point>;
+}
 
 const MAX_STEPS = 5000;
 const ANGLE_DELTAS = Array.from({ length: 36 }, (_, i) => i * 10);
@@ -46,6 +54,25 @@ function shownView(session: ScreenSession): MatchView {
     throw new Error("expected a shown match");
   }
   return view;
+}
+
+function frameOf(session: ScreenSession, reducedMotion: boolean): FrameLayer[] {
+  return describeScreenSessionFrame(session, STARS, CONTOURS_HIDDEN, reducedMotion, FRAME_TIME_MS);
+}
+
+function shakenGroupOf(frame: FrameLayer[]): GroupItem {
+  const layer = frame[2];
+  const group = layer.kind === "items" ? layer.items[0] : undefined;
+  if (group?.kind !== "group") {
+    throw new Error("expected the shaken played match group");
+  }
+  return group;
+}
+
+function playedFrameOf(session: ScreenSession, reducedMotion = false): PlayedFrame {
+  const group = shakenGroupOf(frameOf(session, reducedMotion));
+  const shake = { x: group.transform.x, y: group.transform.y };
+  return { items: group.items, shake };
 }
 
 function aimReaching(reached: ViewReached): AimDelta {
@@ -90,6 +117,9 @@ const CONTOURS_HIDDEN: DisplaySettings = { gravityWellContours: false };
 
 const extremeRandom = () => 1;
 const centredRandom = () => 0.5;
+
+const STARS = generateStars(centredRandom);
+const FRAME_TIME_MS = 1234;
 
 describe("entering a screen", () => {
   test("starts on the main menu with attract mode", () => {
@@ -253,7 +283,7 @@ describe("describing the frame", () => {
   test("shows the match while one is active", () => {
     const session = sessionOn("match");
 
-    expect(describeScreenSessionFrame(session, CONTOURS_HIDDEN, false).items).toEqual(
+    expect(playedFrameOf(session).items).toEqual(
       describeFrame(shownView(session), CONTOURS_HIDDEN, session.debris, HOT_SEAT_VIEWER),
     );
   });
@@ -261,9 +291,32 @@ describe("describing the frame", () => {
   test("shows attract mode otherwise", () => {
     const session = sessionOn("mainMenu", "credits");
 
-    expect(describeScreenSessionFrame(session, CONTOURS_HIDDEN, false).items).toEqual(
+    expect(playedFrameOf(session).items).toEqual(
       describeFrame(shownView(session), CONTOURS_HIDDEN, session.debris, ATTRACT_VIEWER),
     );
+  });
+});
+
+describe("frame layers", () => {
+  test("draws the backdrop, then the stars, then the shaken played match", () => {
+    const session = sessionOn("match");
+
+    const frame = frameOf(session, false);
+
+    expect(frame.map((layer) => layer.kind)).toEqual(["items", "stars", "items"]);
+    expect(frame[0]).toEqual({ kind: "items", items: describeBackdropFrame() });
+    expect(frame[1]).toEqual({ kind: "stars", stars: STARS, timeMs: FRAME_TIME_MS });
+    expect(shakenGroupOf(frame).items).toEqual(
+      describeFrame(shownView(session), CONTOURS_HIDDEN, session.debris, HOT_SEAT_VIEWER),
+    );
+  });
+
+  test("holds the stars still under reduced motion", () => {
+    const session = sessionOn("match");
+
+    const frame = frameOf(session, true);
+
+    expect(frame[1]).toEqual({ kind: "stars", stars: STARS, timeMs: 0 });
   });
 });
 
@@ -277,7 +330,7 @@ describe("screen shake", () => {
   test("follows the match right after a hit", () => {
     const session = roundOverSession();
 
-    const shake = describeScreenSessionFrame(session, CONTOURS_HIDDEN, false).shake;
+    const shake = playedFrameOf(session).shake;
 
     expect(shake).toEqual(screenShakeOffset(shownView(session), extremeRandom));
     expect(shake).not.toEqual(NO_SHAKE);
@@ -286,13 +339,20 @@ describe("screen shake", () => {
   test("is still under reduced motion", () => {
     const session = roundOverSession();
 
-    expect(describeScreenSessionFrame(session, CONTOURS_HIDDEN, true).shake).toBe(NO_SHAKE);
+    expect(playedFrameOf(session, true).shake).toEqual(NO_SHAKE);
   });
 
   test("is still without a match", () => {
     const session = createScreenSession(1, extremeRandom);
 
-    expect(describeScreenSessionFrame(session, CONTOURS_HIDDEN, false).shake).toBe(NO_SHAKE);
+    expect(playedFrameOf(session).shake).toEqual(NO_SHAKE);
+  });
+
+  test("is still for a played match that does not shake", () => {
+    const session = roundOverSession();
+    session.played = { ...session.played, shakes: false };
+
+    expect(playedFrameOf(session).shake).toEqual(NO_SHAKE);
   });
 });
 
@@ -399,7 +459,7 @@ describe("debris", () => {
   test("the frame draws the debris", () => {
     const session = planetHitSession(false);
 
-    const dots = describeScreenSessionFrame(session, CONTOURS_HIDDEN, false).items.filter((item) => item.kind === "dot");
+    const dots = playedFrameOf(session).items.filter((item) => item.kind === "dot");
 
     expect(dots).toHaveLength(BURST_COUNT.large);
   });

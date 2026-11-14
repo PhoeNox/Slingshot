@@ -4,24 +4,21 @@
 import "./style.css";
 import { loadFonts, loadSprites } from "./assets";
 import { applyFit, applyOverlayFit, fitPlayingArea } from "./display";
-import { describeBackdropFrame } from "./frame";
 import { startGameLoop } from "./gameLoop";
 import { bindEscape, bindPlayerInput } from "./input";
 import { MAIN_MENU_ITEMS, PLAY_MENU_ITEMS } from "./navigation";
 import { hostPeerConnection, joinPeerConnection } from "./peerConnection";
 import { bindRemoteMatchScreens, type GuestScreenElements, type HostScreenElements } from "./remoteMatchScreens";
 import type { PeerConnectors } from "./remoteVisit";
-import { drawFrame, drawShakenFrame } from "./renderer";
+import { drawLayers } from "./renderer";
 import { nostrReplyRelay } from "./replyRelay";
 import { createRouteController, randomSeed, type RouteAdapters } from "./routeController";
 import { bindBracketFlash, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, bindSettingControls, bindSettingsTabs, navigateBack, navigateTo, renderMenuItems, showScreen, traceTitleArc, type ScreenElements } from "./screens";
 import { localSettingsStorage } from "./settingsStorage";
 import { createSettingsStore } from "./settingsStore";
 import { createScreenSession, describeScreenSessionFrame, submitReplyCode } from "./screenSession";
-import { drawStars, renderStarSprites } from "./starLayer";
+import { renderStarSprites } from "./starLayer";
 import { generateStars } from "./stars";
-
-const STATIC_STAR_TIME_MS = 0;
 
 async function start(): Promise<void> {
   const stage = document.querySelector<HTMLElement>("#stage")!;
@@ -122,15 +119,11 @@ async function start(): Promise<void> {
   traceTitleArc(titleArc, reducedMotion);
 
   const stepSimulation = () => routes.stepSession(reducedMotion.matches);
-  const backdropFrame = describeBackdropFrame();
   const stars = generateStars(Math.random);
   const starSprites = renderStarSprites();
   const render = (timeMs: number) => {
-    const starTimeMs = reducedMotion.matches ? STATIC_STAR_TIME_MS : timeMs;
-    const frame = describeScreenSessionFrame(session, settings.display(), reducedMotion.matches);
-    drawFrame(context, sprites, backdropFrame);
-    drawStars(context, starSprites, stars, starTimeMs);
-    drawShakenFrame(context, sprites, frame.items, frame.shake);
+    const frame = describeScreenSessionFrame(session, stars, settings.display(), reducedMotion.matches, timeMs);
+    drawLayers(context, sprites, starSprites, frame);
   };
   startGameLoop(stepSimulation, render);
 }

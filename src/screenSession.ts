@@ -5,8 +5,8 @@ import { createAttractMode } from "./core/attract";
 import type { Point } from "./core/flight";
 import { createMatch, type MatchRules, type MatchView } from "./core/match";
 import { advanceDebris, type Particle } from "./debris";
-import { describeFrame, describeRemoteNotice, type DisplaySettings } from "./frame";
-import type { FrameItem } from "./frameItems";
+import { describeBackdropFrame, describeFrame, describeRemoteNotice, type DisplaySettings } from "./frame";
+import type { FrameItem, FrameLayer, GroupItem, ItemsLayer, StarsLayer } from "./frameItems";
 import type { RemoteNotice } from "./lockstep";
 import type { Route, RouteScreen, Screen } from "./navigation";
 import type { PeerLink } from "./peerConnection";
@@ -23,6 +23,7 @@ import {
 } from "./remoteVisit";
 import type { ReplyRelay } from "./replyRelay";
 import { NO_SHAKE, screenShakeOffset } from "./screenShake";
+import type { Star } from "./stars";
 import type { Invitation } from "./visitTransition";
 
 export type ScreenVisit = { role: "host"; visit: HostVisit } | { role: "guest"; visit: RemoteVisit };
@@ -55,10 +56,8 @@ export interface VisitPorts {
 
 export type ScreenSessionStep = "stay" | "mainMenu";
 
-export interface ScreenSessionFrame {
-  items: FrameItem[];
-  shake: Readonly<Point>;
-}
+const STATIC_STAR_TIME_MS = 0;
+const BACKDROP_LAYER: ItemsLayer = { kind: "items", items: describeBackdropFrame() };
 
 export function createScreenSession(seed: number, random: () => number): ScreenSession {
   const attract = createAttractMode(seed);
@@ -167,16 +166,40 @@ function advanceSessionDebris(session: ScreenSession, steppedView: MatchView | u
 
 export function describeScreenSessionFrame(
   session: ScreenSession,
+  stars: readonly Star[],
   display: Readonly<DisplaySettings>,
   reducedMotion: boolean,
-): ScreenSessionFrame {
+  timeMs: number,
+): FrameLayer[] {
+  const starsLayer = starsLayerOf(stars, reducedMotion, timeMs);
+  const playedLayer = shakenPlayedLayer(session, display, reducedMotion);
+  return [BACKDROP_LAYER, starsLayer, playedLayer];
+}
+
+function starsLayerOf(stars: readonly Star[], reducedMotion: boolean, timeMs: number): StarsLayer {
+  const starTimeMs = reducedMotion ? STATIC_STAR_TIME_MS : timeMs;
+  return { kind: "stars", stars, timeMs: starTimeMs };
+}
+
+function shakenPlayedLayer(
+  session: ScreenSession,
+  display: Readonly<DisplaySettings>,
+  reducedMotion: boolean,
+): ItemsLayer {
   const played = session.played;
   const view = played.view();
   const matchItems = view === undefined ? [] : describeFrame(view, display, session.debris, played.viewer);
   const noticeItems = noticeItemsOf(played.notice());
   const shakes = played.shakes && !reducedMotion;
   const shake = shakes && view !== undefined ? screenShakeOffset(view, session.random) : NO_SHAKE;
-  return { items: [...matchItems, ...noticeItems], shake };
+  const items = [...matchItems, ...noticeItems];
+  const shaken = shakenGroup(items, shake);
+  return { kind: "items", items: [shaken] };
+}
+
+function shakenGroup(items: FrameItem[], shake: Readonly<Point>): GroupItem {
+  const transform = { x: shake.x, y: shake.y, rotation: 0, scale: 1 };
+  return { kind: "group", transform, items };
 }
 
 function noticeItemsOf(notice: RemoteNotice | undefined): FrameItem[] {

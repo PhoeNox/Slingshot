@@ -7,6 +7,7 @@
 
 import type { Point, Segment } from "./core/flight";
 import type { Side } from "./core/round";
+import type { Star } from "./stars";
 
 export interface Rect {
   left: number;
@@ -114,3 +115,16 @@ export type FrameItem =
   | StrokeRectItem
   | TextItem
   | GroupItem;
+
+export interface ItemsLayer {
+  kind: "items";
+  items: FrameItem[];
+}
+
+export interface StarsLayer {
+  kind: "stars";
+  stars: readonly Star[];
+  timeMs: number;
+}
+
+export type FrameLayer = ItemsLayer | StarsLayer;

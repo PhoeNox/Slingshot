@@ -6,12 +6,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { TEXT_FONT_FAMILY, TITLE_FONT_FAMILY } from "./assets";
-import type { Point } from "./core/flight";
 import type {
   BloomItem,
   DotItem,
   FillRectItem,
   FrameItem,
+  FrameLayer,
   GroupItem,
   ImageItem,
   LinesItem,
@@ -21,6 +21,7 @@ import type {
   StrokeRectItem,
   TextItem,
 } from "./frameItems";
+import { drawStars, type StarSprites } from "./starLayer";
 
 export type Sprites = Record<SpriteName, HTMLImageElement>;
 
@@ -56,16 +57,31 @@ function drawItems(
   }
 }
 
-export function drawShakenFrame(
+export function drawLayers(
   context: CanvasRenderingContext2D,
   sprites: Sprites,
-  frame: readonly FrameItem[],
-  offset: Readonly<Point>,
+  starSprites: StarSprites,
+  layers: readonly FrameLayer[],
 ): void {
-  context.save();
-  context.translate(offset.x, offset.y);
-  drawFrame(context, sprites, frame);
-  context.restore();
+  for (const layer of layers) {
+    drawLayer(context, sprites, starSprites, layer);
+  }
+}
+
+function drawLayer(
+  context: CanvasRenderingContext2D,
+  sprites: Sprites,
+  starSprites: StarSprites,
+  layer: FrameLayer,
+): void {
+  switch (layer.kind) {
+    case "items":
+      drawFrame(context, sprites, layer.items);
+      break;
+    case "stars":
+      drawStars(context, starSprites, layer.stars, layer.timeMs);
+      break;
+  }
 }
 
 function drawItem(context: CanvasRenderingContext2D, sprites: Sprites, item: FrameItem, groupScale: number): void {
