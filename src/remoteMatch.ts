@@ -60,6 +60,7 @@ export function playRemoteMatch(remote: RemoteMatch): PlayedMatch {
     view: () => remoteMatchView(remote),
     notice: () => remoteNotice(remote),
     leave: () => leaveRemoteMatch(remote),
+    keptBehind: () => undefined,
   };
 }
 

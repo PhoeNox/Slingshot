@@ -85,7 +85,7 @@ async function start(): Promise<void> {
 
   bindPlayerInput(window, session);
 
-  const navigateBackFromCurrentScreen = () => navigateBack(window, session.state.screen);
+  const navigateBackFromCurrentScreen = () => navigateBack(window, session.screen);
   bindEscape(window, navigateBackFromCurrentScreen);
 
   renderMenuItems(menu, MAIN_MENU_ITEMS);

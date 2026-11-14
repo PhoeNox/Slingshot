@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { describe, expect, test } from "vitest";
-import { adjustAim, DEFAULT_MATCH_RULES, fire, matchView, nextShooter, step, type Aim, type Match, type Side } from "./core/match";
+import { adjustAim, DEFAULT_MATCH_RULES, fire, matchView, nextShooter, step, type Aim, type Match, type MatchRules, type Side } from "./core/match";
 import { remoteNotice, type RemoteMatchEnd } from "./lockstep";
 import type { PeerLink } from "./peerConnection";
 import { encodeMessage, type RemoteMessage } from "./remoteProtocol";
-import type { RemoteMatch } from "./remoteMatch";
+import type { RemoteMatch, RemoteRole } from "./remoteMatch";
 import {
   createScreenSession,
   enterRemoteMatch,
@@ -101,26 +101,34 @@ function deliver(channel: FakeChannel): void {
   }
 }
 
+const remotes = new WeakMap<ScreenSession, RemoteMatch>();
+
+function playRemote(session: ScreenSession, role: RemoteRole, link: PeerLink, rules: Readonly<MatchRules>): void {
+  const remote = enterRemoteMatch(session, role, link, SEED, rules);
+  remotes.set(session, remote);
+}
+
 function joinedGuest(channel: FakeChannel): ScreenSession {
   const guest = createScreenSession(2, () => 0.5);
-  enterRemoteMatch(guest, "guest", channel.guest.link, SEED, DEFAULT_MATCH_RULES);
+  playRemote(guest, "guest", channel.guest.link, DEFAULT_MATCH_RULES);
   return guest;
 }
 
 function connectedPeers(hostSettings: Readonly<Settings> = DEFAULT_SETTINGS): Peers {
   const channel = fakeChannel();
   const host = createScreenSession(1, () => 0.5);
-  enterRemoteMatch(host, "host", channel.host.link, SEED, matchRulesFor(hostSettings));
+  playRemote(host, "host", channel.host.link, matchRulesFor(hostSettings));
   const guest = joinedGuest(channel);
   deliver(channel);
   return { channel, host, guest };
 }
 
 function remoteOf(session: ScreenSession): RemoteMatch {
-  if (session.state.screen !== "remoteMatch") {
+  const remote = remotes.get(session);
+  if (remote === undefined) {
     throw new Error("expected a remote match");
   }
-  return session.state.remote;
+  return remote;
 }
 
 function matchOf(session: ScreenSession): Match {
@@ -451,7 +459,7 @@ describe("ending a remote match", () => {
     deliver(peers.channel);
     await flushPromises();
 
-    expect(peers.host.state.screen).toBe("mainMenu");
+    expect(peers.host.screen).toBe("mainMenu");
     expect(remoteNotice(remoteOf(peers.guest))).toBe("opponentLeft");
     expect(peers.channel.closed).toBe(true);
   });
@@ -460,7 +468,7 @@ describe("ending a remote match", () => {
     const peers = connectedPeers();
     const next = fakeChannel();
 
-    enterRemoteMatch(peers.guest, "guest", next.guest.link, SEED, DEFAULT_MATCH_RULES);
+    playRemote(peers.guest, "guest", next.guest.link, DEFAULT_MATCH_RULES);
     deliver(peers.channel);
     await flushPromises();
 
@@ -518,7 +526,7 @@ describe("returning to the main menu", () => {
     await flushPromises();
 
     expect(leaving.end).toBe("left");
-    expect(peers.host.state.screen).toBe("mainMenu");
+    expect(peers.host.screen).toBe("mainMenu");
     expect(stepScreenSession(peers.host, false)).toBe("stay");
     expect(stepsUntilMainMenu(peers.guest)).toBe(END_NOTICE_STEPS);
   });

@@ -35,6 +35,7 @@ export interface PlayedMatch {
   view: () => MatchView | undefined;
   notice: () => RemoteNotice | undefined;
   leave: () => void;
+  keptBehind: (screen: Screen) => PlayedMatch | undefined;
 }
 
 const UNSTEPPED: PlayedMatchStep = { steppedView: undefined, returnsToMainMenu: false };
@@ -42,6 +43,7 @@ const UNSTEPPED: PlayedMatchStep = { steppedView: undefined, returnsToMainMenu: 
 const ignore = () => {};
 const noNotice = () => undefined;
 const noSide = () => undefined;
+const notKept = () => undefined;
 
 export function playHotSeat(match: Match): PlayedMatch {
   return {
@@ -55,6 +57,7 @@ export function playHotSeat(match: Match): PlayedMatch {
     view: () => matchView(match),
     notice: noNotice,
     leave: ignore,
+    keptBehind: notKept,
   };
 }
 
@@ -86,6 +89,7 @@ export function playAttractMode(attract: AttractMode, screen: Screen): PlayedMat
     view: () => matchView(attract.match),
     notice: noNotice,
     leave: ignore,
+    keptBehind: (nextScreen) => playAttractMode(attract, nextScreen),
   };
 }
 

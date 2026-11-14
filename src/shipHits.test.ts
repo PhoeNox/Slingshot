@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from "vitest";
 import type { Point } from "./core/flight";
-import { DEFAULT_MATCH_RULES, matchView, type Match } from "./core/match";
+import { DEFAULT_MATCH_RULES, type MatchView } from "./core/match";
 import type { Side } from "./core/round";
 import { createScreenSession, enterScreen, stepScreenSession, type ScreenSession } from "./screenSession";
 
@@ -22,29 +22,29 @@ interface ShotOutcome {
 function fireThroughScreenSession(seed: number, angle: number, power: number): ShotOutcome {
   const session = createScreenSession(seed, Math.random);
   enterScreen(session, "match", seed, DEFAULT_MATCH_RULES);
-  const match = shownMatch(session);
-  const ships = structuredClone(matchView(match).ships);
+  const ships = structuredClone(shownView(session).ships);
   aimAt(session, angle, power);
   session.played.fire();
-  for (let i = 0; i < MAX_FLIGHT_STEPS && matchView(match).phase.kind === "inFlight"; i++) {
+  for (let i = 0; i < MAX_FLIGHT_STEPS && shownView(session).phase.kind === "inFlight"; i++) {
     stepScreenSession(session, false);
   }
-  const view = matchView(match);
+  const view = shownView(session);
   const passedThrough = SIDES.find((side) =>
     view.trails.some((trail) => distanceToSegment(ships[side], trail.from, trail.to) < CERTAIN_HIT_DISTANCE));
   const hitShip = view.phase.kind === "roundOver" ? view.phase.result.hitShip : undefined;
   return { passedThrough, hitShip };
 }
 
-function shownMatch(session: ScreenSession): Match {
-  if (session.state.screen !== "match") {
-    throw new Error("expected a match");
+function shownView(session: ScreenSession): MatchView {
+  const view = session.played.view();
+  if (view === undefined) {
+    throw new Error("expected a shown match");
   }
-  return session.state.match;
+  return view;
 }
 
 function aimAt(session: ScreenSession, angle: number, power: number): void {
-  const view = matchView(shownMatch(session));
+  const view = shownView(session);
   const aim = view.ships[view.activePlayer].aim;
   session.played.aim({ angle: angle - aim.angle, power: power - aim.power });
 }

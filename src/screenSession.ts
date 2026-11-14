@@ -1,30 +1,21 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { createAttractMode, type AttractMode } from "./core/attract";
+import { createAttractMode } from "./core/attract";
 import type { Point } from "./core/flight";
-import { createMatch, type Match, type MatchRules, type MatchView } from "./core/match";
+import { createMatch, type MatchRules, type MatchView } from "./core/match";
 import { advanceDebris, type Particle } from "./debris";
 import { describeFrame, describeRemoteNotice, type DisplaySettings } from "./frame";
 import type { FrameItem } from "./frameItems";
 import type { RemoteNotice } from "./lockstep";
-import type { RouteScreen } from "./navigation";
+import type { RouteScreen, Screen } from "./navigation";
 import type { PeerLink } from "./peerConnection";
 import { playAttractMode, playHotSeat, type PlayedMatch } from "./playedMatch";
 import { playRemoteMatch, startRemoteMatch, type RemoteMatch, type RemoteRole } from "./remoteMatch";
 import { NO_SHAKE, screenShakeOffset } from "./screenShake";
 
-export type MenuScreen = Exclude<RouteScreen, "match">;
-
-export type ScreenState =
-  | { screen: "match"; match: Match }
-  | { screen: "remoteMatch"; remote: RemoteMatch }
-  | { screen: MenuScreen; attract: AttractMode };
-
-type RouteScreenState = Exclude<ScreenState, { screen: "remoteMatch" }>;
-
 export interface ScreenSession {
-  state: ScreenState;
+  screen: Screen;
   played: PlayedMatch;
   debris: Particle[];
   random: () => number;
@@ -40,7 +31,7 @@ export interface ScreenSessionFrame {
 export function createScreenSession(seed: number, random: () => number): ScreenSession {
   const attract = createAttractMode(seed);
   const played = playAttractMode(attract, "mainMenu");
-  return { state: { screen: "mainMenu", attract }, played, debris: [], random };
+  return { screen: "mainMenu", played, debris: [], random };
 }
 
 export function enterScreen(
@@ -49,26 +40,25 @@ export function enterScreen(
   seed: number,
   matchRules: Readonly<MatchRules>,
 ): void {
-  session.played.leave();
-  if (screen === "match" || !("attract" in session.state)) {
-    session.debris = [];
+  const kept = keptPlayedMatch(session.played, screen);
+  if (kept === undefined) {
+    leavePlayedMatch(session);
   }
-  const state = nextScreenState(session.state, screen, seed, matchRules);
-  session.state = state;
-  session.played = playedMatchOf(state);
+  session.screen = screen;
+  session.played = kept ?? newPlayedMatch(screen, seed, matchRules);
 }
 
-function nextScreenState(state: ScreenState, screen: RouteScreen, seed: number, matchRules: Readonly<MatchRules>): RouteScreenState {
+function keptPlayedMatch(played: PlayedMatch, screen: RouteScreen): PlayedMatch | undefined {
+  return screen === "match" ? undefined : played.keptBehind(screen);
+}
+
+function newPlayedMatch(screen: RouteScreen, seed: number, matchRules: Readonly<MatchRules>): PlayedMatch {
   if (screen === "match") {
     const match = createMatch(seed, undefined, matchRules);
-    return { screen, match };
+    return playHotSeat(match);
   }
-  const attract = "attract" in state ? state.attract : createAttractMode(seed);
-  return { screen, attract };
-}
-
-function playedMatchOf(state: RouteScreenState): PlayedMatch {
-  return state.screen === "match" ? playHotSeat(state.match) : playAttractMode(state.attract, state.screen);
+  const attract = createAttractMode(seed);
+  return playAttractMode(attract, screen);
 }
 
 export function enterRemoteMatch(
@@ -77,12 +67,17 @@ export function enterRemoteMatch(
   link: PeerLink,
   seed: number,
   matchRules: Readonly<MatchRules>,
-): void {
-  session.played.leave();
+): RemoteMatch {
+  leavePlayedMatch(session);
   const remote = startRemoteMatch(role, link, seed, matchRules);
-  session.debris = [];
-  session.state = { screen: "remoteMatch", remote };
+  session.screen = "remoteMatch";
   session.played = playRemoteMatch(remote);
+  return remote;
+}
+
+function leavePlayedMatch(session: ScreenSession): void {
+  session.played.leave();
+  session.debris = [];
 }
 
 export function stepScreenSession(session: ScreenSession, reducedMotion: boolean): ScreenSessionStep {

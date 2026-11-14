@@ -101,14 +101,14 @@ describe("entering a route", () => {
   test.each(ROUTES)("shows the screen of %j", (route) => {
     const h = harness();
     h.controller.enterRoute(route);
-    expect(h.session.state.screen).toBe(route.screen);
+    expect(h.session.screen).toBe(route.screen);
     expect(h.shownScreens).toEqual([route.screen]);
   });
 
   test("shows the remote match once the link is handed over", () => {
     const h = harness();
     enterRemoteMatch(h, HOST);
-    expect(h.session.state.screen).toBe("remoteMatch");
+    expect(h.session.screen).toBe("remoteMatch");
     expect(h.shownScreens).toEqual(["host", "remoteMatch"]);
   });
 });
@@ -119,7 +119,7 @@ describe("leaving a remote match", () => {
     const link = enterRemoteMatch(h, GUEST);
     h.controller.enterRoute(route);
     expect(link.closed).toBe(true);
-    expect(h.session.state.screen).toBe(route.screen);
+    expect(h.session.screen).toBe(route.screen);
   });
 });
 
@@ -150,7 +150,7 @@ describe("a finished remote match", () => {
     expect(h.navigations).toEqual([]);
     h.controller.stepSession(false);
     expect(h.navigations).toEqual(["mainMenu"]);
-    expect(h.session.state.screen).toBe("mainMenu");
+    expect(h.session.screen).toBe("mainMenu");
     expect(h.shownScreens.at(-1)).toBe("mainMenu");
   });
 });
