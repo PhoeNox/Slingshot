@@ -3,9 +3,10 @@
 
 import { describe, expect, test } from "vitest";
 import { adjustAim, DEFAULT_MATCH_RULES, fire, matchView, nextShooter, step, type Aim, type Match, type Side } from "./core/match";
+import { remoteNotice, type RemoteMatchEnd } from "./lockstep";
 import type { PeerLink } from "./peerConnection";
 import { encodeMessage, type RemoteMessage } from "./remoteProtocol";
-import { remoteNotice, type RemoteMatch, type RemoteMatchEnd } from "./remoteMatch";
+import type { RemoteMatch } from "./remoteMatch";
 import {
   aimMatch,
   createScreenSession,

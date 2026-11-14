@@ -15,12 +15,12 @@ import {
 } from "./frame";
 import type { FrameItem } from "./frameItems";
 import { playsAttractMode, type RouteScreen } from "./navigation";
+import { remoteNotice } from "./lockstep";
 import type { PeerLink } from "./peerConnection";
 import {
   aimRemoteMatch,
   fireRemoteMatch,
   leaveRemoteMatch,
-  remoteNotice,
   startRemoteMatch,
   stepRemoteMatch,
   type RemoteMatch,
