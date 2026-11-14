@@ -25,6 +25,7 @@ const MESSAGES: RemoteMessage[] = [
   { ...HELLO, rules: { planetCount: { min: 3, max: 3 }, timeoutSeconds: undefined, bounce: true, planetVisibility: "hidden" } },
   { kind: "aim", aim: { angle: 123.5, power: 200 } },
   { kind: "shot", aim: { angle: 90, power: 350 }, shot: { x: 59.5, y: 300, vx: 35, vy: -2.1e-15 } },
+  { kind: "nextRound" },
   { kind: "outcome", outcome: OUTCOME },
   ...(["hit", "selfHit", "leftTrackingArea", "timedOut"] as const).map(
     (endReason): RemoteMessage => ({ kind: "outcome", outcome: { ...OUTCOME, endReason } }),

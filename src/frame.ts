@@ -224,6 +224,7 @@ const MESSAGE_ROW_HEIGHT = 20;
 const MESSAGE_SCORE_CHANGE_TOP = 100;
 const MESSAGE_PROMPT_TOP = 140;
 const MESSAGE_PROMPT_TEXT = "Press Space or Enter for the next round";
+const MESSAGE_WAITING_TEXT = "Waiting for opponent to start the next round";
 
 const NOTICE_HEIGHT = 110;
 const NOTICE_DETAIL_TOP = 65;
@@ -269,7 +270,7 @@ function hudItems(view: MatchView, localSide: Side | undefined): FrameItem[] {
   const border = bounceBorderItems(view.rules.bounce);
   const readouts = phaseReadoutItems(view);
   const turn = turnItems(view, localSide);
-  const message = roundOverMessageItems(view.phase, labels);
+  const message = roundOverMessageItems(view.phase, labels, localSide);
   const scores = scoreItems(view.scores, labels);
   const banner = roundBannerItems(view.roundNumber, view.roundStepCount);
   return [...border, ...readouts, ...turn, ...message, ...scores, ...banner];
@@ -645,14 +646,27 @@ function bloomItems(ship: Readonly<Ship>, stepsSinceHit: number): BloomItem[] {
   ];
 }
 
-function roundOverMessageItems(phase: MatchView["phase"], labels: Readonly<PlayerLabels>): FrameItem[] {
+function roundOverMessageItems(
+  phase: MatchView["phase"],
+  labels: Readonly<PlayerLabels>,
+  localSide: Side | undefined,
+): FrameItem[] {
   if (phase.kind !== "roundOver") {
     return [];
   }
-  return roundResultMessageItems(phase.result, labels);
+  const prompt = roundOverPrompt(phase.nextShooter, localSide);
+  return roundResultMessageItems(phase.result, labels, prompt);
 }
 
-function roundResultMessageItems(result: Readonly<RoundResult>, labels: Readonly<PlayerLabels>): FrameItem[] {
+function roundOverPrompt(nextShooter: Side, localSide: Side | undefined): string {
+  return localSide === undefined || localSide === nextShooter ? MESSAGE_PROMPT_TEXT : MESSAGE_WAITING_TEXT;
+}
+
+function roundResultMessageItems(
+  result: Readonly<RoundResult>,
+  labels: Readonly<PlayerLabels>,
+  prompt: string,
+): FrameItem[] {
   const box = roundOverMessageBox(result.outcome);
   const panel = roundOverPanelItems(box);
   const tops = roundOverTextTops(result.outcome);
@@ -673,7 +687,7 @@ function roundResultMessageItems(result: Readonly<RoundResult>, labels: Readonly
       items: [
         title,
         hudText(scoreChange, shooterColour, MESSAGE_TEXT_CENTRE_X, tops.scoreChange, "center", "top"),
-        hudText(MESSAGE_PROMPT_TEXT, COLOURS.instrumentDim, MESSAGE_TEXT_CENTRE_X, tops.prompt, "center", "top"),
+        hudText(prompt, COLOURS.instrumentDim, MESSAGE_TEXT_CENTRE_X, tops.prompt, "center", "top"),
         ...rowTexts,
       ],
     },

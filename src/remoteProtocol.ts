@@ -6,7 +6,7 @@ import { parseStoredMatchRules, storedMatchRulesOf } from "./settings";
 
 // Bump whenever a message changes shape or meaning, or core physics changes:
 // peers on different versions would fly the same shot differently and drift out of sync.
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 export interface HelloMessage {
   kind: "hello";
@@ -26,6 +26,10 @@ export interface ShotMessage {
   shot: ShotRecord;
 }
 
+export interface NextRoundMessage {
+  kind: "nextRound";
+}
+
 export interface OutcomeMessage {
   kind: "outcome";
   outcome: ShotOutcome;
@@ -35,7 +39,13 @@ export interface LeaveMessage {
   kind: "leave";
 }
 
-export type RemoteMessage = HelloMessage | AimMessage | ShotMessage | OutcomeMessage | LeaveMessage;
+export type RemoteMessage =
+  | HelloMessage
+  | AimMessage
+  | ShotMessage
+  | NextRoundMessage
+  | OutcomeMessage
+  | LeaveMessage;
 
 export type RejectionReason = "malformed" | "protocolMismatch";
 
@@ -102,6 +112,8 @@ function readMessage(value: unknown): RemoteMessage {
       return { kind: "aim", aim: readAim(fields.aim) };
     case "shot":
       return { kind: "shot", aim: readAim(fields.aim), shot: readShotRecord(fields.shot) };
+    case "nextRound":
+      return { kind: "nextRound" };
     case "outcome":
       return { kind: "outcome", outcome: readOutcome(fields.outcome) };
     case "leave":

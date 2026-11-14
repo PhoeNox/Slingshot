@@ -9,6 +9,7 @@ import {
   fire,
   fireReceivedShot,
   matchView,
+  nextShooter,
   previewShot,
   showAim,
   step,
@@ -788,6 +789,16 @@ describe("round end and next round", () => {
     expect(matchView(match).activePlayer).toBe(target);
   });
 
+  test("during round over the next shooter is the player who shoots first in the next round", () => {
+    const match = createMatch(85, fixedLayout([]));
+    hitOpponent(match, 100);
+    const announced = nextShooter(match);
+
+    fire(match);
+
+    expect(matchView(match).activePlayer).toBe(announced);
+  });
+
   test("a player who hit their own ship has the lower score and shoots first in the next round", () => {
     const match = selfHitMatch(84);
     const shooter = matchView(match).activePlayer;
@@ -1339,6 +1350,9 @@ describe("fireReceivedShot", () => {
     const { shots, outcomes: localOutcomes } = playLocally(local, SHOT_PLANS);
     const outcomes: ShotOutcome[] = [];
     for (const shot of shots) {
+      if (matchView(remote).phase.kind === "roundOver") {
+        fire(remote);
+      }
       expect(fireReceivedShot(remote, shot.aim, shot.record)).toBe(true);
       outcomes.push(flyShot(remote, 1000).outcome);
     }
@@ -1373,19 +1387,6 @@ describe("fireReceivedShot", () => {
     expect(matchView(match).trails[0].from).toEqual({ x: received.x, y: received.y });
   });
 
-  test("a shot received while the round is over starts the next round and then flies", () => {
-    const match = createMatch(84, fixedLayout([]));
-    hitOpponent(match, 100);
-    const shot = nextRoundShot(match, 30, 150);
-
-    expect(fireReceivedShot(match, shot.aim, shot.record)).toBe(true);
-
-    expect(matchView(match).roundNumber).toBe(2);
-    expect(inFlight(match).missile).toMatchObject(shot.record);
-    expect(activeShip(match).aim).toEqual(shot.aim);
-    expect(matchView(match).attempts[matchView(match).activePlayer]).toBe(1);
-  });
-
   test.each<[string, (shot: ReceivedShot) => ReceivedShot]>([
     ["negative power", (shot) => ({ ...shot, aim: { ...shot.aim, power: -1 } })],
     ["power above 350", (shot) => ({ ...shot, aim: { ...shot.aim, power: 351 } })],
@@ -1415,6 +1416,18 @@ describe("fireReceivedShot", () => {
     const before = structuredClone(match);
 
     expect(fireReceivedShot(match, staleShot.aim, staleShot.record)).toBe(false);
+
+    expect(match).toEqual(before);
+  });
+
+  // A remote round starts only through its own message, so the core never draws the next layout to check a shot.
+  test("rejects a shot made for the next round while the round is over and leaves the match unchanged", () => {
+    const match = createMatch(84, fixedLayout([]));
+    hitOpponent(match, 100);
+    const nextRound = nextRoundShot(match, 30, 150);
+    const before = structuredClone(match);
+
+    expect(fireReceivedShot(match, nextRound.aim, nextRound.record)).toBe(false);
 
     expect(match).toEqual(before);
   });

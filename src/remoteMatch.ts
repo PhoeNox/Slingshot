@@ -25,6 +25,8 @@ import {
   encodeMessage,
   PROTOCOL_VERSION,
   shotOutcomesAgree,
+  type AimMessage,
+  type NextRoundMessage,
   type RejectionReason,
   type RemoteMessage,
   type ShotMessage,
@@ -37,11 +39,13 @@ export type RemoteMatchEnd = "left" | "opponentLeft" | "outOfSync" | "versionMis
 
 export type RemoteNotice = Exclude<RemoteMatchEnd, "left"> | "awaitingHost";
 
+type OpponentMove = AimMessage | ShotMessage | NextRoundMessage;
+
 export interface RemoteMatch {
   readonly link: PeerLink;
   readonly localSide: Side;
   match: Match | undefined;
-  receivedShots: ShotMessage[];
+  receivedMoves: OpponentMove[];
   localOutcomes: ShotOutcome[];
   remoteOutcomes: ShotOutcome[];
   sentAim: Aim | undefined;
@@ -96,7 +100,7 @@ function newRemoteMatch(link: PeerLink, localSide: Side): RemoteMatch {
     link,
     localSide,
     match: undefined,
-    receivedShots: [],
+    receivedMoves: [],
     localOutcomes: [],
     remoteOutcomes: [],
     sentAim: undefined,
@@ -145,14 +149,12 @@ function receiveMessage(remote: RemoteMatch, message: Readonly<RemoteMessage>): 
     receiveHello(remote, message.seed, message.rules);
   } else if (match === undefined) {
     endRemoteMatch(remote, "outOfSync");
-  } else if (message.kind === "aim") {
-    showAim(match, opponentSide(remote), message.aim);
-  } else if (message.kind === "shot") {
-    remote.receivedShots.push(message);
-    fireReceivedShots(remote, match);
-  } else {
+  } else if (message.kind === "outcome") {
     remote.remoteOutcomes.push(message.outcome);
     compareOutcomes(remote);
+  } else {
+    remote.receivedMoves.push(message);
+    applyReceivedMoves(remote, match);
   }
 }
 
@@ -168,18 +170,50 @@ function opponentSide(remote: Readonly<RemoteMatch>): Side {
   return remote.localSide === "left" ? "right" : "left";
 }
 
-function fireReceivedShots(remote: RemoteMatch, match: Match): void {
-  if (remote.end !== undefined || isShotInFlight(match)) {
-    return;
+// Opponent moves apply in the order sent, each only once the local flight has ended,
+// so a move always meets the phase the opponent made it in.
+function applyReceivedMoves(remote: RemoteMatch, match: Match): void {
+  while (remote.end === undefined && !isShotInFlight(match)) {
+    const move = remote.receivedMoves.shift();
+    if (move === undefined) {
+      return;
+    }
+    applyReceivedMove(remote, match, move);
   }
-  const received = remote.receivedShots.shift();
-  if (received === undefined) {
-    return;
+}
+
+function applyReceivedMove(remote: RemoteMatch, match: Match, move: Readonly<OpponentMove>): void {
+  if (move.kind === "aim") {
+    showAim(match, opponentSide(remote), move.aim);
+  } else if (move.kind === "nextRound") {
+    startOpponentRound(remote, match);
+  } else {
+    fireOpponentShot(remote, match, move);
   }
-  const fromOpponent = nextShooter(match) === opponentSide(remote);
+}
+
+function startOpponentRound(remote: RemoteMatch, match: Match): void {
+  if (isRoundStartOf(match, opponentSide(remote))) {
+    startRound(remote, match);
+  } else {
+    endRemoteMatch(remote, "outOfSync");
+  }
+}
+
+function fireOpponentShot(remote: RemoteMatch, match: Match, received: Readonly<ShotMessage>): void {
+  const fromOpponent = isAimingTurnOf(match, opponentSide(remote));
   if (!fromOpponent || !fireReceivedShot(match, received.aim, received.shot)) {
     endRemoteMatch(remote, "outOfSync");
   }
+}
+
+function isRoundStartOf(match: Readonly<Match>, side: Side): boolean {
+  return isRoundOver(match) && nextShooter(match) === side;
+}
+
+function startRound(remote: RemoteMatch, match: Match): void {
+  fire(match);
+  remote.sentAim = undefined;
 }
 
 function compareOutcomes(remote: RemoteMatch): void {
@@ -203,11 +237,10 @@ export function fireRemoteMatch(remote: RemoteMatch): void {
   if (match === undefined || remote.end !== undefined) {
     return;
   }
-  if (isRoundOver(match)) {
-    fire(match);
-    return;
-  }
-  if (isLocalTurn(remote)) {
+  if (isRoundStartOf(match, remote.localSide)) {
+    startRound(remote, match);
+    send(remote, { kind: "nextRound" });
+  } else if (isLocalTurn(remote)) {
     const aim = match.ships[remote.localSide].aim;
     const shot = fire(match)!;
     send(remote, { kind: "shot", aim, shot });
@@ -237,7 +270,7 @@ function stepStartedMatch(remote: RemoteMatch, match: Match): void {
   if (outcome !== undefined) {
     reportShotOutcome(remote, outcome);
   }
-  fireReceivedShots(remote, match);
+  applyReceivedMoves(remote, match);
   sendChangedAim(remote, match);
 }
 

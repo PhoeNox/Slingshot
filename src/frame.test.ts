@@ -10,6 +10,7 @@ import {
   DEFAULT_MATCH_RULES,
   fire,
   matchView,
+  nextShooter,
   step,
   type Match,
   type MatchView,
@@ -223,7 +224,7 @@ function inFlightMissile(view: MatchView): { x: number; y: number } {
 function roundOverFrameOf(result: RoundResult): FrameItem[] {
   const match = emptyMatch(30);
   hitOpponent(match);
-  const phase: RoundOverView = { kind: "roundOver", result, stepsSinceRoundOver: 10 };
+  const phase: RoundOverView = { kind: "roundOver", result, nextShooter: "right", stepsSinceRoundOver: 10 };
   return frameOfView({ ...matchView(match), phase });
 }
 
@@ -544,7 +545,7 @@ describe("planet visibility", () => {
   }
 
   function roundOverFrameAfter(match: Match, stepsSinceRoundOver: number, display = CONTOURS_SHOWN): FrameItem[] {
-    const phase: RoundOverView = { kind: "roundOver", result: HIT, stepsSinceRoundOver };
+    const phase: RoundOverView = { kind: "roundOver", result: HIT, nextShooter: "right", stepsSinceRoundOver };
     const view = { ...matchView(match), phase, roundStepCount: 300 + stepsSinceRoundOver };
     return flatten(describeFrame(view, display, NO_DEBRIS, "match"));
   }
@@ -1034,12 +1035,30 @@ describe("remote match HUD", () => {
   test("round-over titles speak from the local player's view", () => {
     const match = emptyMatch(30);
     hitOpponent(match);
-    const view = (result: RoundResult) => ({ ...matchView(match), phase: { kind: "roundOver", result, stepsSinceRoundOver: 10 } as RoundOverView });
+    const view = (result: RoundResult) => ({
+      ...matchView(match),
+      phase: { kind: "roundOver", result, nextShooter: "right", stepsSinceRoundOver: 10 } as RoundOverView,
+    });
 
     expect(textsOf(remoteFrameOfView(view(HIT), "left"))).toContain("You hit opponent");
     expect(textsOf(remoteFrameOfView(view(HIT), "right"))).toContain("Opponent hit you");
     expect(textsOf(remoteFrameOfView(view(SELF_HIT), "right"))).toContain("You hit your own ship");
     expect(textsOf(remoteFrameOfView(view(SELF_HIT), "left"))).toContain("Opponent hit their own ship");
+  });
+
+  test("the round-over prompt asks only the next shooter for a key press and tells the other peer to wait", () => {
+    const match = emptyMatch(30);
+    hitOpponent(match);
+    const view = matchView(match);
+    const shooter = nextShooter(match);
+    const waiting: Side = shooter === "left" ? "right" : "left";
+
+    const shooterTexts = textsOf(remoteFrameOfView(view, shooter));
+    const waitingTexts = textsOf(remoteFrameOfView(view, waiting));
+
+    expect(shooterTexts).toContain("Press Space or Enter for the next round");
+    expect(waitingTexts).toContain("Waiting for opponent to start the next round");
+    expect(waitingTexts).not.toContain("Press Space or Enter for the next round");
   });
 });
 

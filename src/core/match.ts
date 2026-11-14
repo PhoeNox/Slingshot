@@ -51,6 +51,7 @@ interface InFlightPhase {
 interface RoundOverPhase {
   kind: "roundOver";
   result: RoundResult;
+  nextShooter: Side;
   stepsSinceRoundOver: number;
 }
 
@@ -72,11 +73,6 @@ export interface ShotOutcome {
   endReason: ShotEndReason;
   stepsFlown: number;
   finalPosition: Point;
-}
-
-interface ShooterShip {
-  side: Side;
-  ship: Readonly<Ship>;
 }
 
 interface TrailSegment {
@@ -241,12 +237,13 @@ function endRound(match: Match, hitShip: Side): void {
   const shooter = match.activePlayer;
   const result = roundResultFor(shooter, hitShip, match.attempts[shooter], match.ships[shooter].aim.power);
   match.scores[shooter] += result.scoreChange;
-  match.phase = { kind: "roundOver", result, stepsSinceRoundOver: 0 };
+  const nextRoundFirstShooter = nextRoundShooter(match.scores, shooter);
+  match.phase = { kind: "roundOver", result, nextShooter: nextRoundFirstShooter, stepsSinceRoundOver: 0 };
 }
 
-function startNextRound(match: Match): void {
+function startNextRound(match: Match, shooter: Side): void {
   const layout = createRoundLayout(match.rng, match.rules.planetCount);
-  match.activePlayer = nextRoundShooter(match.scores, match.activePlayer);
+  match.activePlayer = shooter;
   match.phase = { kind: "aiming" };
   match.roundNumber++;
   match.roundStepCount = 0;
@@ -285,7 +282,7 @@ export function isRoundOver(match: Readonly<Match>): boolean {
 
 export function fire(match: Match): ShotRecord | undefined {
   if (match.phase.kind === "roundOver") {
-    startNextRound(match);
+    startNextRound(match, match.phase.nextShooter);
     return undefined;
   }
   if (match.phase.kind === "aiming") {
@@ -308,11 +305,8 @@ function launchShotRecord(match: Match, shot: Readonly<ShotRecord>): void {
 }
 
 export function fireReceivedShot(match: Match, aim: Readonly<Aim>, shot: Readonly<ShotRecord>): boolean {
-  if (match.phase.kind === "inFlight" || !isValidShot(match, aim, shot)) {
+  if (match.phase.kind !== "aiming" || !isValidShot(match, aim, shot)) {
     return false;
-  }
-  if (match.phase.kind === "roundOver") {
-    startNextRound(match);
   }
   match.ships[match.activePlayer].aim = { angle: aim.angle, power: aim.power };
   launchShotRecord(match, shot);
@@ -332,25 +326,12 @@ function isWithinTolerance(shot: Readonly<ShotRecord>, expected: Readonly<ShotRe
 }
 
 function expectedShotRecord(match: Readonly<Match>, aim: Readonly<Aim>): ShotRecord {
-  const { side, ship } = nextShooterShip(match);
-  return shotRecordFor({ ...ship, aim }, BARREL_DISTANCE[side]);
-}
-
-function nextShooterShip(match: Readonly<Match>): ShooterShip {
-  const side = nextShooter(match);
-  if (match.phase.kind !== "roundOver") {
-    return { side, ship: match.ships[side] };
-  }
-  const rngCopy = { ...match.rng };
-  const layout = createRoundLayout(rngCopy, match.rules.planetCount);
-  return { side, ship: layout.ships[side] };
+  const side = match.activePlayer;
+  return shotRecordFor({ ...match.ships[side], aim }, BARREL_DISTANCE[side]);
 }
 
 export function nextShooter(match: Readonly<Match>): Side {
-  if (match.phase.kind === "roundOver") {
-    return nextRoundShooter(match.scores, match.activePlayer);
-  }
-  return match.activePlayer;
+  return match.phase.kind === "roundOver" ? match.phase.nextShooter : match.activePlayer;
 }
 
 export function previewShot(match: Readonly<Match>, aim: Readonly<Aim>, stepLimit: number): ShotPreview {

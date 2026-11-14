@@ -36,6 +36,13 @@ interface Peers {
   guest: ScreenSession;
 }
 
+type ShotResult = "hit" | "miss";
+
+interface RoundOverSessions {
+  next: ScreenSession;
+  waiting: ScreenSession;
+}
+
 interface EndingCase {
   end: Exclude<RemoteMatchEnd, "left">;
   endMatch: () => ScreenSession;
@@ -49,6 +56,7 @@ const MAX_STEPS = 5000;
 const END_NOTICE_STEPS = 90;
 const ANGLES = Array.from({ length: 180 }, (_, i) => i * 2);
 const POWERS = [100, 150, 200, 250, 300];
+const DEFAULT_AIMS: Record<Side, Aim> = { left: { angle: 90, power: 100 }, right: { angle: 270, power: 100 } };
 
 function fakeChannel(): FakeChannel {
   let markClosed!: () => void;
@@ -157,7 +165,7 @@ function aimDeltaTo(match: Readonly<Match>, target: Aim): Aim {
   return { angle: target.angle - aim.angle, power: target.power - aim.power };
 }
 
-function findAim(match: Readonly<Match>, wantHit: boolean): Aim {
+function findAim(match: Readonly<Match>, wanted: ShotResult): Aim {
   for (const angle of ANGLES) {
     for (const power of POWERS) {
       const trial = structuredClone(match) as Match;
@@ -170,24 +178,33 @@ function findAim(match: Readonly<Match>, wantHit: boolean): Aim {
       }
       const hitOpponent = trial.phase.kind === "roundOver" && trial.phase.result.hitShip !== shooter;
       const missed = trial.phase.kind === "aiming";
-      if (wantHit ? hitOpponent : missed) {
+      if (wanted === "hit" ? hitOpponent : missed) {
         return target;
       }
     }
   }
-  throw new Error(`no aim found for ${wantHit ? "a hit" : "a miss"}`);
+  throw new Error(`no aim found for a ${wanted}`);
 }
 
-function takeShot(peers: Peers, shooter: ScreenSession, wantHit: boolean): void {
+function takeShot(peers: Peers, shooter: ScreenSession, wanted: ShotResult): void {
   settle(peers, shooter);
   const match = matchOf(shooter);
   if (match.phase.kind === "roundOver") {
     fireMatch(shooter);
   }
-  const target = findAim(match, wantHit);
+  const target = findAim(match, wanted);
   aimMatch(shooter, aimDeltaTo(match, target));
   fireMatch(shooter);
   deliver(peers.channel);
+}
+
+function roundOverOnBoth(peers: Peers): RoundOverSessions {
+  const shooter = sessionOf(peers, matchOf(peers.host).activePlayer);
+  takeShot(peers, shooter, "hit");
+  settle(peers, shooter);
+  settle(peers, otherSession(peers, shooter));
+  const next = sessionOf(peers, nextShooter(matchOf(shooter)));
+  return { next, waiting: otherSession(peers, next) };
 }
 
 function stepsUntilMainMenu(session: ScreenSession): number {
@@ -251,7 +268,7 @@ describe("playing a remote match", () => {
     for (let shot = 0; shot < MAX_SHOTS && matchOf(peers.host).roundNumber <= ROUNDS; shot++) {
       const settled = otherSession(peers, lagging);
       const shooter = sessionOf(peers, nextShooter(matchOf(settled)));
-      takeShot(peers, shooter, shot % 2 === 1);
+      takeShot(peers, shooter, shot % 2 === 1 ? "hit" : "miss");
       lagging = shooter;
       settle(peers, otherSession(peers, shooter));
     }
@@ -269,31 +286,78 @@ describe("playing a remote match", () => {
     expect(remoteOf(peers.guest).end).toBeUndefined();
   });
 
-  test("a shot arriving while the receiver is in round-over starts the next round there", () => {
+  test("in round over the waiting peer's key press has no effect on either side", () => {
+    const peers = connectedPeers();
+    const { waiting } = roundOverOnBoth(peers);
+    const hostBefore = structuredClone(matchView(matchOf(peers.host)));
+    const guestBefore = structuredClone(matchView(matchOf(peers.guest)));
+
+    fireMatch(waiting);
+    deliver(peers.channel);
+
+    expect(matchView(matchOf(peers.host))).toEqual(hostBefore);
+    expect(matchView(matchOf(peers.guest))).toEqual(guestBefore);
+  });
+
+  test("the next shooter moves past round over first and the waiting peer follows into the same round", () => {
+    const peers = connectedPeers();
+    const { next, waiting } = roundOverOnBoth(peers);
+
+    fireMatch(next);
+    const waitingPhaseBeforeDelivery = matchOf(waiting).phase.kind;
+    deliver(peers.channel);
+
+    expect(waitingPhaseBeforeDelivery).toBe("roundOver");
+    expect(matchOf(next).roundNumber).toBe(2);
+    expect(matchView(matchOf(waiting))).toEqual(matchView(matchOf(next)));
+  });
+
+  test("the waiting peer shows the next shooter's aim once the next round has started", () => {
+    const peers = connectedPeers();
+    const { next, waiting } = roundOverOnBoth(peers);
+    const side = nextShooter(matchOf(next));
+
+    fireMatch(next);
+    deliver(peers.channel);
+    aimMatch(next, { angle: 10, power: 20 });
+    stepBoth(peers, 3);
+
+    expect(matchOf(waiting).ships[side].aim).toEqual(matchOf(next).ships[side].aim);
+    expect(matchOf(waiting).ships[side].aim).not.toEqual(DEFAULT_AIMS[side]);
+  });
+
+  test("an aim streamed in an earlier round is streamed again when the shooter returns to it", () => {
     const peers = connectedPeers();
     const shooter = sessionOf(peers, matchOf(peers.host).activePlayer);
     const receiver = otherSession(peers, shooter);
-    takeShot(peers, shooter, true);
+    const side = matchOf(shooter).activePlayer;
+    const earlierAim = findAim(matchOf(shooter), "hit");
+    aimMatch(shooter, aimDeltaTo(matchOf(shooter), earlierAim));
+    stepBoth(peers, 3);
+    fireMatch(shooter);
+    deliver(peers.channel);
     settle(peers, shooter);
     settle(peers, receiver);
-    const nextShooterSession = sessionOf(peers, nextShooter(matchOf(receiver)));
-    const waitingSession = otherSession(peers, nextShooterSession);
+    takeShot(peers, receiver, "miss");
+    settle(peers, receiver);
+    settle(peers, shooter);
 
-    takeShot(peers, nextShooterSession, false);
+    aimMatch(shooter, aimDeltaTo(matchOf(shooter), earlierAim));
+    stepBoth(peers, 3);
 
-    expect(matchOf(waitingSession).roundNumber).toBe(2);
-    expect(matchOf(waitingSession).phase.kind).toBe("inFlight");
+    expect(matchOf(shooter).roundNumber).toBe(2);
+    expect(matchOf(receiver).ships[side].aim).toEqual(earlierAim);
   });
 
   test("a shot arriving while the receiver is still in flight is applied once that flight ends", () => {
     const peers = connectedPeers();
     const shooter = sessionOf(peers, matchOf(peers.host).activePlayer);
     const receiver = otherSession(peers, shooter);
-    takeShot(peers, shooter, false);
+    takeShot(peers, shooter, "miss");
     settle(peers, receiver);
 
-    takeShot(peers, receiver, false);
-    const queuedWhileInFlight = matchOf(shooter).phase.kind === "inFlight" && remoteOf(shooter).receivedShots.length === 1;
+    takeShot(peers, receiver, "miss");
+    const queuedWhileInFlight = matchOf(shooter).phase.kind === "inFlight" && remoteOf(shooter).receivedMoves.at(-1)?.kind === "shot";
     settle(peers, shooter);
     stepBoth(peers, 1);
     settle(peers, shooter);
@@ -344,7 +408,7 @@ describe("out of sync", () => {
     };
     const shooter = sessionOf(peers, matchOf(peers.host).activePlayer);
 
-    takeShot(peers, shooter, false);
+    takeShot(peers, shooter, "miss");
     settle(peers, peers.host);
     settle(peers, peers.guest);
     await flushPromises();
