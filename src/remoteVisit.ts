@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import { effectLoop, type Feed } from "./effectLoop";
 import {
   PeerConnectionError,
   type GuestReply,
@@ -16,15 +17,13 @@ import {
   hostTransition,
   newGuestProgress,
   newHostProgress,
-  type GuestAction,
+  type Failing,
+  type GuestEffect,
   type GuestEvent,
-  type GuestProgress,
-  type HostAction,
+  type HostEffect,
   type HostEvent,
-  type HostProgress,
   type Invitation,
-  type VisitAction,
-  type VisitFailure,
+  type VisitEffect,
   type VisitState,
 } from "./visitTransition";
 
@@ -51,22 +50,15 @@ interface VisitOutlet {
   readonly startRemoteMatch: StartRemoteMatch;
 }
 
-interface HostDriver extends VisitOutlet {
-  readonly host: HostProgress;
+interface HostPorts extends VisitOutlet {
   readonly connectHost: HostPeerConnection;
   readonly relay: ReplyRelay;
 }
 
-interface GuestDriver extends VisitOutlet {
-  readonly guest: GuestProgress;
+interface GuestPorts extends VisitOutlet {
   readonly joinHost: JoinPeerConnection;
   readonly relay: ReplyRelay;
   fallbackTimer: ReturnType<typeof setTimeout> | undefined;
-}
-
-interface Arrival<Event> {
-  readonly event: Event;
-  readonly error: unknown;
 }
 
 export const REPLY_FALLBACK_MS = 15_000;
@@ -82,11 +74,15 @@ export function startHostVisit(
   startRemoteMatch: StartRemoteMatch,
 ): HostVisit {
   const host = newHostProgress();
-  const driver: HostDriver = { host, connectHost, relay, show, startRemoteMatch };
-  const settled = dispatchHost(driver, STARTED);
-  const submitReply = (replyCode: string) => submitReplyCode(driver, replyCode);
+  const ports: HostPorts = { connectHost, relay, show, startRemoteMatch };
+  const feed = effectLoop<HostEvent, HostEffect>(
+    (event) => hostTransition(host, event),
+    (effect, feedBack) => performHostEffect(ports, effect, feedBack),
+  );
+  const settled = feed(STARTED);
+  const submitReply = (replyCode: string) => submitReplyCode(feed, replyCode);
   const leave = () => {
-    dispatchHost(driver, LEFT);
+    feed(LEFT);
   };
   return { settled, submitReply, leave };
 }
@@ -99,156 +95,113 @@ export function startGuestVisit(
   startRemoteMatch: StartRemoteMatch,
 ): RemoteVisit {
   const guest = newGuestProgress(invitation);
-  const driver: GuestDriver = { guest, joinHost, relay, show, startRemoteMatch, fallbackTimer: undefined };
-  const settled = dispatchGuest(driver, STARTED);
+  const ports: GuestPorts = { joinHost, relay, show, startRemoteMatch, fallbackTimer: undefined };
+  const feed = effectLoop<GuestEvent, GuestEffect>(
+    (event) => guestTransition(guest, event),
+    (effect, feedBack) => performGuestEffect(ports, effect, feedBack),
+  );
+  const settled = feed(STARTED);
   const leave = () => {
-    dispatchGuest(driver, LEFT);
+    feed(LEFT);
   };
   return { settled, leave };
 }
 
-async function dispatchHost(driver: HostDriver, event: HostEvent, error?: unknown): Promise<void> {
-  const actions = hostTransition(driver.host, event);
-  const performed = actions.map((action) => performHostAction(driver, action, error));
-  await Promise.all(performed);
-}
-
-async function dispatchGuest(driver: GuestDriver, event: GuestEvent, error?: unknown): Promise<void> {
-  const actions = guestTransition(driver.guest, event);
-  const performed = actions.map((action) => performGuestAction(driver, action, error));
-  await Promise.all(performed);
-}
-
-function submitReplyCode(driver: HostDriver, replyCode: string): Promise<void> {
+function submitReplyCode(feed: Feed<HostEvent>, replyCode: string): Promise<void> {
   const submitted: HostEvent = { kind: "replySubmitted", replyCode };
-  return dispatchHost(driver, submitted);
+  return feed(submitted);
 }
 
-async function performHostAction(driver: HostDriver, action: HostAction, error: unknown): Promise<void> {
-  switch (action.kind) {
+function performHostEffect(ports: HostPorts, effect: HostEffect, feed: Feed<HostEvent>): Promise<HostEvent> | void {
+  switch (effect.kind) {
     case "connectHost":
-      return prepareInvitation(driver);
+      return ports.connectHost().then(connected, preparationFailed);
     case "awaitReplies":
-      return openReplyRoom(driver);
+      return openReplyRoom(ports.relay, feed);
     case "accept":
-      return acceptReplyCode(driver, action.invitation, action.replyCode);
+      return effect.invitation.accept(effect.replyCode).then(accepted, acceptFailed);
     default:
-      return performVisitAction(driver, action, error);
+      return performVisitEffect(ports, effect);
   }
 }
 
-async function performGuestAction(driver: GuestDriver, action: GuestAction, error: unknown): Promise<void> {
-  switch (action.kind) {
+function openReplyRoom(relay: ReplyRelay, feed: Feed<HostEvent>): Promise<HostEvent> {
+  const takeReply = (replyCode: string) => submitReplyCode(feed, replyCode);
+  return relay.awaitReplies(takeReply).then(roomOpened, preparationFailed);
+}
+
+function performGuestEffect(ports: GuestPorts, effect: GuestEffect, feed: Feed<GuestEvent>): Promise<GuestEvent> | void {
+  switch (effect.kind) {
     case "join":
-      return joinOffer(driver, action.offerCode);
+      return ports.joinHost(effect.offerCode).then(joined, joinFailed);
     case "awaitOpened":
-      return awaitOpened(driver, action.reply);
+      return effect.reply.opened.then(opened, joinFailed);
     case "deliverReply":
-      deliverReply(driver, action.roomSecret, action.replyCode);
-      return;
+      return ports.relay.deliverReply(effect.roomSecret, effect.replyCode).then(delivered);
     case "startFallbackTimer":
-      driver.fallbackTimer = setTimeout(() => dispatchGuest(driver, FALLBACK_TIMER_FIRED), REPLY_FALLBACK_MS);
+      ports.fallbackTimer = setTimeout(() => feed(FALLBACK_TIMER_FIRED), REPLY_FALLBACK_MS);
       return;
     case "cancelFallbackTimer":
-      clearTimeout(driver.fallbackTimer);
+      clearTimeout(ports.fallbackTimer);
       return;
     default:
-      return performVisitAction(driver, action, error);
+      return performVisitEffect(ports, effect);
   }
 }
 
-async function performVisitAction(outlet: VisitOutlet, action: VisitAction, error: unknown): Promise<void> {
-  switch (action.kind) {
+function performVisitEffect(outlet: VisitOutlet, effect: VisitEffect): void {
+  switch (effect.kind) {
     case "show":
-      outlet.show(action.state);
+      outlet.show(effect.state);
       return;
     case "close":
-      action.handle.close();
+      effect.handle.close();
       return;
     case "handOver":
-      outlet.startRemoteMatch(action.role, action.link);
+      outlet.startRemoteMatch(effect.role, effect.link);
       return;
     case "rethrow":
-      throw error;
+      throw effect.error;
   }
 }
 
-async function prepareInvitation(driver: HostDriver): Promise<void> {
-  const preparing = driver.connectHost();
-  const arrival = await arrive<HostEvent, HostInvitation>(
-    preparing,
-    (invitation) => ({ kind: "connected", invitation }),
-    (failure) => ({ kind: "preparationFailed", failure }),
-  );
-  return dispatchHost(driver, arrival.event, arrival.error);
+function connected(invitation: HostInvitation): HostEvent {
+  return { kind: "connected", invitation };
 }
 
-async function openReplyRoom(driver: HostDriver): Promise<void> {
-  const opening = driver.relay.awaitReplies((replyCode) => submitReplyCode(driver, replyCode));
-  const arrival = await arrive<HostEvent, ReplyRoom>(
-    opening,
-    (room) => ({ kind: "roomOpened", room }),
-    (failure) => ({ kind: "preparationFailed", failure }),
-  );
-  return dispatchHost(driver, arrival.event, arrival.error);
+function roomOpened(room: ReplyRoom): HostEvent {
+  return { kind: "roomOpened", room };
 }
 
-async function acceptReplyCode(driver: HostDriver, invitation: HostInvitation, replyCode: string): Promise<void> {
-  const accepting = invitation.accept(replyCode);
-  const arrival = await arrive<HostEvent, PeerLink>(
-    accepting,
-    (link) => ({ kind: "accepted", link }),
-    (failure) => ({ kind: "acceptFailed", failure }),
-  );
-  return dispatchHost(driver, arrival.event, arrival.error);
+function accepted(link: PeerLink): HostEvent {
+  return { kind: "accepted", link };
 }
 
-async function joinOffer(driver: GuestDriver, offerCode: string): Promise<void> {
-  const joining = driver.joinHost(offerCode);
-  const arrival = await arrive<GuestEvent, GuestReply>(
-    joining,
-    (reply) => ({ kind: "joined", reply }),
-    (failure) => ({ kind: "joinFailed", failure }),
-  );
-  return dispatchGuest(driver, arrival.event, arrival.error);
+function preparationFailed(error: unknown): HostEvent {
+  return { kind: "preparationFailed", ...failingOf(error) };
 }
 
-async function awaitOpened(driver: GuestDriver, reply: GuestReply): Promise<void> {
-  const arrival = await arrive<GuestEvent, PeerLink>(
-    reply.opened,
-    (link) => ({ kind: "opened", link }),
-    (failure) => ({ kind: "joinFailed", failure }),
-  );
-  return dispatchGuest(driver, arrival.event, arrival.error);
+function acceptFailed(error: unknown): HostEvent {
+  return { kind: "acceptFailed", ...failingOf(error) };
 }
 
-function deliverReply(driver: GuestDriver, roomSecret: string, replyCode: string): void {
-  const delivering = driver.relay.deliverReply(roomSecret, replyCode);
-  delivering.then((delivery) => reportDelivery(driver, delivery));
+function joined(reply: GuestReply): GuestEvent {
+  return { kind: "joined", reply };
 }
 
-function reportDelivery(driver: GuestDriver, delivery: ReplyDelivery): Promise<void> {
-  const delivered: GuestEvent = { kind: "delivered", delivery };
-  return dispatchGuest(driver, delivered);
+function opened(link: PeerLink): GuestEvent {
+  return { kind: "opened", link };
 }
 
-async function arrive<Event, Value>(
-  pending: Promise<Value>,
-  arrived: (value: Value) => Event,
-  failed: (failure: VisitFailure) => Event,
-): Promise<Arrival<Event>> {
-  let value: Value;
-  try {
-    value = await pending;
-  } catch (error) {
-    const failure = failureOf(error);
-    const failedEvent = failed(failure);
-    return { event: failedEvent, error };
-  }
-  const arrivedEvent = arrived(value);
-  return { event: arrivedEvent, error: undefined };
+function delivered(delivery: ReplyDelivery): GuestEvent {
+  return { kind: "delivered", delivery };
 }
 
-function failureOf(error: unknown): VisitFailure {
-  return error instanceof PeerConnectionError ? error.reason : "unexpected";
+function joinFailed(error: unknown): GuestEvent {
+  return { kind: "joinFailed", ...failingOf(error) };
+}
+
+function failingOf(error: unknown): Failing {
+  const failure = error instanceof PeerConnectionError ? error.reason : "unexpected";
+  return { failure, error };
 }

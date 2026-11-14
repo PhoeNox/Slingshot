@@ -39,20 +39,20 @@ interface Closable {
   close(): void;
 }
 
-export type VisitAction =
+export type VisitEffect =
   | { readonly kind: "show"; readonly state: VisitState }
   | { readonly kind: "close"; readonly handle: Closable }
   | { readonly kind: "handOver"; readonly role: RemoteRole; readonly link: PeerLink }
-  | { readonly kind: "rethrow" };
+  | { readonly kind: "rethrow"; readonly error: unknown };
 
-export type HostAction =
-  | VisitAction
+export type HostEffect =
+  | VisitEffect
   | { readonly kind: "connectHost" }
   | { readonly kind: "awaitReplies" }
   | { readonly kind: "accept"; readonly invitation: HostInvitation; readonly replyCode: string };
 
-export type GuestAction =
-  | VisitAction
+export type GuestEffect =
+  | VisitEffect
   | { readonly kind: "join"; readonly offerCode: string }
   | { readonly kind: "awaitOpened"; readonly reply: GuestReply }
   | { readonly kind: "deliverReply"; readonly roomSecret: string; readonly replyCode: string }
@@ -64,10 +64,10 @@ export type HostEvent =
   | { readonly kind: "left" }
   | { readonly kind: "connected"; readonly invitation: HostInvitation }
   | { readonly kind: "roomOpened"; readonly room: ReplyRoom }
-  | { readonly kind: "preparationFailed"; readonly failure: VisitFailure }
+  | { readonly kind: "preparationFailed"; readonly failure: VisitFailure; readonly error: unknown }
   | { readonly kind: "replySubmitted"; readonly replyCode: string }
   | { readonly kind: "accepted"; readonly link: PeerLink }
-  | { readonly kind: "acceptFailed"; readonly failure: VisitFailure };
+  | { readonly kind: "acceptFailed"; readonly failure: VisitFailure; readonly error: unknown };
 
 export type GuestEvent =
   | { readonly kind: "started" }
@@ -76,7 +76,12 @@ export type GuestEvent =
   | { readonly kind: "delivered"; readonly delivery: ReplyDelivery }
   | { readonly kind: "fallbackTimerFired" }
   | { readonly kind: "opened"; readonly link: PeerLink }
-  | { readonly kind: "joinFailed"; readonly failure: VisitFailure };
+  | { readonly kind: "joinFailed"; readonly failure: VisitFailure; readonly error: unknown };
+
+export interface Failing {
+  readonly failure: VisitFailure;
+  readonly error: unknown;
+}
 
 interface Leavable {
   readonly left: boolean;
@@ -86,11 +91,10 @@ const PENDING: VisitState = { phase: "pending" };
 const JOINING: VisitState = { phase: "joining" };
 const CONNECTING: VisitState = { phase: "connecting" };
 const HANDED_OVER: VisitState = { phase: "handedOver" };
-const CONNECT_HOST: HostAction = { kind: "connectHost" };
-const AWAIT_REPLIES: HostAction = { kind: "awaitReplies" };
-const START_FALLBACK_TIMER: GuestAction = { kind: "startFallbackTimer" };
-const CANCEL_FALLBACK_TIMER: GuestAction = { kind: "cancelFallbackTimer" };
-const RETHROW: VisitAction = { kind: "rethrow" };
+const CONNECT_HOST: HostEffect = { kind: "connectHost" };
+const AWAIT_REPLIES: HostEffect = { kind: "awaitReplies" };
+const START_FALLBACK_TIMER: GuestEffect = { kind: "startFallbackTimer" };
+const CANCEL_FALLBACK_TIMER: GuestEffect = { kind: "cancelFallbackTimer" };
 
 const RETRYABLE_REPLY_FAILURES: ReadonlySet<VisitFailure> = new Set(["malformed", "wrongKind", "protocolMismatch"]);
 
@@ -102,7 +106,7 @@ export function newGuestProgress(invitation: Invitation): GuestProgress {
   return { invitation, left: false, reply: undefined, dueReplyCode: undefined };
 }
 
-export function hostTransition(host: HostProgress, event: HostEvent): HostAction[] {
+export function hostTransition(host: HostProgress, event: HostEvent): HostEffect[] {
   switch (event.kind) {
     case "started":
       return [...showing(host, PENDING), CONNECT_HOST];
@@ -113,17 +117,17 @@ export function hostTransition(host: HostProgress, event: HostEvent): HostAction
     case "roomOpened":
       return adoptRoom(host, event.room);
     case "preparationFailed":
-      return failed(host, event.failure, false);
+      return failed(host, event, false);
     case "replySubmitted":
       return takeReplyCode(host, event.replyCode);
     case "accepted":
       return handOverHostLink(host, event.link);
     case "acceptFailed":
-      return rejectReplyCode(host, event.failure);
+      return rejectReplyCode(host, event);
   }
 }
 
-export function guestTransition(guest: GuestProgress, event: GuestEvent): GuestAction[] {
+export function guestTransition(guest: GuestProgress, event: GuestEvent): GuestEffect[] {
   switch (event.kind) {
     case "started":
       return [...showing(guest, PENDING), { kind: "join", offerCode: guest.invitation.offerCode }];
@@ -138,11 +142,11 @@ export function guestTransition(guest: GuestProgress, event: GuestEvent): GuestA
     case "opened":
       return handOverGuestLink(guest, event.link);
     case "joinFailed":
-      return [...cancelFallback(guest), ...failed(guest, event.failure, false)];
+      return [...cancelFallback(guest), ...failed(guest, event, false)];
   }
 }
 
-function leaveHost(host: HostProgress): HostAction[] {
+function leaveHost(host: HostProgress): HostEffect[] {
   const closingHandles = closing(host.invitation, host.room);
   host.left = true;
   host.invitation = undefined;
@@ -151,7 +155,7 @@ function leaveHost(host: HostProgress): HostAction[] {
   return closingHandles;
 }
 
-function adoptInvitation(host: HostProgress, invitation: HostInvitation): HostAction[] {
+function adoptInvitation(host: HostProgress, invitation: HostInvitation): HostEffect[] {
   if (host.left) {
     return closing(invitation);
   }
@@ -159,7 +163,7 @@ function adoptInvitation(host: HostProgress, invitation: HostInvitation): HostAc
   return [AWAIT_REPLIES];
 }
 
-function adoptRoom(host: HostProgress, room: ReplyRoom): HostAction[] {
+function adoptRoom(host: HostProgress, room: ReplyRoom): HostEffect[] {
   const invitation = host.invitation;
   if (invitation === undefined) {
     return closing(room);
@@ -170,7 +174,7 @@ function adoptRoom(host: HostProgress, room: ReplyRoom): HostAction[] {
   return showing(host, { phase: "invitation", invitation: shownInvitation });
 }
 
-function takeReplyCode(host: HostProgress, replyCode: string): HostAction[] {
+function takeReplyCode(host: HostProgress, replyCode: string): HostEffect[] {
   const invitation = host.invitationAwaitingReply;
   if (invitation === undefined) {
     return [];
@@ -179,7 +183,7 @@ function takeReplyCode(host: HostProgress, replyCode: string): HostAction[] {
   return [...showing(host, CONNECTING), { kind: "accept", invitation, replyCode }];
 }
 
-function handOverHostLink(host: HostProgress, link: PeerLink): HostAction[] {
+function handOverHostLink(host: HostProgress, link: PeerLink): HostEffect[] {
   const closingRoom = closeRoom(host);
   if (host.left) {
     return [...closingRoom, ...closing(link)];
@@ -188,22 +192,22 @@ function handOverHostLink(host: HostProgress, link: PeerLink): HostAction[] {
   return [...closingRoom, ...showing(host, HANDED_OVER), { kind: "handOver", role: "host", link }];
 }
 
-function rejectReplyCode(host: HostProgress, failure: VisitFailure): HostAction[] {
-  const retry = RETRYABLE_REPLY_FAILURES.has(failure) && !host.left;
+function rejectReplyCode(host: HostProgress, failing: Readonly<Failing>): HostEffect[] {
+  const retry = RETRYABLE_REPLY_FAILURES.has(failing.failure) && !host.left;
   if (retry) {
     host.invitationAwaitingReply = host.invitation;
-    return failed(host, failure, true);
+    return failed(host, failing, true);
   }
-  return [...closeRoom(host), ...failed(host, failure, false)];
+  return [...closeRoom(host), ...failed(host, failing, false)];
 }
 
-function closeRoom(host: HostProgress): VisitAction[] {
+function closeRoom(host: HostProgress): VisitEffect[] {
   const closingRoom = closing(host.room);
   host.room = undefined;
   return closingRoom;
 }
 
-function leaveGuest(guest: GuestProgress): GuestAction[] {
+function leaveGuest(guest: GuestProgress): GuestEffect[] {
   const closingReply = closing(guest.reply);
   const cancelling = cancelFallback(guest);
   guest.left = true;
@@ -211,7 +215,7 @@ function leaveGuest(guest: GuestProgress): GuestAction[] {
   return [...closingReply, ...cancelling];
 }
 
-function adoptReply(guest: GuestProgress, reply: GuestReply): GuestAction[] {
+function adoptReply(guest: GuestProgress, reply: GuestReply): GuestEffect[] {
   if (guest.left) {
     return closing(reply);
   }
@@ -225,7 +229,7 @@ function adoptReply(guest: GuestProgress, reply: GuestReply): GuestAction[] {
   ];
 }
 
-function showReplyCode(guest: GuestProgress): GuestAction[] {
+function showReplyCode(guest: GuestProgress): GuestEffect[] {
   const code = guest.dueReplyCode;
   if (code === undefined) {
     return [];
@@ -234,7 +238,7 @@ function showReplyCode(guest: GuestProgress): GuestAction[] {
   return [CANCEL_FALLBACK_TIMER, ...showing(guest, { phase: "replyCode", code })];
 }
 
-function handOverGuestLink(guest: GuestProgress, link: PeerLink): GuestAction[] {
+function handOverGuestLink(guest: GuestProgress, link: PeerLink): GuestEffect[] {
   const cancelling = cancelFallback(guest);
   if (guest.left) {
     return [...cancelling, ...closing(link)];
@@ -243,7 +247,7 @@ function handOverGuestLink(guest: GuestProgress, link: PeerLink): GuestAction[] 
   return [...cancelling, ...showing(guest, HANDED_OVER), { kind: "handOver", role: "guest", link }];
 }
 
-function cancelFallback(guest: GuestProgress): GuestAction[] {
+function cancelFallback(guest: GuestProgress): GuestEffect[] {
   if (guest.dueReplyCode === undefined) {
     return [];
   }
@@ -251,15 +255,16 @@ function cancelFallback(guest: GuestProgress): GuestAction[] {
   return [CANCEL_FALLBACK_TIMER];
 }
 
-function failed(progress: Leavable, failure: VisitFailure, retry: boolean): VisitAction[] {
-  const rethrowing = failure === "unexpected" ? [RETHROW] : [];
+function failed(progress: Leavable, failing: Readonly<Failing>, retry: boolean): VisitEffect[] {
+  const { failure, error } = failing;
+  const rethrowing: VisitEffect[] = failure === "unexpected" ? [{ kind: "rethrow", error }] : [];
   return [...showing(progress, { phase: "failed", failure, retry }), ...rethrowing];
 }
 
-function showing(progress: Leavable, state: VisitState): VisitAction[] {
+function showing(progress: Leavable, state: VisitState): VisitEffect[] {
   return progress.left ? [] : [{ kind: "show", state }];
 }
 
-function closing(...handles: (Closable | undefined)[]): VisitAction[] {
+function closing(...handles: (Closable | undefined)[]): VisitEffect[] {
   return handles.filter((handle) => handle !== undefined).map((handle) => ({ kind: "close", handle }));
 }

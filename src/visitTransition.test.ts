@@ -9,10 +9,10 @@ import {
   hostTransition,
   newGuestProgress,
   newHostProgress,
-  type GuestAction,
+  type GuestEffect,
   type GuestEvent,
   type GuestProgress,
-  type HostAction,
+  type HostEffect,
   type HostEvent,
   type HostProgress,
 } from "./visitTransition";
@@ -20,6 +20,7 @@ import {
 const OFFER_CODE = "offer-code";
 const REPLY_CODE = "reply-code";
 const ROOM_SECRET = "room-secret";
+const FAILURE_ERROR = new Error("failure");
 const RETRYABLE_REPLY_FAILURES: readonly PeerConnectionFailure[] = ["malformed", "wrongKind", "protocolMismatch"];
 const FINAL_REPLY_FAILURES: readonly PeerConnectionFailure[] = ["couldNotConnect", "noCandidates"];
 const ALL_FAILURES: readonly PeerConnectionFailure[] = [...RETRYABLE_REPLY_FAILURES, ...FINAL_REPLY_FAILURES];
@@ -42,11 +43,11 @@ function fakeLink(): PeerLink {
   return { send: () => {}, onMessage: () => {}, closed: never<void>(), close: () => {} };
 }
 
-function host(progress: HostProgress, ...events: HostEvent[]): HostAction[] {
+function host(progress: HostProgress, ...events: HostEvent[]): HostEffect[] {
   return events.map((event) => hostTransition(progress, event)).at(-1) ?? [];
 }
 
-function guest(progress: GuestProgress, ...events: GuestEvent[]): GuestAction[] {
+function guest(progress: GuestProgress, ...events: GuestEvent[]): GuestEffect[] {
   return events.map((event) => guestTransition(progress, event)).at(-1) ?? [];
 }
 
@@ -92,8 +93,8 @@ describe("the host's visit", () => {
     const progress = newHostProgress();
     const invitation = fakeInvitation();
     const room = fakeRoom();
-    const actions = host(progress, { kind: "started" }, { kind: "connected", invitation }, { kind: "roomOpened", room });
-    expect(actions).toEqual([{ kind: "show", state: { phase: "invitation", invitation: { offerCode: OFFER_CODE, roomSecret: ROOM_SECRET } } }]);
+    const effects = host(progress, { kind: "started" }, { kind: "connected", invitation }, { kind: "roomOpened", room });
+    expect(effects).toEqual([{ kind: "show", state: { phase: "invitation", invitation: { offerCode: OFFER_CODE, roomSecret: ROOM_SECRET } } }]);
   });
 
   test("takes no reply code before the room opens", () => {
@@ -115,8 +116,8 @@ describe("the host's visit", () => {
   test("closes the room and hands the link over once accepted", () => {
     const { progress, room } = hostWithRoom();
     const link = fakeLink();
-    const actions = host(progress, { kind: "replySubmitted", replyCode: REPLY_CODE }, { kind: "accepted", link });
-    expect(actions).toEqual([
+    const effects = host(progress, { kind: "replySubmitted", replyCode: REPLY_CODE }, { kind: "accepted", link });
+    expect(effects).toEqual([
       { kind: "close", handle: room },
       { kind: "show", state: { phase: "handedOver" } },
       { kind: "handOver", role: "host", link },
@@ -170,7 +171,7 @@ describe("leaving the host's visit", () => {
   test("shows nothing and offers no retry for a rejected reply code afterwards", () => {
     const { progress } = hostWithRoom();
     host(progress, { kind: "replySubmitted", replyCode: REPLY_CODE }, { kind: "left" });
-    expect(host(progress, { kind: "acceptFailed", failure: "malformed" })).toEqual([]);
+    expect(host(progress, { kind: "acceptFailed", failure: "malformed", error: FAILURE_ERROR })).toEqual([]);
     expect(host(progress, { kind: "replySubmitted", replyCode: REPLY_CODE })).toEqual([]);
   });
 });
@@ -178,15 +179,15 @@ describe("leaving the host's visit", () => {
 describe("retrying the host's reply code", () => {
   test.each(RETRYABLE_REPLY_FAILURES)("is offered after a rejected reply code (%s), keeping the room", (failure) => {
     const { progress, invitation } = hostWithRoom();
-    const actions = host(progress, { kind: "replySubmitted", replyCode: "bad" }, { kind: "acceptFailed", failure });
-    expect(actions).toEqual([{ kind: "show", state: { phase: "failed", failure, retry: true } }]);
+    const effects = host(progress, { kind: "replySubmitted", replyCode: "bad" }, { kind: "acceptFailed", failure, error: FAILURE_ERROR });
+    expect(effects).toEqual([{ kind: "show", state: { phase: "failed", failure, retry: true } }]);
     expect(host(progress, { kind: "replySubmitted", replyCode: REPLY_CODE })).toContainEqual({ kind: "accept", invitation, replyCode: REPLY_CODE });
   });
 
   test.each(FINAL_REPLY_FAILURES)("is not offered after a reply fails with %s, closing the room", (failure) => {
     const { progress, room } = hostWithRoom();
-    const actions = host(progress, { kind: "replySubmitted", replyCode: REPLY_CODE }, { kind: "acceptFailed", failure });
-    expect(actions).toEqual([
+    const effects = host(progress, { kind: "replySubmitted", replyCode: REPLY_CODE }, { kind: "acceptFailed", failure, error: FAILURE_ERROR });
+    expect(effects).toEqual([
       { kind: "close", handle: room },
       { kind: "show", state: { phase: "failed", failure, retry: false } },
     ]);
@@ -195,26 +196,26 @@ describe("retrying the host's reply code", () => {
 
   test("is not offered when preparing the invitation fails", () => {
     const progress = newHostProgress();
-    const actions = host(progress, { kind: "started" }, { kind: "preparationFailed", failure: "noCandidates" });
-    expect(actions).toEqual([{ kind: "show", state: { phase: "failed", failure: "noCandidates", retry: false } }]);
+    const effects = host(progress, { kind: "started" }, { kind: "preparationFailed", failure: "noCandidates", error: FAILURE_ERROR });
+    expect(effects).toEqual([{ kind: "show", state: { phase: "failed", failure: "noCandidates", retry: false } }]);
   });
 });
 
 describe("an unexpected host failure", () => {
   test("is shown and rethrown", () => {
     const { progress, room } = hostWithRoom();
-    const actions = host(progress, { kind: "replySubmitted", replyCode: REPLY_CODE }, { kind: "acceptFailed", failure: "unexpected" });
-    expect(actions).toEqual([
+    const effects = host(progress, { kind: "replySubmitted", replyCode: REPLY_CODE }, { kind: "acceptFailed", failure: "unexpected", error: FAILURE_ERROR });
+    expect(effects).toEqual([
       { kind: "close", handle: room },
       { kind: "show", state: { phase: "failed", failure: "unexpected", retry: false } },
-      { kind: "rethrow" },
+      { kind: "rethrow", error: FAILURE_ERROR },
     ]);
   });
 
   test("after leaving is only rethrown", () => {
     const progress = newHostProgress();
     host(progress, { kind: "started" }, { kind: "left" });
-    expect(host(progress, { kind: "preparationFailed", failure: "unexpected" })).toEqual([{ kind: "rethrow" }]);
+    expect(host(progress, { kind: "preparationFailed", failure: "unexpected", error: FAILURE_ERROR })).toEqual([{ kind: "rethrow", error: FAILURE_ERROR }]);
   });
 });
 
@@ -257,13 +258,13 @@ describe("the guest's visit", () => {
 
   test.each(ALL_FAILURES)("offers no retry when failing with %s", (failure) => {
     const progress = newGuestProgress({ offerCode: OFFER_CODE, roomSecret: ROOM_SECRET });
-    const actions = guest(progress, { kind: "started" }, { kind: "joinFailed", failure });
-    expect(actions).toEqual([{ kind: "show", state: { phase: "failed", failure, retry: false } }]);
+    const effects = guest(progress, { kind: "started" }, { kind: "joinFailed", failure, error: FAILURE_ERROR });
+    expect(effects).toEqual([{ kind: "show", state: { phase: "failed", failure, retry: false } }]);
   });
 
   test("cancels the fallback timer when the link fails to open", () => {
     const { progress } = guestWithReply();
-    expect(guest(progress, { kind: "joinFailed", failure: "couldNotConnect" })).toEqual([
+    expect(guest(progress, { kind: "joinFailed", failure: "couldNotConnect", error: FAILURE_ERROR })).toEqual([
       { kind: "cancelFallbackTimer" },
       { kind: "show", state: { phase: "failed", failure: "couldNotConnect", retry: false } },
     ]);
@@ -271,12 +272,12 @@ describe("the guest's visit", () => {
 
   test("shows and rethrows an unexpected failure", () => {
     const { progress } = guestWithReply();
-    expect(guest(progress, { kind: "joinFailed", failure: "unexpected" })).toContainEqual({ kind: "rethrow" });
+    expect(guest(progress, { kind: "joinFailed", failure: "unexpected", error: FAILURE_ERROR })).toContainEqual({ kind: "rethrow", error: FAILURE_ERROR });
   });
 });
 
 describe("the guest's reply code fallback", () => {
-  const replyCodeShown: GuestAction[] = [{ kind: "cancelFallbackTimer" }, { kind: "show", state: { phase: "replyCode", code: REPLY_CODE } }];
+  const replyCodeShown: GuestEffect[] = [{ kind: "cancelFallbackTimer" }, { kind: "show", state: { phase: "replyCode", code: REPLY_CODE } }];
 
   test("is shown at once when no relay accepts the reply, and not again when the timer fires", () => {
     const { progress } = guestWithReply();
@@ -344,6 +345,6 @@ describe("leaving the guest's visit", () => {
   test("leaves an unexpected failure afterwards only rethrown", () => {
     const { progress } = guestWithReply();
     guest(progress, { kind: "left" });
-    expect(guest(progress, { kind: "joinFailed", failure: "unexpected" })).toEqual([{ kind: "rethrow" }]);
+    expect(guest(progress, { kind: "joinFailed", failure: "unexpected", error: FAILURE_ERROR })).toEqual([{ kind: "rethrow", error: FAILURE_ERROR }]);
   });
 });

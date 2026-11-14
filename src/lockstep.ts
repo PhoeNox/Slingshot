@@ -51,10 +51,17 @@ export interface Lockstep {
   stepsSinceEnd: number;
 }
 
-export interface LockstepResult {
-  outgoing: RemoteMessage[];
-  end: RemoteMatchEnd | undefined;
-}
+export type LockstepEvent =
+  | { readonly kind: "hosted"; readonly seed: number; readonly rules: Readonly<MatchRules> }
+  | { readonly kind: "aimed"; readonly delta: AimDelta }
+  | { readonly kind: "fired" }
+  | { readonly kind: "received"; readonly decoded: Readonly<DecodedMessage> }
+  | { readonly kind: "stepped" }
+  | { readonly kind: "ended"; readonly end: RemoteMatchEnd };
+
+export type LockstepEffect =
+  | { readonly kind: "send"; readonly message: RemoteMessage }
+  | { readonly kind: "end"; readonly end: RemoteMatchEnd };
 
 const END_NOTICE_STEPS = 90;
 
@@ -76,67 +83,82 @@ export function newLockstep(localSide: Side): Lockstep {
   };
 }
 
-function emptyResult(): LockstepResult {
-  return { outgoing: [], end: undefined };
+export function lockstepTransition(lockstep: Lockstep, event: Readonly<LockstepEvent>): LockstepEffect[] {
+  const effects: LockstepEffect[] = [];
+  switch (event.kind) {
+    case "hosted":
+      startHosting(lockstep, effects, event.seed, event.rules);
+      break;
+    case "aimed":
+      aimLocalTurn(lockstep, event.delta);
+      break;
+    case "fired":
+      fireLocalTurn(lockstep, effects);
+      break;
+    case "received":
+      receive(lockstep, effects, event.decoded);
+      break;
+    case "stepped":
+      stepLockstep(lockstep, effects);
+      break;
+    case "ended":
+      finish(lockstep, effects, event.end);
+      break;
+  }
+  return effects;
 }
 
-export function hostLockstep(lockstep: Lockstep, seed: number, rules: Readonly<MatchRules>): LockstepResult {
-  const result = emptyResult();
+function send(effects: LockstepEffect[], message: RemoteMessage): void {
+  effects.push({ kind: "send", message });
+}
+
+function startHosting(lockstep: Lockstep, effects: LockstepEffect[], seed: number, rules: Readonly<MatchRules>): void {
   lockstep.match = createMatch(seed, undefined, rules);
-  result.outgoing.push({ kind: "hello", protocolVersion: PROTOCOL_VERSION, rules, seed });
-  return result;
+  send(effects, { kind: "hello", protocolVersion: PROTOCOL_VERSION, rules, seed });
 }
 
-export function endLockstep(lockstep: Lockstep, end: RemoteMatchEnd): LockstepResult {
-  const result = emptyResult();
-  finish(lockstep, result, end);
-  return result;
-}
-
-function finish(lockstep: Lockstep, result: LockstepResult, end: RemoteMatchEnd): void {
+function finish(lockstep: Lockstep, effects: LockstepEffect[], end: RemoteMatchEnd): void {
   if (lockstep.end !== undefined) {
     return;
   }
   lockstep.end = end;
-  result.end = end;
   if (end !== "opponentLeft") {
-    result.outgoing.push({ kind: "leave" });
+    send(effects, { kind: "leave" });
   }
+  effects.push({ kind: "end", end });
 }
 
-export function receiveLockstep(lockstep: Lockstep, decoded: Readonly<DecodedMessage>): LockstepResult {
-  const result = emptyResult();
+function receive(lockstep: Lockstep, effects: LockstepEffect[], decoded: Readonly<DecodedMessage>): void {
   if (lockstep.end !== undefined) {
-    return result;
+    return;
   }
   if (decoded.accepted) {
-    receiveMessage(lockstep, result, decoded.message);
+    receiveMessage(lockstep, effects, decoded.message);
   } else {
-    finish(lockstep, result, REJECTION_ENDS[decoded.reason]);
+    finish(lockstep, effects, REJECTION_ENDS[decoded.reason]);
   }
-  return result;
 }
 
-function receiveMessage(lockstep: Lockstep, result: LockstepResult, message: Readonly<RemoteMessage>): void {
+function receiveMessage(lockstep: Lockstep, effects: LockstepEffect[], message: Readonly<RemoteMessage>): void {
   const match = lockstep.match;
   if (message.kind === "leave") {
-    finish(lockstep, result, "opponentLeft");
+    finish(lockstep, effects, "opponentLeft");
   } else if (message.kind === "hello") {
-    receiveHello(lockstep, result, message.seed, message.rules);
+    receiveHello(lockstep, effects, message.seed, message.rules);
   } else if (match === undefined) {
-    finish(lockstep, result, "outOfSync");
+    finish(lockstep, effects, "outOfSync");
   } else if (message.kind === "outcome") {
     lockstep.remoteOutcomes.push(message.outcome);
-    compareOutcomes(lockstep, result);
+    compareOutcomes(lockstep, effects);
   } else {
     lockstep.receivedMoves.push(message);
-    applyReceivedMoves(lockstep, result, match);
+    applyReceivedMoves(lockstep, effects, match);
   }
 }
 
-function receiveHello(lockstep: Lockstep, result: LockstepResult, seed: number, rules: Readonly<MatchRules>): void {
+function receiveHello(lockstep: Lockstep, effects: LockstepEffect[], seed: number, rules: Readonly<MatchRules>): void {
   if (lockstep.match !== undefined) {
-    finish(lockstep, result, "outOfSync");
+    finish(lockstep, effects, "outOfSync");
     return;
   }
   lockstep.match = createMatch(seed, undefined, rules);
@@ -148,38 +170,38 @@ function opponentSide(lockstep: Readonly<Lockstep>): Side {
 
 // Opponent moves apply in the order sent, each only once the local flight has ended,
 // so a move always meets the phase the opponent made it in.
-function applyReceivedMoves(lockstep: Lockstep, result: LockstepResult, match: Match): void {
+function applyReceivedMoves(lockstep: Lockstep, effects: LockstepEffect[], match: Match): void {
   while (lockstep.end === undefined && !isShotInFlight(match)) {
     const move = lockstep.receivedMoves.shift();
     if (move === undefined) {
       return;
     }
-    applyReceivedMove(lockstep, result, match, move);
+    applyReceivedMove(lockstep, effects, match, move);
   }
 }
 
-function applyReceivedMove(lockstep: Lockstep, result: LockstepResult, match: Match, move: Readonly<OpponentMove>): void {
+function applyReceivedMove(lockstep: Lockstep, effects: LockstepEffect[], match: Match, move: Readonly<OpponentMove>): void {
   if (move.kind === "aim") {
     showAim(match, opponentSide(lockstep), move.aim);
   } else if (move.kind === "nextRound") {
-    startOpponentRound(lockstep, result, match);
+    startOpponentRound(lockstep, effects, match);
   } else {
-    fireOpponentShot(lockstep, result, match, move);
+    fireOpponentShot(lockstep, effects, match, move);
   }
 }
 
-function startOpponentRound(lockstep: Lockstep, result: LockstepResult, match: Match): void {
+function startOpponentRound(lockstep: Lockstep, effects: LockstepEffect[], match: Match): void {
   if (isRoundStartOf(match, opponentSide(lockstep))) {
     startRound(lockstep, match);
   } else {
-    finish(lockstep, result, "outOfSync");
+    finish(lockstep, effects, "outOfSync");
   }
 }
 
-function fireOpponentShot(lockstep: Lockstep, result: LockstepResult, match: Match, received: Readonly<ShotMessage>): void {
+function fireOpponentShot(lockstep: Lockstep, effects: LockstepEffect[], match: Match, received: Readonly<ShotMessage>): void {
   const fromOpponent = isAimingTurnOf(match, opponentSide(lockstep));
   if (!fromOpponent || !fireReceivedShot(match, received.aim, received.shot)) {
-    finish(lockstep, result, "outOfSync");
+    finish(lockstep, effects, "outOfSync");
   }
 }
 
@@ -192,37 +214,35 @@ function startRound(lockstep: Lockstep, match: Match): void {
   lockstep.sentAim = undefined;
 }
 
-function compareOutcomes(lockstep: Lockstep, result: LockstepResult): void {
+function compareOutcomes(lockstep: Lockstep, effects: LockstepEffect[]): void {
   while (lockstep.end === undefined && lockstep.localOutcomes.length > 0 && lockstep.remoteOutcomes.length > 0) {
     const local = lockstep.localOutcomes.shift()!;
     const received = lockstep.remoteOutcomes.shift()!;
     if (!shotOutcomesAgree(local, received)) {
-      finish(lockstep, result, "outOfSync");
+      finish(lockstep, effects, "outOfSync");
     }
   }
 }
 
-export function aimLockstep(lockstep: Lockstep, delta: AimDelta): void {
+function aimLocalTurn(lockstep: Lockstep, delta: AimDelta): void {
   if (isLocalTurn(lockstep)) {
     adjustAim(lockstep.match!, delta);
   }
 }
 
-export function fireLockstep(lockstep: Lockstep): LockstepResult {
-  const result = emptyResult();
+function fireLocalTurn(lockstep: Lockstep, effects: LockstepEffect[]): void {
   const match = lockstep.match;
   if (match === undefined || lockstep.end !== undefined) {
-    return result;
+    return;
   }
   if (isRoundStartOf(match, lockstep.localSide)) {
     startRound(lockstep, match);
-    result.outgoing.push({ kind: "nextRound" });
+    send(effects, { kind: "nextRound" });
   } else if (isLocalTurn(lockstep)) {
     const aim = aimOf(match, lockstep.localSide);
     const shot = fire(match)!;
-    result.outgoing.push({ kind: "shot", aim, shot });
+    send(effects, { kind: "shot", aim, shot });
   }
-  return result;
 }
 
 export function isLocalTurn(lockstep: Readonly<Lockstep>): boolean {
@@ -231,37 +251,35 @@ export function isLocalTurn(lockstep: Readonly<Lockstep>): boolean {
     && isAimingTurnOf(lockstep.match, lockstep.localSide);
 }
 
-export function stepLockstep(lockstep: Lockstep): LockstepResult {
-  const result = emptyResult();
+function stepLockstep(lockstep: Lockstep, effects: LockstepEffect[]): void {
   if (lockstep.end !== undefined) {
     lockstep.stepsSinceEnd++;
   }
   const match = lockstep.match;
   if (match !== undefined) {
-    stepStartedMatch(lockstep, result, match);
+    stepStartedMatch(lockstep, effects, match);
   }
-  return result;
 }
 
-function stepStartedMatch(lockstep: Lockstep, result: LockstepResult, match: Match): void {
+function stepStartedMatch(lockstep: Lockstep, effects: LockstepEffect[], match: Match): void {
   const outcome = step(match);
   if (outcome !== undefined) {
-    reportShotOutcome(lockstep, result, outcome);
+    reportShotOutcome(lockstep, effects, outcome);
   }
-  applyReceivedMoves(lockstep, result, match);
-  sendChangedAim(lockstep, result, match);
+  applyReceivedMoves(lockstep, effects, match);
+  sendChangedAim(lockstep, effects, match);
 }
 
-function reportShotOutcome(lockstep: Lockstep, result: LockstepResult, outcome: Readonly<ShotOutcome>): void {
+function reportShotOutcome(lockstep: Lockstep, effects: LockstepEffect[], outcome: Readonly<ShotOutcome>): void {
   if (lockstep.end !== undefined) {
     return;
   }
   lockstep.localOutcomes.push(outcome);
-  result.outgoing.push({ kind: "outcome", outcome });
-  compareOutcomes(lockstep, result);
+  send(effects, { kind: "outcome", outcome });
+  compareOutcomes(lockstep, effects);
 }
 
-function sendChangedAim(lockstep: Lockstep, result: LockstepResult, match: Readonly<Match>): void {
+function sendChangedAim(lockstep: Lockstep, effects: LockstepEffect[], match: Readonly<Match>): void {
   if (!isLocalTurn(lockstep) || !isAimStreamingStep(match)) {
     return;
   }
@@ -270,7 +288,7 @@ function sendChangedAim(lockstep: Lockstep, result: LockstepResult, match: Reado
     return;
   }
   lockstep.sentAim = aim;
-  result.outgoing.push({ kind: "aim", aim });
+  send(effects, { kind: "aim", aim });
 }
 
 export function isEndNoticeOver(lockstep: Readonly<Lockstep>): boolean {

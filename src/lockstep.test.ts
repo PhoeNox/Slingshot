@@ -2,19 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { describe, expect, test } from "vitest";
-import { adjustAim, DEFAULT_MATCH_RULES, fire, isShotInFlight, matchView, nextShooter, step, type Aim, type Match } from "./core/match";
+import { adjustAim, DEFAULT_MATCH_RULES, type AimDelta, fire, isShotInFlight, matchView, nextShooter, step, type Aim, type Match } from "./core/match";
 import {
-  aimLockstep,
-  endLockstep,
-  fireLockstep,
-  hostLockstep,
   isEndNoticeOver,
+  lockstepTransition,
   newLockstep,
-  receiveLockstep,
   remoteNotice,
-  stepLockstep,
   type Lockstep,
-  type LockstepResult,
+  type LockstepEffect,
   type RemoteMatchEnd,
 } from "./lockstep";
 import { PROTOCOL_VERSION, type OutcomeMessage, type RejectionReason, type RemoteMessage } from "./remoteProtocol";
@@ -47,21 +42,57 @@ const AIM_SEND_INTERVAL_STEPS = 3;
 const END_NOTICE_STEPS = 90;
 const ANGLES = Array.from({ length: 180 }, (_, i) => i * 2);
 const POWERS = [100, 150, 200, 250, 300];
-const NOTHING: LockstepResult = { outgoing: [], end: undefined };
+const NOTHING: LockstepEffect[] = [];
 const LEAVE: RemoteMessage = { kind: "leave" };
 const INVALID_SHOT: RemoteMessage = { kind: "shot", aim: { angle: 0, power: 999 }, shot: { x: 0, y: 0, vx: 0, vy: 0 } };
 
-function receive(lockstep: Lockstep, message: RemoteMessage): LockstepResult {
-  return receiveLockstep(lockstep, { accepted: true, message });
+function sending(message: RemoteMessage): LockstepEffect {
+  return { kind: "send", message };
 }
 
-function relay(result: LockstepResult, to: Lockstep): void {
-  for (const message of result.outgoing) {
+function ending(end: RemoteMatchEnd): LockstepEffect {
+  return { kind: "end", end };
+}
+
+function endedSendingLeave(end: RemoteMatchEnd): LockstepEffect[] {
+  return [sending(LEAVE), ending(end)];
+}
+
+function sent(effects: LockstepEffect[]): RemoteMessage[] {
+  return effects.flatMap((effect) => (effect.kind === "send" ? [effect.message] : []));
+}
+
+function hostMatch(lockstep: Lockstep): LockstepEffect[] {
+  return lockstepTransition(lockstep, { kind: "hosted", seed: SEED, rules: DEFAULT_MATCH_RULES });
+}
+
+function aimBy(lockstep: Lockstep, delta: AimDelta): void {
+  lockstepTransition(lockstep, { kind: "aimed", delta });
+}
+
+function fireLocal(lockstep: Lockstep): LockstepEffect[] {
+  return lockstepTransition(lockstep, { kind: "fired" });
+}
+
+function stepOnce(lockstep: Lockstep): LockstepEffect[] {
+  return lockstepTransition(lockstep, { kind: "stepped" });
+}
+
+function endLocally(lockstep: Lockstep, end: RemoteMatchEnd): LockstepEffect[] {
+  return lockstepTransition(lockstep, { kind: "ended", end });
+}
+
+function receive(lockstep: Lockstep, message: RemoteMessage): LockstepEffect[] {
+  return lockstepTransition(lockstep, { kind: "received", decoded: { accepted: true, message } });
+}
+
+function relay(effects: LockstepEffect[], to: Lockstep): void {
+  for (const message of sent(effects)) {
     receive(to, message);
   }
 }
 
-function relayAll(results: LockstepResult[], to: Lockstep): void {
+function relayAll(results: LockstepEffect[][], to: Lockstep): void {
   for (const result of results) {
     relay(result, to);
   }
@@ -70,7 +101,7 @@ function relayAll(results: LockstepResult[], to: Lockstep): void {
 function connectedPeers(): Peers {
   const host = newLockstep("left");
   const guest = newLockstep("right");
-  relay(hostLockstep(host, SEED, DEFAULT_MATCH_RULES), guest);
+  relay(hostMatch(host), guest);
   return { host, guest };
 }
 
@@ -110,29 +141,29 @@ function aimFor(match: Readonly<Match>, wanted: ShotResult): Aim {
 
 function aimAt(lockstep: Lockstep, target: Aim): void {
   const aim = matchOf(lockstep).ships[lockstep.localSide].aim;
-  aimLockstep(lockstep, { angle: target.angle - aim.angle, power: target.power - aim.power });
+  aimBy(lockstep, { angle: target.angle - aim.angle, power: target.power - aim.power });
 }
 
-function shoot(lockstep: Lockstep, wanted: ShotResult): LockstepResult {
+function shoot(lockstep: Lockstep, wanted: ShotResult): LockstepEffect[] {
   const target = aimFor(matchOf(lockstep), wanted);
   aimAt(lockstep, target);
-  return fireLockstep(lockstep);
+  return fireLocal(lockstep);
 }
 
-function stepTimes(lockstep: Lockstep, steps: number): LockstepResult[] {
-  return Array.from({ length: steps }, () => stepLockstep(lockstep));
+function stepTimes(lockstep: Lockstep, steps: number): LockstepEffect[][] {
+  return Array.from({ length: steps }, () => stepOnce(lockstep));
 }
 
-function flyOut(lockstep: Lockstep): LockstepResult[] {
-  const results: LockstepResult[] = [];
+function flyOut(lockstep: Lockstep): LockstepEffect[][] {
+  const results: LockstepEffect[][] = [];
   for (let i = 0; i < MAX_STEPS && isShotInFlight(matchOf(lockstep)); i++) {
-    results.push(stepLockstep(lockstep));
+    results.push(stepOnce(lockstep));
   }
   return results;
 }
 
-function outgoingOf(results: LockstepResult[]): RemoteMessage[] {
-  return results.flatMap((result) => result.outgoing);
+function outgoingOf(results: LockstepEffect[][]): RemoteMessage[] {
+  return results.flatMap(sent);
 }
 
 function playShot(peers: Peers, wanted: ShotResult): void {
@@ -144,7 +175,7 @@ function playShot(peers: Peers, wanted: ShotResult): void {
   relayAll(receiverSteps, shooter);
 }
 
-function outcomeOf(results: LockstepResult[]): OutcomeMessage {
+function outcomeOf(results: LockstepEffect[][]): OutcomeMessage {
   const outcome = outgoingOf(results).find((message) => message.kind === "outcome");
   if (outcome?.kind !== "outcome") {
     throw new Error("expected an outcome");
@@ -156,19 +187,16 @@ describe("starting a lockstep match", () => {
   test("the host creates its match and sends a hello with the seed and rules", () => {
     const host = newLockstep("left");
 
-    const hosted = hostLockstep(host, SEED, DEFAULT_MATCH_RULES);
+    const hosted = hostMatch(host);
 
-    expect(hosted).toEqual({
-      outgoing: [{ kind: "hello", protocolVersion: PROTOCOL_VERSION, rules: DEFAULT_MATCH_RULES, seed: SEED }],
-      end: undefined,
-    });
+    expect(hosted).toEqual([sending({ kind: "hello", protocolVersion: PROTOCOL_VERSION, rules: DEFAULT_MATCH_RULES, seed: SEED })]);
     expect(remoteNotice(host)).toBeUndefined();
   });
 
   test("the guest awaits the host until the hello, then plays the host's match", () => {
     const host = newLockstep("left");
     const guest = newLockstep("right");
-    const hosted = hostLockstep(host, SEED, DEFAULT_MATCH_RULES);
+    const hosted = hostMatch(host);
     const awaiting = remoteNotice(guest);
 
     relay(hosted, guest);
@@ -183,7 +211,7 @@ describe("starting a lockstep match", () => {
 
     const received = receive(guest, { kind: "hello", protocolVersion: PROTOCOL_VERSION, rules: DEFAULT_MATCH_RULES, seed: 1 });
 
-    expect(received).toEqual({ outgoing: [LEAVE], end: "outOfSync" });
+    expect(received).toEqual(endedSendingLeave("outOfSync"));
   });
 
   test("a move before the hello ends the match as out of sync", () => {
@@ -191,13 +219,13 @@ describe("starting a lockstep match", () => {
 
     const received = receive(guest, { kind: "aim", aim: { angle: 10, power: 20 } });
 
-    expect(received).toEqual({ outgoing: [LEAVE], end: "outOfSync" });
+    expect(received).toEqual(endedSendingLeave("outOfSync"));
   });
 
   test("fire before the hello does nothing", () => {
     const guest = newLockstep("right");
 
-    expect(fireLockstep(guest)).toEqual(NOTHING);
+    expect(fireLocal(guest)).toEqual(NOTHING);
   });
 });
 
@@ -207,19 +235,18 @@ describe("local input", () => {
     const target = aimFor(matchOf(shooter), "miss");
 
     aimAt(shooter, target);
-    const fired = fireLockstep(shooter);
+    const fired = fireLocal(shooter);
 
     expect(isShotInFlight(matchOf(shooter))).toBe(true);
-    expect(fired.outgoing).toEqual([{ kind: "shot", aim: target, shot: expect.any(Object) }]);
-    expect(fired.end).toBeUndefined();
+    expect(fired).toEqual([sending({ kind: "shot", aim: target, shot: expect.any(Object) })]);
   });
 
   test("aim and fire on the opponent's turn change nothing and send nothing", () => {
     const { receiver } = turnOf(connectedPeers());
     const before = structuredClone(matchView(matchOf(receiver)));
 
-    aimLockstep(receiver, { angle: 30, power: 50 });
-    const fired = fireLockstep(receiver);
+    aimBy(receiver, { angle: 30, power: 50 });
+    const fired = fireLocal(receiver);
 
     expect(fired).toEqual(NOTHING);
     expect(matchView(matchOf(receiver))).toEqual(before);
@@ -229,21 +256,21 @@ describe("local input", () => {
 describe("aim streaming", () => {
   test("a changed aim is sent on every third step", () => {
     const { shooter } = turnOf(connectedPeers());
-    aimLockstep(shooter, { angle: 10, power: 20 });
+    aimBy(shooter, { angle: 10, power: 20 });
 
     const stepped = stepTimes(shooter, AIM_SEND_INTERVAL_STEPS);
 
     const aim = matchOf(shooter).ships[shooter.localSide].aim;
-    expect(stepped.map((result) => result.outgoing)).toEqual([[], [], [{ kind: "aim", aim }]]);
+    expect(stepped.map(sent)).toEqual([[], [], [{ kind: "aim", aim }]]);
   });
 
   test("an aim changing on every step is sent only once per interval", () => {
     const { shooter } = turnOf(connectedPeers());
-    const stepped: LockstepResult[] = [];
+    const stepped: LockstepEffect[][] = [];
 
     for (let i = 0; i < AIM_SEND_INTERVAL_STEPS * 2; i++) {
-      aimLockstep(shooter, { angle: 1, power: 0 });
-      stepped.push(stepLockstep(shooter));
+      aimBy(shooter, { angle: 1, power: 0 });
+      stepped.push(stepOnce(shooter));
     }
 
     expect(outgoingOf(stepped).map((message) => message.kind)).toEqual(["aim", "aim"]);
@@ -251,7 +278,7 @@ describe("aim streaming", () => {
 
   test("an unchanged aim is not sent again", () => {
     const { shooter } = turnOf(connectedPeers());
-    aimLockstep(shooter, { angle: 10, power: 20 });
+    aimBy(shooter, { angle: 10, power: 20 });
     stepTimes(shooter, AIM_SEND_INTERVAL_STEPS);
 
     const stepped = stepTimes(shooter, AIM_SEND_INTERVAL_STEPS * 2);
@@ -261,7 +288,7 @@ describe("aim streaming", () => {
 
   test("the streamed aim moves the opponent's ship on the receiving side", () => {
     const { shooter, receiver } = turnOf(connectedPeers());
-    aimLockstep(shooter, { angle: 10, power: 20 });
+    aimBy(shooter, { angle: 10, power: 20 });
 
     relayAll(stepTimes(shooter, AIM_SEND_INTERVAL_STEPS), receiver);
 
@@ -284,14 +311,14 @@ describe("opponent moves", () => {
     const { shooter, receiver } = turnOf(connectedPeers());
     relay(shoot(shooter, "miss"), receiver);
     flyOut(receiver);
-    aimLockstep(receiver, { angle: 10, power: 20 });
+    aimBy(receiver, { angle: 10, power: 20 });
     relayAll(stepTimes(receiver, AIM_SEND_INTERVAL_STEPS), shooter);
     relay(shoot(receiver, "miss"), shooter);
     const queued = shooter.receivedMoves.map((move) => move.kind);
     const queuedInFlight = isShotInFlight(matchOf(shooter));
 
     for (let i = 0; i < MAX_STEPS && shooter.receivedMoves.length > 0; i++) {
-      stepLockstep(shooter);
+      stepOnce(shooter);
     }
 
     expect(queued).toEqual(["aim", "shot"]);
@@ -307,7 +334,7 @@ describe("opponent moves", () => {
 
     const received = receive(shooter, { kind: "shot", aim, shot: { x: 0, y: 0, vx: 0, vy: 0 } });
 
-    expect(received).toEqual({ outgoing: [LEAVE], end: "outOfSync" });
+    expect(received).toEqual(endedSendingLeave("outOfSync"));
   });
 
   test("an invalid shot ends the match as out of sync", () => {
@@ -315,7 +342,7 @@ describe("opponent moves", () => {
 
     const received = receive(receiver, INVALID_SHOT);
 
-    expect(received).toEqual({ outgoing: [LEAVE], end: "outOfSync" });
+    expect(received).toEqual(endedSendingLeave("outOfSync"));
   });
 });
 
@@ -326,13 +353,13 @@ describe("round starts", () => {
     const { shooter: next, receiver: waiting } = turnOf(peers);
     const waitingBefore = structuredClone(matchView(matchOf(waiting)));
 
-    const waitingFired = fireLockstep(waiting);
-    const nextFired = fireLockstep(next);
+    const waitingFired = fireLocal(waiting);
+    const nextFired = fireLocal(next);
     relay(nextFired, waiting);
 
     expect(waitingFired).toEqual(NOTHING);
     expect(waitingBefore.phase.kind).toBe("roundOver");
-    expect(nextFired).toEqual({ outgoing: [{ kind: "nextRound" }], end: undefined });
+    expect(nextFired).toEqual([sending({ kind: "nextRound" })]);
     expect(matchOf(next).roundNumber).toBe(2);
     expect(matchView(matchOf(waiting))).toEqual(matchView(matchOf(next)));
   });
@@ -344,7 +371,7 @@ describe("round starts", () => {
 
     const received = receive(next, { kind: "nextRound" });
 
-    expect(received).toEqual({ outgoing: [LEAVE], end: "outOfSync" });
+    expect(received).toEqual(endedSendingLeave("outOfSync"));
   });
 });
 
@@ -372,7 +399,7 @@ describe("outcome comparison", () => {
 
     const received = receive(receiver, { kind: "outcome", outcome: { ...outcome, stepsFlown: outcome.stepsFlown + 1 } });
 
-    expect(received).toEqual({ outgoing: [LEAVE], end: "outOfSync" });
+    expect(received).toEqual(endedSendingLeave("outOfSync"));
   });
 
   test("an outcome received during the local flight is compared once that flight ends", () => {
@@ -384,7 +411,7 @@ describe("outcome comparison", () => {
     const flown = flyOut(receiver);
 
     expect(received).toEqual(NOTHING);
-    expect(flown.at(-1)).toEqual({ outgoing: [outcomeOf(flown), LEAVE], end: "outOfSync" });
+    expect(flown.at(-1)).toEqual([sending(outcomeOf(flown)), ...endedSendingLeave("outOfSync")]);
   });
 });
 
@@ -403,36 +430,36 @@ describe("endings", () => {
   test.each(localEndings)("ending locally as $end tells the opponent unless it left", ({ end, outgoing }) => {
     const { host } = connectedPeers();
 
-    expect(endLockstep(host, end)).toEqual({ outgoing, end });
+    expect(endLocally(host, end)).toEqual([...outgoing.map(sending), ending(end)]);
   });
 
   test("a received leave ends the match as opponent left without a reply", () => {
     const { guest } = connectedPeers();
 
-    expect(receive(guest, LEAVE)).toEqual({ outgoing: [], end: "opponentLeft" });
+    expect(receive(guest, LEAVE)).toEqual([ending("opponentLeft")]);
   });
 
   test.each(rejections)("a $reason rejection ends the match as $end", ({ reason, end }) => {
     const { guest } = connectedPeers();
 
-    const received = receiveLockstep(guest, { accepted: false, reason, detail: "rejected" });
+    const received = lockstepTransition(guest, { kind: "received", decoded: { accepted: false, reason, detail: "rejected" } });
 
-    expect(received).toEqual({ outgoing: [LEAVE], end });
+    expect(received).toEqual(endedSendingLeave(end));
   });
 
   test("after an ending, messages, input, steps and further endings send nothing", () => {
     const { shooter } = turnOf(connectedPeers());
-    endLockstep(shooter, "outOfSync");
+    endLocally(shooter, "outOfSync");
 
-    aimLockstep(shooter, { angle: 10, power: 20 });
+    aimBy(shooter, { angle: 10, power: 20 });
     const results = [
       receive(shooter, LEAVE),
-      fireLockstep(shooter),
+      fireLocal(shooter),
       ...stepTimes(shooter, AIM_SEND_INTERVAL_STEPS),
-      endLockstep(shooter, "left"),
+      endLocally(shooter, "left"),
     ];
 
-    expect(results.every((result) => result.outgoing.length === 0 && result.end === undefined)).toBe(true);
+    expect(results.every((result) => result.length === 0)).toBe(true);
     expect(shooter.end).toBe("outOfSync");
     expect(isShotInFlight(matchOf(shooter))).toBe(false);
   });
@@ -441,8 +468,8 @@ describe("endings", () => {
     const left = connectedPeers().host;
     const outOfSync = connectedPeers().host;
 
-    endLockstep(left, "left");
-    endLockstep(outOfSync, "outOfSync");
+    endLocally(left, "left");
+    endLocally(outOfSync, "outOfSync");
 
     expect(remoteNotice(left)).toBeUndefined();
     expect(remoteNotice(outOfSync)).toBe("outOfSync");
@@ -452,11 +479,11 @@ describe("endings", () => {
     const { host } = connectedPeers();
     stepTimes(host, END_NOTICE_STEPS);
     const overBeforeEnding = isEndNoticeOver(host);
-    endLockstep(host, "opponentLeft");
+    endLocally(host, "opponentLeft");
 
     stepTimes(host, END_NOTICE_STEPS - 1);
     const overJustBefore = isEndNoticeOver(host);
-    stepLockstep(host);
+    stepOnce(host);
 
     expect(overBeforeEnding).toBe(false);
     expect(overJustBefore).toBe(false);
