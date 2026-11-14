@@ -13,7 +13,7 @@ Issues and specs (you may know a spec as a PRD) for this repo live as markdown f
 
 ## Closing a ticket
 
-On the commit that completes a ticket, set its `Status:` to `done`, tick its checkboxes, and stage the issue file in that same commit. Scope dropped on the user's request goes under `## Comments` with a one-line reason.
+Before the `git commit` that completes a ticket, set its `Status:` to `done` and tick its checkboxes. `.scratch/` is git-ignored, so the file stays out of the commit. Scope dropped on the user's request goes under `## Comments` with a one-line reason.
 
 ## Bugs found along the way
 
