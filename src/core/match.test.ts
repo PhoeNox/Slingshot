@@ -7,6 +7,7 @@ import {
   createMatch,
   DEFAULT_MATCH_RULES,
   fire,
+  fireReceivedShot,
   matchView,
   previewShot,
   step,
@@ -15,10 +16,11 @@ import {
   type MatchRules,
   type RoundLayout,
   type RoundOverView,
+  type ShotOutcome,
   type Zoom,
 } from "./match";
-import { BARREL_DISTANCE, type Planet, type Side } from "./round";
-import { isInsidePlayingArea } from "./flight";
+import { BARREL_DISTANCE, type Aim, type Planet, type Side } from "./round";
+import { isInsidePlayingArea, shotRecordFor, type ShotRecord } from "./flight";
 
 const SEEDS = Array.from({ length: 1000 }, (_, i) => i * 7919 + 1);
 
@@ -1263,5 +1265,182 @@ describe("impact", () => {
     missShot(match);
 
     expect(matchView(match).impact).toBeUndefined();
+  });
+});
+
+interface ReceivedShot {
+  aim: Aim;
+  record: ShotRecord;
+}
+
+type AimPlan = (shooter: Side) => Aim;
+
+const PLANETLESS_RULES: MatchRules = { ...DEFAULT_MATCH_RULES, planetCount: { min: 0, max: 0 } };
+const MISS_PLAN: AimPlan = () => ({ angle: 0, power: 250 });
+const HIT_PLAN: AimPlan = (shooter) => ({ angle: shooter === "left" ? 90 : 270, power: 100 });
+const SHOT_PLANS = [MISS_PLAN, MISS_PLAN, HIT_PLAN, MISS_PLAN, HIT_PLAN, HIT_PLAN, MISS_PLAN, HIT_PLAN];
+
+function sentShot(match: Match): ReceivedShot {
+  const side = matchView(match).activePlayer;
+  const record = shotRecordFor(activeShip(match), BARREL_DISTANCE[side]);
+  return { aim: activeAim(match), record };
+}
+
+function playLocally(match: Match, plans: AimPlan[]): { shots: ReceivedShot[]; outcomes: ShotOutcome[] } {
+  const shots: ReceivedShot[] = [];
+  const outcomes: ShotOutcome[] = [];
+  for (const plan of plans) {
+    if (matchView(match).phase.kind === "roundOver") {
+      fire(match);
+    }
+    const aim = plan(matchView(match).activePlayer);
+    aimAt(match, aim.angle, aim.power);
+    shots.push(sentShot(match));
+    fire(match);
+    stepUntilShotEnds(match, 1000);
+    outcomes.push(lastOutcome(match));
+  }
+  return { shots, outcomes };
+}
+
+function shootAt(match: Match, angle: number, power: number): number {
+  aimAt(match, angle, power);
+  fire(match);
+  return stepUntilShotEnds(match, 6000);
+}
+
+function lastOutcome(match: Match): ShotOutcome {
+  const outcome = matchView(match).lastShotOutcome;
+  if (outcome === undefined) {
+    throw new Error("expected a shot outcome");
+  }
+  return outcome;
+}
+
+function nextRoundShot(match: Match, angle: number, power: number): ReceivedShot {
+  const nextRound = structuredClone(match);
+  fire(nextRound);
+  aimAt(nextRound, angle, power);
+  return sentShot(nextRound);
+}
+
+describe("fireReceivedShot", () => {
+  test("received shots end in the same state as the same shots fired locally", () => {
+    const local = createMatch(81, fixedLayout([]), PLANETLESS_RULES);
+    const remote = createMatch(81, fixedLayout([]), PLANETLESS_RULES);
+
+    const { shots, outcomes: localOutcomes } = playLocally(local, SHOT_PLANS);
+    const outcomes: ShotOutcome[] = [];
+    for (const shot of shots) {
+      expect(fireReceivedShot(remote, shot.aim, shot.record)).toBe(true);
+      stepUntilShotEnds(remote, 1000);
+      outcomes.push(lastOutcome(remote));
+    }
+
+    expect(matchView(local).roundNumber).toBeGreaterThan(1);
+    expect(matchView(remote)).toEqual(matchView(local));
+    expect(outcomes).toEqual(localOutcomes);
+  });
+
+  test("sets the shooter's aim to the received aim", () => {
+    const match = createMatch(82, fixedLayout([]));
+    const shooter = matchView(match).activePlayer;
+    aimAt(match, 45, 200);
+    const aimed = sentShot(match);
+    aimAt(match, 0, 100);
+
+    fireReceivedShot(match, aimed.aim, aimed.record);
+
+    expect(matchView(match).ships[shooter].aim).toEqual(aimed.aim);
+    expect(matchView(match).powerPenalty).toBe(5 * aimed.aim.power);
+  });
+
+  test("flies the received record as sent rather than recomputing it from the aim", () => {
+    const match = createMatch(83, fixedLayout([]));
+    const { aim, record } = sentShot(match);
+    const received = { ...record, x: record.x + 5e-7, vy: record.vy - 5e-7 };
+
+    expect(fireReceivedShot(match, aim, received)).toBe(true);
+
+    expect(inFlight(match).missile).toMatchObject({ vx: received.vx });
+    step(match);
+    expect(matchView(match).trails[0].from).toEqual({ x: received.x, y: received.y });
+  });
+
+  test("a shot received while the round is over starts the next round and then flies", () => {
+    const match = createMatch(84, fixedLayout([]));
+    hitOpponent(match, 100);
+    const shot = nextRoundShot(match, 30, 150);
+
+    expect(fireReceivedShot(match, shot.aim, shot.record)).toBe(true);
+
+    expect(matchView(match).roundNumber).toBe(2);
+    expect(inFlight(match).missile).toMatchObject(shot.record);
+    expect(activeShip(match).aim).toEqual(shot.aim);
+    expect(matchView(match).attempts[matchView(match).activePlayer]).toBe(1);
+  });
+
+  test.each<[string, (shot: ReceivedShot) => ReceivedShot]>([
+    ["negative power", (shot) => ({ ...shot, aim: { ...shot.aim, power: -1 } })],
+    ["power above 350", (shot) => ({ ...shot, aim: { ...shot.aim, power: 351 } })],
+    ["angle of 360", (shot) => ({ ...shot, aim: { ...shot.aim, angle: 360 } })],
+    ["negative angle", (shot) => ({ ...shot, aim: { ...shot.aim, angle: -0.5 } })],
+    ["non-finite angle", (shot) => ({ ...shot, aim: { ...shot.aim, angle: Number.NaN } })],
+    ["non-finite power", (shot) => ({ ...shot, aim: { ...shot.aim, power: Infinity } })],
+    ["non-finite position", (shot) => ({ ...shot, record: { ...shot.record, x: Number.NaN } })],
+    ["non-finite velocity", (shot) => ({ ...shot, record: { ...shot.record, vy: -Infinity } })],
+    ["position off the aim", (shot) => ({ ...shot, record: { ...shot.record, y: shot.record.y + 1e-5 } })],
+    ["velocity off the aim", (shot) => ({ ...shot, record: { ...shot.record, vx: shot.record.vx - 1e-5 } })],
+  ])("rejects a shot with %s and leaves the match unchanged", (_, corrupt) => {
+    const match = createMatch(85, fixedLayout([]));
+    aimAt(match, 120, 180);
+    const shot = corrupt(sentShot(match));
+    const before = structuredClone(match);
+
+    expect(fireReceivedShot(match, shot.aim, shot.record)).toBe(false);
+
+    expect(match).toEqual(before);
+  });
+
+  test("rejects a shot made for the current round while the round is over and leaves the match unchanged", () => {
+    const match = createMatch(86, fixedLayout([]));
+    hitOpponent(match, 100);
+    const staleShot = sentShot(match);
+    const before = structuredClone(match);
+
+    expect(fireReceivedShot(match, staleShot.aim, staleShot.record)).toBe(false);
+
+    expect(match).toEqual(before);
+  });
+
+  test("rejects a shot while the previous one is in flight and leaves the match unchanged", () => {
+    const match = createMatch(87, fixedLayout([]));
+    const shot = sentShot(match);
+    fire(match);
+    const before = structuredClone(match);
+
+    expect(fireReceivedShot(match, shot.aim, shot.record)).toBe(false);
+
+    expect(match).toEqual(before);
+  });
+});
+
+describe("shot outcome", () => {
+  test("a new match has no shot outcome", () => {
+    expect(matchView(createMatch(90)).lastShotOutcome).toBeUndefined();
+  });
+
+  test.each<[ShotOutcome["endReason"], () => Match, (match: Match) => number]>([
+    ["hit", () => createMatch(91, fixedLayout([])), (match) => shootAt(match, opponentAngle(match), 100)],
+    ["selfHit", () => selfHitMatch(92), (match) => shootAt(match, 0, 20)],
+    ["planet", () => createMatch(93, fixedLayout([planetAt(400, 300, 8, 25)])), (match) => shootAt(match, opponentAngle(match), 100)],
+    ["leftTrackingArea", () => createMatch(94, fixedLayout([])), (match) => shootAt(match, 0, 250)],
+    ["timedOut", () => createMatch(95, fixedLayout([])), (match) => shootAt(match, 0, 1)],
+  ])("reports %s with the steps flown and the final missile position", (endReason, createShotMatch, shoot) => {
+    const match = createShotMatch();
+
+    const shotSteps = shoot(match);
+
+    expect(lastOutcome(match)).toEqual({ endReason, stepsFlown: shotSteps, finalPosition: shotEndPoint(match) });
   });
 });

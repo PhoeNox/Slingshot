@@ -13,6 +13,8 @@ import {
   launchMissile,
   shotRecordFor,
   STEPS_PER_SECOND,
+  type FlightEnd,
+  type FlightStep,
   type Missile,
   type Point,
   type Segment,
@@ -63,6 +65,19 @@ export interface ShotPreview {
   endedWithinLimit: boolean;
 }
 
+export type ShotEndReason = "hit" | "selfHit" | "planet" | "leftTrackingArea" | "timedOut";
+
+export interface ShotOutcome {
+  endReason: ShotEndReason;
+  stepsFlown: number;
+  finalPosition: Point;
+}
+
+interface ShooterShip {
+  side: Side;
+  ship: Readonly<Ship>;
+}
+
 interface TrailSegment {
   shooter: Side;
   shotNumber: number;
@@ -88,6 +103,8 @@ export const DEFAULT_MATCH_RULES: DeepReadonly<MatchRules> = {
 
 const MAX_POWER = 350;
 const FULL_TURN = 360;
+const SHOT_RECORD_TOLERANCE = 1e-6;
+const SHOT_RECORD_FIELDS = ["x", "y", "vx", "vy"] as const;
 
 interface MatchState {
   phase: Phase;
@@ -101,6 +118,7 @@ interface MatchState {
   attempts: Record<Side, number>;
   zoom: Zoom;
   impact: Point | undefined;
+  lastShotOutcome: ShotOutcome | undefined;
 }
 
 type DeepReadonly<T> = { readonly [K in keyof T]: DeepReadonly<T[K]> };
@@ -151,6 +169,7 @@ export function createMatch(
     attempts: { left: 0, right: 0 },
     zoom: { ...NO_ZOOM },
     impact: undefined,
+    lastShotOutcome: undefined,
   };
 }
 
@@ -175,14 +194,35 @@ function advanceShot(match: Match, missile: Missile): void {
   const shotNumber = match.attempts.left + match.attempts.right;
   const trailSegment = { shooter: match.activePlayer, shotNumber, ...flightStep.segment };
   match.trails.push(trailSegment);
-  if (flightStep.hitPlanet || flightStep.hitShip !== undefined) {
+  if (flightStep.end === "planet" || flightStep.end === "ship") {
     match.impact = flightStep.segment.to;
+  }
+  if (flightStep.end !== undefined) {
+    match.lastShotOutcome = shotOutcomeFor(match.activePlayer, flightStep.end, flightStep, missile);
   }
   if (flightStep.hitShip !== undefined) {
     endRound(match, flightStep.hitShip);
-  } else if (flightStep.shotEnded) {
+  } else if (flightStep.end !== undefined) {
     endShot(match);
   }
+}
+
+function shotOutcomeFor(
+  shooter: Side,
+  end: FlightEnd,
+  flightStep: Readonly<FlightStep>,
+  missile: Readonly<Missile>,
+): ShotOutcome {
+  const endReason = shotEndReasonFor(shooter, end, flightStep.hitShip);
+  const finalPosition = { ...flightStep.segment.to };
+  return { endReason, stepsFlown: missile.stepsFlown, finalPosition };
+}
+
+function shotEndReasonFor(shooter: Side, end: FlightEnd, hitShip: Side | undefined): ShotEndReason {
+  if (end !== "ship") {
+    return end;
+  }
+  return hitShip === shooter ? "selfHit" : "hit";
 }
 
 function endShot(match: Match): void {
@@ -233,9 +273,53 @@ export function fire(match: Match): void {
 function launchShot(match: Match): void {
   const side = match.activePlayer;
   const shot = shotRecordFor(match.ships[side], BARREL_DISTANCE[side]);
+  launchShotRecord(match, shot);
+}
+
+function launchShotRecord(match: Match, shot: Readonly<ShotRecord>): void {
   const missile = launchMissileUnderRules(shot, match.rules);
-  match.attempts[side]++;
+  match.attempts[match.activePlayer]++;
   match.phase = { kind: "inFlight", missile };
+}
+
+export function fireReceivedShot(match: Match, aim: Readonly<Aim>, shot: Readonly<ShotRecord>): boolean {
+  if (match.phase.kind === "inFlight" || !isValidShot(match, aim, shot)) {
+    return false;
+  }
+  if (match.phase.kind === "roundOver") {
+    startNextRound(match);
+  }
+  match.ships[match.activePlayer].aim = { angle: aim.angle, power: aim.power };
+  launchShotRecord(match, shot);
+  return true;
+}
+
+function isValidShot(match: Readonly<Match>, aim: Readonly<Aim>, shot: Readonly<ShotRecord>): boolean {
+  return isAimInRange(aim) && isWithinTolerance(shot, expectedShotRecord(match, aim));
+}
+
+function isAimInRange(aim: Readonly<Aim>): boolean {
+  return aim.angle >= 0 && aim.angle < FULL_TURN && aim.power >= 0 && aim.power <= MAX_POWER;
+}
+
+function isWithinTolerance(shot: Readonly<ShotRecord>, expected: Readonly<ShotRecord>): boolean {
+  return SHOT_RECORD_FIELDS.every((field) => Math.abs(shot[field] - expected[field]) <= SHOT_RECORD_TOLERANCE);
+}
+
+function expectedShotRecord(match: Readonly<Match>, aim: Readonly<Aim>): ShotRecord {
+  const { side, ship } = nextShooterShip(match);
+  return shotRecordFor({ ...ship, aim }, BARREL_DISTANCE[side]);
+}
+
+function nextShooterShip(match: Readonly<Match>): ShooterShip {
+  if (match.phase.kind !== "roundOver") {
+    const side = match.activePlayer;
+    return { side, ship: match.ships[side] };
+  }
+  const side = nextRoundShooter(match.scores, match.activePlayer);
+  const rngCopy = { ...match.rng };
+  const layout = createRoundLayout(rngCopy, match.rules.planetCount);
+  return { side, ship: layout.ships[side] };
 }
 
 export function previewShot(match: Readonly<Match>, aim: Readonly<Aim>, stepLimit: number): ShotPreview {
@@ -254,8 +338,8 @@ function launchMissileUnderRules(shot: ShotRecord, rules: DeepReadonly<MatchRule
 function previewFlight(missile: Missile, match: Readonly<Match>, stepLimit: number): ShotPreview {
   let inAreaSteps = 0;
   for (let flightStep = 0; flightStep < stepLimit; flightStep++) {
-    const { shotEnded } = flyMissile(missile, match.planets, match.ships);
-    if (shotEnded) {
+    const { end } = flyMissile(missile, match.planets, match.ships);
+    if (end !== undefined) {
       return { inAreaSteps, endedWithinLimit: true };
     }
     if (isInsidePlayingArea(missile)) {
@@ -289,6 +373,7 @@ export function matchView(match: Match): MatchView {
     powerPenalty,
     zoom: match.zoom,
     impact: match.impact,
+    lastShotOutcome: match.lastShotOutcome,
     rules: match.rules,
   };
 }

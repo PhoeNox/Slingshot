@@ -40,10 +40,11 @@ export interface Segment {
   to: Point;
 }
 
+export type FlightEnd = "ship" | "planet" | "leftTrackingArea" | "timedOut";
+
 export interface FlightStep {
   segment: Segment;
-  shotEnded: boolean;
-  hitPlanet: boolean;
+  end: FlightEnd | undefined;
   hitShip: Side | undefined;
 }
 
@@ -102,14 +103,27 @@ export function flyMissile(
 ): FlightStep {
   countFlightStep(missile);
   const bodyStep = moveBody(missile, planets, missile.bounces);
-  const hitPlanet = bodyStep.planetContact !== undefined;
   const hitShip = bodyStep.tracked ? stopAtShip(missile, bodyStep, ships) : undefined;
-  const shotEnded = !bodyStep.tracked
-    || hitPlanet
-    || hitShip !== undefined
-    || isEndedByTimeout(missile);
+  const end = flightEndOf(missile, bodyStep, hitShip);
   const to = { x: missile.x, y: missile.y };
-  return { segment: { from: bodyStep.from, to }, shotEnded, hitPlanet, hitShip };
+  return { segment: { from: bodyStep.from, to }, end, hitShip };
+}
+
+function flightEndOf(
+  missile: Readonly<Missile>,
+  bodyStep: Readonly<BodyStep>,
+  hitShip: Side | undefined,
+): FlightEnd | undefined {
+  if (hitShip !== undefined) {
+    return "ship";
+  }
+  if (bodyStep.planetContact !== undefined) {
+    return "planet";
+  }
+  if (!bodyStep.tracked) {
+    return "leftTrackingArea";
+  }
+  return isEndedByTimeout(missile) ? "timedOut" : undefined;
 }
 
 function countFlightStep(missile: Missile): void {
