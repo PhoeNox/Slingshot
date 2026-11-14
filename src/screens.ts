@@ -6,6 +6,7 @@ import type { PlanetCountRange } from "./core/match";
 import { backTargetFor, hashFor, moveFocus, resolveHash, showsMatch, type FixedRouteScreen, type FocusStep, type MenuItem, type Route, type Screen } from "./navigation";
 import { scrambleLabel } from "./scramble";
 import { SETTING_KEYS, SETTING_RULES, withRangeEnd, type AnySettingRule, type RangeEnd, type SettingChoice, type SettingKey, type Settings } from "./settings";
+import type { SettingsStore } from "./settingsStore";
 
 export interface ScreenElements {
   overlay: HTMLElement;
@@ -197,14 +198,10 @@ function selectTab(tabs: readonly HTMLButtonElement[], selectedTab: HTMLButtonEl
   }
 }
 
-export function bindSettingControls(
-  settingsScreen: HTMLElement,
-  settings: Settings,
-  saveSettings: (settings: Readonly<Settings>) => void,
-): void {
+export function bindSettingControls(settingsScreen: HTMLElement, settings: SettingsStore): void {
   for (const key of SETTING_KEYS) {
     const controls = settingControls(settingsScreen, key);
-    const field = settingField(settings, key, saveSettings);
+    const field = settingField(settings, key);
     bindSettingControl(controls, SETTING_RULES[key], field);
   }
 }
@@ -217,17 +214,11 @@ function settingControls(settingsScreen: HTMLElement, key: SettingKey): HTMLElem
   return controls;
 }
 
-function settingField(
-  settings: Settings,
-  key: SettingKey,
-  saveSettings: (settings: Readonly<Settings>) => void,
-): SettingField {
-  const values: Record<SettingKey, unknown> = settings;
+function settingField(settings: SettingsStore, key: SettingKey): SettingField {
   return {
-    read: () => values[key],
+    read: () => settings.current()[key],
     write: (value) => {
-      values[key] = value;
-      saveSettings(settings);
+      settings.change(key, value as Settings[SettingKey]);
     },
   };
 }

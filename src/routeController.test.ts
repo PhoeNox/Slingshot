@@ -9,7 +9,9 @@ import type { PeerConnectors } from "./remoteVisit";
 import type { ReplyRelay } from "./replyRelay";
 import { createRouteController, type RouteController } from "./routeController";
 import { createScreenSession, submitReplyCode, type ScreenSession } from "./screenSession";
-import { DEFAULT_SETTINGS, type Settings } from "./settings";
+import { DEFAULT_SETTINGS, matchRulesFor } from "./settings";
+import { memorySettingsStorage, type SettingsStorage } from "./settingsStorage";
+import { createSettingsStore, type SettingsStore } from "./settingsStore";
 import type { VisitState } from "./visitTransition";
 
 interface Deferred<T> {
@@ -44,7 +46,7 @@ interface FakeRoom {
 
 interface Harness {
   session: ScreenSession;
-  settings: Settings;
+  settings: SettingsStore;
   controller: RouteController;
   shownScreens: Screen[];
   navigations: FixedRouteScreen[];
@@ -145,9 +147,9 @@ function fakeRelay(rooms: FakeRoom[]): ReplyRelay {
   return { awaitReplies, deliverReply };
 }
 
-function harness(): Harness {
+function harness(storage: SettingsStorage = memorySettingsStorage()): Harness {
   const session = createScreenSession(SEED, Math.random);
-  const settings: Settings = { ...DEFAULT_SETTINGS };
+  const settings = createSettingsStore(storage);
   const shownScreens: Screen[] = [];
   const navigations: FixedRouteScreen[] = [];
   const hostStates: VisitState[] = [];
@@ -238,6 +240,27 @@ describe("entering a route", () => {
   });
 });
 
+describe("entering a match route", () => {
+  const MATCH: Route = { screen: "match", replace: false };
+
+  test("plays under a setting changed before it, which the store has saved", () => {
+    const storage = memorySettingsStorage();
+    const h = harness(storage);
+    h.settings.change("bounce", true);
+    h.controller.enterRoute(MATCH);
+    expect(h.session.played.view()?.rules.bounce).toBe(true);
+    expect(createSettingsStore(storage).current().bounce).toBe(true);
+  });
+
+  test("keeps its match rules when a setting changes during the match", () => {
+    const h = harness();
+    h.controller.enterRoute(MATCH);
+    h.settings.change("timeoutSeconds", 10);
+    h.settings.change("planetVisibility", "hidden");
+    expect(h.session.played.view()?.rules).toEqual(matchRulesFor(DEFAULT_SETTINGS));
+  });
+});
+
 describe("handing over a visit", () => {
   test("shows the host's remote match once the guest's reply opens the link", async () => {
     const h = harness();
@@ -259,10 +282,10 @@ describe("handing over a visit", () => {
 
   test("plays under the match rules drawn on that route entry", async () => {
     const h = harness();
-    h.settings.planetCount = { min: 6, max: 6 };
+    h.settings.change("planetCount", { min: 6, max: 6 });
     h.controller.enterRoute(HOST);
     await flush();
-    h.settings.planetCount = { ...DEFAULT_SETTINGS.planetCount };
+    h.settings.change("planetCount", DEFAULT_SETTINGS.planetCount);
     submitReplyCode(h.session, REPLY_CODE);
     h.invitations[0].accepted.resolve(fakeLink().link);
     await flush();

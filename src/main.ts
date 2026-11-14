@@ -15,18 +15,13 @@ import { drawFrame, drawShakenFrame } from "./renderer";
 import { nostrReplyRelay } from "./replyRelay";
 import { createRouteController, randomSeed, type RouteAdapters } from "./routeController";
 import { bindBracketFlash, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, bindSettingControls, bindSettingsTabs, navigateBack, navigateTo, renderMenuItems, showScreen, traceTitleArc, type ScreenElements } from "./screens";
-import { parseSettings, serialiseSettings, type Settings } from "./settings";
-import { readStoredSettings, writeStoredSettings } from "./settingsStorage";
+import { localSettingsStorage } from "./settingsStorage";
+import { createSettingsStore } from "./settingsStore";
 import { createScreenSession, describeScreenSessionFrame, submitReplyCode } from "./screenSession";
 import { drawStars, renderStarSprites } from "./starLayer";
 import { generateStars } from "./stars";
 
 const STATIC_STAR_TIME_MS = 0;
-
-function saveSettings(settings: Readonly<Settings>): void {
-  const serialised = serialiseSettings(settings);
-  writeStoredSettings(window, serialised);
-}
 
 async function start(): Promise<void> {
   const stage = document.querySelector<HTMLElement>("#stage")!;
@@ -72,8 +67,8 @@ async function start(): Promise<void> {
   await loadFonts();
 
   const session = createScreenSession(randomSeed(Math.random), Math.random);
-  const storedSettings = readStoredSettings(window);
-  const settings = parseSettings(storedSettings);
+  const settingsStorage = localSettingsStorage(window);
+  const settings = createSettingsStore(settingsStorage);
 
   const fitStage = () => {
     const fit = fitPlayingArea(stage.clientWidth, stage.clientHeight, window.devicePixelRatio);
@@ -108,7 +103,7 @@ async function start(): Promise<void> {
     bindBracketFlash(button);
   }
   bindSettingsTabs(elements.settingsTabs);
-  bindSettingControls(elements.settings, settings, saveSettings);
+  bindSettingControls(elements.settings, settings);
   const peers: PeerConnectors = { host: hostPeerConnection, join: joinPeerConnection };
   const relay = nostrReplyRelay();
   const submitReply = (replyCode: string) => {
@@ -132,7 +127,7 @@ async function start(): Promise<void> {
   const starSprites = renderStarSprites();
   const render = (timeMs: number) => {
     const starTimeMs = reducedMotion.matches ? STATIC_STAR_TIME_MS : timeMs;
-    const frame = describeScreenSessionFrame(session, settings, reducedMotion.matches);
+    const frame = describeScreenSessionFrame(session, settings.display(), reducedMotion.matches);
     drawFrame(context, sprites, backdropFrame);
     drawStars(context, starSprites, stars, starTimeMs);
     drawShakenFrame(context, sprites, frame.items, frame.shake);

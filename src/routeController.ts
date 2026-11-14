@@ -12,7 +12,7 @@ import {
   type VisitPorts,
   type VisitScreens,
 } from "./screenSession";
-import { matchRulesFor, type Settings } from "./settings";
+import type { SettingsStore } from "./settingsStore";
 
 export interface RouteAdapters {
   showScreen: (screen: Screen) => void;
@@ -35,7 +35,7 @@ export function randomSeed(random: () => number): number {
 
 export function createRouteController(
   session: ScreenSession,
-  settings: Readonly<Settings>,
+  settings: SettingsStore,
   adapters: RouteAdapters,
 ): RouteController {
   const visits: VisitPorts = {
@@ -46,7 +46,7 @@ export function createRouteController(
   };
   const enterRoute = (route: Route) => {
     const seed = randomSeed(session.random);
-    const matchRules = matchRulesFor(settings);
+    const matchRules = settings.matchRules();
     const entry: RouteEntry = { route, seed, matchRules };
     enterSessionRoute(session, entry, visits);
     adapters.showScreen(route.screen);

@@ -74,9 +74,13 @@ export type Settings = { [K in SettingKey]: SettingRules[K]["defaultValue"] };
 
 type MatchRuleKey = { [K in SettingKey]: SettingRules[K]["kind"] extends "matchRule" ? K : never }[SettingKey];
 
+type DisplayKey = { [K in SettingKey]: SettingRules[K]["kind"] extends "display" ? K : never }[SettingKey];
+
 export const SETTING_KEYS = Object.keys(SETTING_RULES) as SettingKey[];
 
 const MATCH_RULE_KEYS = SETTING_KEYS.filter((key): key is MatchRuleKey => SETTING_RULES[key].kind === "matchRule");
+
+const DISPLAY_KEYS = SETTING_KEYS.filter((key): key is DisplayKey => SETTING_RULES[key].kind === "display");
 
 export const DEFAULT_SETTINGS: Readonly<Settings> = settingsFrom((key) => SETTING_RULES[key].defaultValue);
 
@@ -191,6 +195,12 @@ export function matchRulesFor(settings: Readonly<Settings>): MatchRules {
   const entries = MATCH_RULE_KEYS.map((key) => [key, settings[key]]);
   const matchRules = Object.fromEntries(entries) as Pick<Settings, MatchRuleKey>;
   return matchRules;
+}
+
+export function displaySettingsFor(settings: Readonly<Settings>): Pick<Settings, DisplayKey> {
+  const entries = DISPLAY_KEYS.map((key) => [key, settings[key]]);
+  const displaySettings = Object.fromEntries(entries) as Pick<Settings, DisplayKey>;
+  return displaySettings;
 }
 
 export function storedMatchRulesOf(rules: Readonly<MatchRules>): Record<string, unknown> {
