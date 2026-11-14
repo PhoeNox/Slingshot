@@ -24,10 +24,11 @@ Pure, seeded, no DOM, canvas, or clock (ADR-0001).
 | `main.ts` | Boot: loads assets, binds input and screens, starts the loop |
 | `gameLoop.ts` | Fixed 30 Hz step loop plus render callback |
 | `screenSession.ts` | Current screen as a per-screen union of match or attract mode; routes aim and fire, steps it, describes its frame and shake |
-| `navigation.ts` | Hash routes, screens, which screens play attract mode (ADR-0002), menu focus movement (ADR-0003) |
+| `navigation.ts` | Hash routes (including the host route and invitation routes carrying an offer code), screens, which screens play attract mode (ADR-0002), menu focus movement (ADR-0003) |
 | `screens.ts` | HTML menu/settings/credits overlays, button effects, settings tabs, one table-driven binder for every settings control (located by `data-setting` in the markup), route binding (ADR-0002) |
 | `settings.ts` | Setting rule table (control kind, choices, labels, default, display vs match rule per setting) and the Settings type, defaults, parse/serialise of the stored form and match rules derived from it, stored-form match rules for the wire; planet count drag-along |
 | `remoteProtocol.ts` | Remote match wire messages (hello, aim, shot, outcome, leave): JSON encode, never-throwing decode with validation, `PROTOCOL_VERSION`, shot outcome comparison |
+| `signalingCode.ts` | Compact, URL-safe signaling codes: a non-trickle offer or answer reduced to its connection fields (ICE credentials, DTLS fingerprint, setup role, candidates), deflated and base64url-encoded with the protocol version; never-throwing decode back to an SDP from a fixed data-channel template, rejecting garbage, wrong kind and version mismatch |
 | `settingsStorage.ts` | Reads and writes the stored settings in `localStorage`, tolerating unavailable storage |
 | `input.ts` | Keyboard bindings for aiming, firing, escape |
 | `aimKeyRepeat.ts` | Held-key repeat timing for aim adjustment |

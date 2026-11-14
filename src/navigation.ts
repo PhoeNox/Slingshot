@@ -1,36 +1,42 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-export type Screen = "mainMenu" | "match" | "settings" | "credits";
+export type Screen = "mainMenu" | "match" | "settings" | "credits" | "host" | "guest";
 
-export interface Route {
-  screen: Screen;
-  replace: boolean;
-}
+export type FixedRouteScreen = Exclude<Screen, "guest">;
+
+export type Route =
+  | { screen: FixedRouteScreen; replace: boolean }
+  | { screen: "guest"; replace: false; offerCode: string };
 
 export type FocusStep = -1 | 1;
 
 export interface MenuItem {
   label: string;
-  screen: Screen;
+  screen: FixedRouteScreen;
 }
 
-const SCREENS: readonly Screen[] = ["mainMenu", "match", "settings", "credits"];
+const FIXED_ROUTE_SCREENS: readonly FixedRouteScreen[] = ["mainMenu", "match", "settings", "credits", "host"];
 
-const SCREEN_HASHES: Record<Screen, string> = {
+const SCREEN_HASHES: Record<FixedRouteScreen, string> = {
   mainMenu: "#/",
   match: "#/play",
   settings: "#/settings",
   credits: "#/credits",
+  host: "#/host",
 };
+
+const INVITATION_HASH_PREFIX = "#/join/";
 
 const ATTRACT_PLAYING_SCREENS: ReadonlySet<Screen> = new Set(["mainMenu", "settings"]);
 
-const BACK_TARGETS: Record<Screen, Screen | undefined> = {
+const BACK_TARGETS: Record<Screen, FixedRouteScreen | undefined> = {
   mainMenu: undefined,
   match: "mainMenu",
   settings: "mainMenu",
   credits: "mainMenu",
+  host: "mainMenu",
+  guest: "mainMenu",
 };
 
 export const MAIN_MENU_ITEMS: readonly MenuItem[] = [
@@ -40,19 +46,26 @@ export const MAIN_MENU_ITEMS: readonly MenuItem[] = [
 ];
 
 export function resolveHash(hash: string): Route {
+  if (hash.startsWith(INVITATION_HASH_PREFIX) && hash.length > INVITATION_HASH_PREFIX.length) {
+    return { screen: "guest", replace: false, offerCode: hash.slice(INVITATION_HASH_PREFIX.length) };
+  }
   const canonicalHash = hash === "" ? SCREEN_HASHES.mainMenu : hash;
-  const screen = SCREENS.find((candidate) => SCREEN_HASHES[candidate] === canonicalHash);
+  const screen = FIXED_ROUTE_SCREENS.find((candidate) => SCREEN_HASHES[candidate] === canonicalHash);
   if (screen === undefined) {
     return { screen: "mainMenu", replace: true };
   }
   return { screen, replace: false };
 }
 
-export function hashFor(screen: Screen): string {
+export function hashFor(screen: FixedRouteScreen): string {
   return SCREEN_HASHES[screen];
 }
 
-export function backTargetFor(screen: Screen): Screen | undefined {
+export function invitationHash(offerCode: string): string {
+  return `${INVITATION_HASH_PREFIX}${offerCode}`;
+}
+
+export function backTargetFor(screen: Screen): FixedRouteScreen | undefined {
   return BACK_TARGETS[screen];
 }
 

@@ -2,27 +2,38 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { describe, expect, test } from "vitest";
-import { MAIN_MENU_ITEMS, backTargetFor, hashFor, moveFocus, playsAttractMode, resolveHash, type FocusStep, type Screen } from "./navigation";
+import { MAIN_MENU_ITEMS, backTargetFor, hashFor, invitationHash, moveFocus, playsAttractMode, resolveHash, type FixedRouteScreen, type FocusStep, type Screen } from "./navigation";
 
 describe("resolveHash", () => {
-  test.each<[string, Screen]>([
+  test.each<[string, FixedRouteScreen]>([
     ["#/", "mainMenu"],
     ["", "mainMenu"],
     ["#/play", "match"],
     ["#/settings", "settings"],
     ["#/credits", "credits"],
+    ["#/host", "host"],
   ])("%j resolves to %s without replacement", (hash, screen) => {
     expect(resolveHash(hash)).toEqual({ screen, replace: false });
   });
 
-  test.each(["#/foo", "#credits", "#/credits/x"])("unknown hash %j resolves to the main menu with replacement", (hash) => {
+  test("an invitation resolves to the guest screen and carries its offer code", () => {
+    expect(resolveHash("#/join/a1B2-c_3")).toEqual({ screen: "guest", replace: false, offerCode: "a1B2-c_3" });
+  });
+
+  test.each(["#/foo", "#credits", "#/credits/x", "#/host/x", "#/join", "#/join/"])("unknown hash %j resolves to the main menu with replacement", (hash) => {
     expect(resolveHash(hash)).toEqual({ screen: "mainMenu", replace: true });
   });
 });
 
 describe("hashFor", () => {
-  test.each<Screen>(["mainMenu", "match", "settings", "credits"])("the hash of %s resolves back to it", (screen) => {
+  test.each<FixedRouteScreen>(["mainMenu", "match", "settings", "credits", "host"])("the hash of %s resolves back to it", (screen) => {
     expect(resolveHash(hashFor(screen))).toEqual({ screen, replace: false });
+  });
+});
+
+describe("invitationHash", () => {
+  test("resolves back to the guest screen with the same offer code", () => {
+    expect(resolveHash(invitationHash("xY_9-z"))).toEqual({ screen: "guest", replace: false, offerCode: "xY_9-z" });
   });
 });
 
@@ -31,6 +42,8 @@ describe("backTargetFor", () => {
     ["match", "mainMenu"],
     ["settings", "mainMenu"],
     ["credits", "mainMenu"],
+    ["host", "mainMenu"],
+    ["guest", "mainMenu"],
     ["mainMenu", undefined],
   ])("the back target of %s is %s", (screen, backTarget) => {
     expect(backTargetFor(screen)).toBe(backTarget);
@@ -43,6 +56,8 @@ describe("playsAttractMode", () => {
     ["settings", true],
     ["credits", false],
     ["match", false],
+    ["host", false],
+    ["guest", false],
   ])("on %s is %s", (screen, plays) => {
     expect(playsAttractMode(screen, false)).toBe(plays);
   });
