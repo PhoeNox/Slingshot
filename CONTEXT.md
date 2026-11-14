@@ -65,6 +65,10 @@ The count of shots a player has fired in the current round; earlier hits earn a 
 The angle and power a player has set on their ship for the next shot.
 _Avoid_: Targeting
 
+**Played match**:
+Whatever the current screen plays and draws: a hot-seat match, a remote match, or attract mode's demo round.
+_Avoid_: Active match, game mode
+
 **Hot-seat**:
 Both players share one device and take shots in alternation.
 _Avoid_: Local multiplayer

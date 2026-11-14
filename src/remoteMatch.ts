@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import type { AimDelta, Match, MatchRules, Side } from "./core/match";
+import { matchView, type MatchRules, type MatchView, type Side } from "./core/match";
+import type { Viewer } from "./frame";
 import {
   aimLockstep,
   endLockstep,
@@ -10,23 +11,20 @@ import {
   isEndNoticeOver,
   newLockstep,
   receiveLockstep,
+  remoteNotice,
   stepLockstep,
   type Lockstep,
   type LockstepResult,
   type RemoteMatchEnd,
 } from "./lockstep";
 import type { PeerLink } from "./peerConnection";
+import type { PlayedMatch, PlayedMatchStep } from "./playedMatch";
 import { decodeMessage, encodeMessage } from "./remoteProtocol";
 
 export type RemoteRole = "host" | "guest";
 
 export interface RemoteMatch extends Lockstep {
   readonly link: PeerLink;
-}
-
-export interface RemoteMatchStep {
-  readonly match: Match | undefined;
-  readonly returnsToMainMenu: boolean;
 }
 
 const LOCAL_SIDES: Record<RemoteRole, Side> = { host: "left", guest: "right" };
@@ -48,7 +46,21 @@ export function startRemoteMatch(
   return remote;
 }
 
-export function leaveRemoteMatch(remote: RemoteMatch): void {
+export function playRemoteMatch(remote: RemoteMatch): PlayedMatch {
+  const viewer: Viewer = { kind: "remote", localSide: remote.localSide };
+  return {
+    viewer,
+    shakes: true,
+    aim: (delta) => aimLockstep(remote, delta),
+    fire: () => fireRemoteMatch(remote),
+    step: () => stepRemoteMatch(remote),
+    view: () => remoteMatchView(remote),
+    notice: () => remoteNotice(remote),
+    leave: () => leaveRemoteMatch(remote),
+  };
+}
+
+function leaveRemoteMatch(remote: RemoteMatch): void {
   endRemoteMatch(remote, "left");
 }
 
@@ -73,18 +85,19 @@ function carryOut(remote: RemoteMatch, result: Readonly<LockstepResult>): void {
   }
 }
 
-export function aimRemoteMatch(remote: RemoteMatch, delta: AimDelta): void {
-  aimLockstep(remote, delta);
-}
-
-export function fireRemoteMatch(remote: RemoteMatch): void {
+function fireRemoteMatch(remote: RemoteMatch): void {
   const fired = fireLockstep(remote);
   carryOut(remote, fired);
 }
 
-export function stepRemoteMatch(remote: RemoteMatch): RemoteMatchStep {
+function stepRemoteMatch(remote: RemoteMatch): PlayedMatchStep {
   const stepped = stepLockstep(remote);
   carryOut(remote, stepped);
+  const steppedView = remoteMatchView(remote);
   const returnsToMainMenu = isEndNoticeOver(remote);
-  return { match: remote.match, returnsToMainMenu };
+  return { steppedView, returnsToMainMenu };
+}
+
+function remoteMatchView(remote: Readonly<RemoteMatch>): MatchView | undefined {
+  return remote.match === undefined ? undefined : matchView(remote.match);
 }

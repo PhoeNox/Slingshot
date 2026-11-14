@@ -1,31 +1,17 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { createAttractMode, stepAttractMode, type AttractMode } from "./core/attract";
+import { createAttractMode, type AttractMode } from "./core/attract";
 import type { Point } from "./core/flight";
-import { adjustAim, createMatch, fire, matchView, step, type AimDelta, type Match, type MatchRules } from "./core/match";
+import { createMatch, type AimDelta, type Match, type MatchRules, type MatchView } from "./core/match";
 import { advanceDebris, type Particle } from "./debris";
-import {
-  ATTRACT_VIEWER,
-  describeFrame,
-  describeRemoteNotice,
-  HOT_SEAT_VIEWER,
-  type DisplaySettings,
-  type Viewer,
-} from "./frame";
+import { describeFrame, describeRemoteNotice, type DisplaySettings } from "./frame";
 import type { FrameItem } from "./frameItems";
-import { playsAttractMode, type RouteScreen } from "./navigation";
-import { remoteNotice } from "./lockstep";
+import type { RemoteNotice } from "./lockstep";
+import type { RouteScreen } from "./navigation";
 import type { PeerLink } from "./peerConnection";
-import {
-  aimRemoteMatch,
-  fireRemoteMatch,
-  leaveRemoteMatch,
-  startRemoteMatch,
-  stepRemoteMatch,
-  type RemoteMatch,
-  type RemoteRole,
-} from "./remoteMatch";
+import { playAttractMode, playHotSeat, type PlayedMatch } from "./playedMatch";
+import { playRemoteMatch, startRemoteMatch, type RemoteMatch, type RemoteRole } from "./remoteMatch";
 import { NO_SHAKE, screenShakeOffset } from "./screenShake";
 
 export type MenuScreen = Exclude<RouteScreen, "match">;
@@ -35,8 +21,11 @@ export type ScreenState =
   | { screen: "remoteMatch"; remote: RemoteMatch }
   | { screen: MenuScreen; attract: AttractMode };
 
+type RouteScreenState = Exclude<ScreenState, { screen: "remoteMatch" }>;
+
 export interface ScreenSession {
   state: ScreenState;
+  played: PlayedMatch;
   debris: Particle[];
   random: () => number;
 }
@@ -50,7 +39,8 @@ export interface ScreenSessionFrame {
 
 export function createScreenSession(seed: number, random: () => number): ScreenSession {
   const attract = createAttractMode(seed);
-  return { state: { screen: "mainMenu", attract }, debris: [], random };
+  const played = playAttractMode(attract, "mainMenu");
+  return { state: { screen: "mainMenu", attract }, played, debris: [], random };
 }
 
 export function enterScreen(
@@ -59,20 +49,26 @@ export function enterScreen(
   seed: number,
   matchRules: Readonly<MatchRules>,
 ): void {
-  leaveShownRemoteMatch(session);
+  session.played.leave();
   if (screen === "match" || !("attract" in session.state)) {
     session.debris = [];
   }
-  session.state = nextScreenState(session.state, screen, seed, matchRules);
+  const state = nextScreenState(session.state, screen, seed, matchRules);
+  session.state = state;
+  session.played = playedMatchOf(state);
 }
 
-function nextScreenState(state: ScreenState, screen: RouteScreen, seed: number, matchRules: Readonly<MatchRules>): ScreenState {
+function nextScreenState(state: ScreenState, screen: RouteScreen, seed: number, matchRules: Readonly<MatchRules>): RouteScreenState {
   if (screen === "match") {
     const match = createMatch(seed, undefined, matchRules);
     return { screen, match };
   }
   const attract = "attract" in state ? state.attract : createAttractMode(seed);
   return { screen, attract };
+}
+
+function playedMatchOf(state: RouteScreenState): PlayedMatch {
+  return state.screen === "match" ? playHotSeat(state.match) : playAttractMode(state.attract, state.screen);
 }
 
 export function enterRemoteMatch(
@@ -82,16 +78,11 @@ export function enterRemoteMatch(
   seed: number,
   matchRules: Readonly<MatchRules>,
 ): void {
-  leaveShownRemoteMatch(session);
+  session.played.leave();
   const remote = startRemoteMatch(role, link, seed, matchRules);
   session.debris = [];
   session.state = { screen: "remoteMatch", remote };
-}
-
-function leaveShownRemoteMatch(session: ScreenSession): void {
-  if (session.state.screen === "remoteMatch") {
-    leaveRemoteMatch(session.state.remote);
-  }
+  session.played = playRemoteMatch(remote);
 }
 
 export function isMatchActive(session: ScreenSession): boolean {
@@ -99,52 +90,25 @@ export function isMatchActive(session: ScreenSession): boolean {
 }
 
 export function aimMatch(session: ScreenSession, delta: AimDelta): void {
-  if (session.state.screen === "match") {
-    adjustAim(session.state.match, delta);
-  } else if (session.state.screen === "remoteMatch") {
-    aimRemoteMatch(session.state.remote, delta);
-  }
+  session.played.aim(delta);
 }
 
 export function fireMatch(session: ScreenSession): void {
-  if (session.state.screen === "match") {
-    fire(session.state.match);
-  } else if (session.state.screen === "remoteMatch") {
-    fireRemoteMatch(session.state.remote);
-  }
+  session.played.fire();
 }
 
 export function stepScreenSession(session: ScreenSession, reducedMotion: boolean): ScreenSessionStep {
-  const state = session.state;
-  if (state.screen === "remoteMatch") {
-    const remoteStep = stepRemoteMatch(state.remote);
-    advanceSessionDebris(session, remoteStep.match, reducedMotion);
-    return remoteStep.returnsToMainMenu ? "mainMenu" : "stay";
-  }
-  const steppedMatch = stepShownMatch(state, reducedMotion);
-  advanceSessionDebris(session, steppedMatch, reducedMotion);
-  return "stay";
+  const played = session.played.step(reducedMotion);
+  advanceSessionDebris(session, played.steppedView, reducedMotion);
+  return played.returnsToMainMenu ? "mainMenu" : "stay";
 }
 
-function advanceSessionDebris(session: ScreenSession, steppedMatch: Readonly<Match> | undefined, reducedMotion: boolean): void {
+function advanceSessionDebris(session: ScreenSession, steppedView: MatchView | undefined, reducedMotion: boolean): void {
   if (reducedMotion) {
     session.debris = [];
-  } else if (steppedMatch !== undefined) {
-    const view = matchView(steppedMatch);
-    session.debris = advanceDebris(session.debris, view, session.random);
+  } else if (steppedView !== undefined) {
+    session.debris = advanceDebris(session.debris, steppedView, session.random);
   }
-}
-
-function stepShownMatch(state: Exclude<ScreenState, { screen: "remoteMatch" }>, reducedMotion: boolean): Match | undefined {
-  if (state.screen === "match") {
-    step(state.match);
-    return state.match;
-  }
-  if (playsAttractMode(state.screen, reducedMotion)) {
-    stepAttractMode(state.attract);
-    return state.attract.match;
-  }
-  return undefined;
 }
 
 export function describeScreenSessionFrame(
@@ -152,35 +116,15 @@ export function describeScreenSessionFrame(
   display: Readonly<DisplaySettings>,
   reducedMotion: boolean,
 ): ScreenSessionFrame {
-  const state = session.state;
-  if (state.screen === "match") {
-    const view = matchView(state.match);
-    const items = describeFrame(view, display, session.debris, HOT_SEAT_VIEWER);
-    const shake = reducedMotion ? NO_SHAKE : screenShakeOffset(view, session.random);
-    return { items, shake };
-  }
-  if (state.screen === "remoteMatch") {
-    return describeRemoteMatchFrame(session, state.remote, display, reducedMotion);
-  }
-  const attractView = matchView(state.attract.match);
-  const items = describeFrame(attractView, display, session.debris, ATTRACT_VIEWER);
-  return { items, shake: NO_SHAKE };
+  const played = session.played;
+  const view = played.view();
+  const matchItems = view === undefined ? [] : describeFrame(view, display, session.debris, played.viewer);
+  const noticeItems = noticeItemsOf(played.notice());
+  const shakes = played.shakes && !reducedMotion;
+  const shake = shakes && view !== undefined ? screenShakeOffset(view, session.random) : NO_SHAKE;
+  return { items: [...matchItems, ...noticeItems], shake };
 }
 
-function describeRemoteMatchFrame(
-  session: ScreenSession,
-  remote: Readonly<RemoteMatch>,
-  display: Readonly<DisplaySettings>,
-  reducedMotion: boolean,
-): ScreenSessionFrame {
-  const notice = remoteNotice(remote);
-  const noticeItems = notice === undefined ? [] : describeRemoteNotice(notice);
-  if (remote.match === undefined) {
-    return { items: noticeItems, shake: NO_SHAKE };
-  }
-  const view = matchView(remote.match);
-  const viewer: Viewer = { kind: "remote", localSide: remote.localSide };
-  const matchItems = describeFrame(view, display, session.debris, viewer);
-  const shake = reducedMotion ? NO_SHAKE : screenShakeOffset(view, session.random);
-  return { items: [...matchItems, ...noticeItems], shake };
+function noticeItemsOf(notice: RemoteNotice | undefined): FrameItem[] {
+  return notice === undefined ? [] : describeRemoteNotice(notice);
 }

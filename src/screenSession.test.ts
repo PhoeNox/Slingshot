@@ -17,6 +17,7 @@ import {
 import { burstDebris, BURST_COUNT } from "./debris";
 import { ATTRACT_VIEWER, describeFrame, HOT_SEAT_VIEWER, type DisplaySettings } from "./frame";
 import type { RouteScreen } from "./navigation";
+import { playHotSeat } from "./playedMatch";
 import {
   aimMatch,
   createScreenSession,
@@ -68,6 +69,7 @@ function shownAttract(session: ScreenSession): AttractMode {
 
 function showMatch(session: ScreenSession, match: Match): void {
   session.state = { screen: "match", match };
+  session.played = playHotSeat(match);
 }
 
 const SIX_PLANET_RULES: MatchRules = { ...DEFAULT_MATCH_RULES, planetCount: { min: 6, max: 6 } };
