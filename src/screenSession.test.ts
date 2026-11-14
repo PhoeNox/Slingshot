@@ -15,7 +15,7 @@ import {
   type RoundLayout,
 } from "./core/match";
 import { burstDebris, BURST_COUNT } from "./debris";
-import { describeFrame, type DisplaySettings } from "./frame";
+import { ATTRACT_VIEWER, describeFrame, HOT_SEAT_VIEWER, type DisplaySettings } from "./frame";
 import type { RouteScreen } from "./navigation";
 import {
   aimMatch,
@@ -227,7 +227,7 @@ describe("describing the frame", () => {
     const session = sessionOn("match");
 
     expect(describeScreenSessionFrame(session, CONTOURS_HIDDEN, false).items).toEqual(
-      describeFrame(matchView(shownMatch(session)), CONTOURS_HIDDEN, session.debris, "match"),
+      describeFrame(matchView(shownMatch(session)), CONTOURS_HIDDEN, session.debris, HOT_SEAT_VIEWER),
     );
   });
 
@@ -235,7 +235,7 @@ describe("describing the frame", () => {
     const session = sessionOn("mainMenu", "credits");
 
     expect(describeScreenSessionFrame(session, CONTOURS_HIDDEN, false).items).toEqual(
-      describeFrame(matchView(shownAttract(session).match), CONTOURS_HIDDEN, session.debris, "attract"),
+      describeFrame(matchView(shownAttract(session).match), CONTOURS_HIDDEN, session.debris, ATTRACT_VIEWER),
     );
   });
 });

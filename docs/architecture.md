@@ -37,7 +37,8 @@ Pure, seeded, no DOM, canvas, or clock (ADR-0001).
 | `settingsStorage.ts` | Reads and writes the stored settings in `localStorage`, tolerating unavailable storage |
 | `input.ts` | Keyboard bindings for aiming, firing, escape |
 | `aimKeyRepeat.ts` | Held-key repeat timing for aim adjustment |
-| `frame.ts` | Turns a `MatchView` into `FrameItem` data (sprites, rings, lines, text), with You/Opponent labels and a turn line from the local side in a remote match, plus remote notices; no drawing |
+| `frameItems.ts` | Frame item vocabulary shared by frame description and the renderer: `FrameItem` (sprites, rings, lines, text, rects, groups), `Rect`, `Transform`, `SpriteName` |
+| `frame.ts` | Turns a `MatchView` into `FrameItem` data for a `Viewer` (attract mode, hot seat, or a remote match's local side, giving You/Opponent labels and a turn line), plus remote notices; no drawing, no dependency on the remote match |
 | `renderer.ts` | Draws `FrameItem`s onto the canvas |
 | `animationCurves.ts` | Afterglow, trail fade, explosion, round banner curves |
 | `screenShake.ts` | Shake offset after hits |

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { describe, expect, test } from "vitest";
-import type { FrameItem, GroupItem, LinesItem, RingItem, StrokeRectItem } from "./frame";
+import type { FrameItem, GroupItem, LinesItem, RingItem, StrokeRectItem } from "./frameItems";
 import { drawFrame, type Sprites } from "./renderer";
 
 interface StrokeRecorder {

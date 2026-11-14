@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import type { SpriteName } from "./frame";
+import type { SpriteName } from "./frameItems";
 import type { Sprites } from "./renderer";
 
 export const TEXT_FONT_FAMILY = "Barlow Semi Condensed";

@@ -13,120 +13,33 @@ import { PLAYING_AREA_HEIGHT, PLAYING_AREA_WIDTH } from "./core/playingArea";
 import type { Aim, Planet, Ship, Side } from "./core/round";
 import { NO_ZOOM, type Zoom } from "./core/zoom";
 import { particleAlpha, type Particle, type ParticleSize } from "./debris";
-import type { RemoteNotice } from "./remoteMatch";
-
-export interface Rect {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
-
-export type SpriteName = "backdrop" | "missile" | "explosion" | `${Side}Ship` | `planet${number}`;
-
-export interface Transform {
-  x: number;
-  y: number;
-  rotation: number;
-  scale: number;
-}
-
-export interface ImageItem {
-  kind: "image";
-  sprite: SpriteName;
-  target: Rect;
-  alpha: number;
-}
-
-export interface SpriteFrameItem {
-  kind: "spriteFrame";
-  sprite: SpriteName;
-  source: Rect;
-  target: Rect;
-  alpha: number;
-}
-
-export interface RingItem {
-  kind: "ring";
-  colour: string;
-  centre: Point;
-  radius: number;
-  alpha: number;
-}
-
-export interface LinesItem {
-  kind: "lines";
-  colour: string;
-  segments: Segment[];
-  alpha: number;
-  dash: number[];
-  glow: boolean;
-}
-
-export interface BloomItem {
-  kind: "bloom";
-  colour: string;
-  centre: Point;
-  radius: number;
-  alpha: number;
-}
-
-export interface DotItem {
-  kind: "dot";
-  colour: string;
-  centre: Point;
-  size: number;
-  alpha: number;
-}
-
-export interface FillRectItem {
-  kind: "fillRect";
-  colour: string;
-  rect: Rect;
-}
-
-export interface StrokeRectItem {
-  kind: "strokeRect";
-  colour: string;
-  rect: Rect;
-}
-
-export interface TextItem {
-  kind: "text";
-  text: string;
-  x: number;
-  y: number;
-  colour: string;
-  font: "title" | "text";
-  fontSize: number;
-  align: "left" | "center" | "right";
-  baseline: "top" | "middle" | "bottom";
-  alpha: number;
-}
-
-export interface GroupItem {
-  kind: "group";
-  transform: Transform;
-  items: FrameItem[];
-}
+import type {
+  BloomItem,
+  DotItem,
+  FillRectItem,
+  FrameItem,
+  GroupItem,
+  ImageItem,
+  LinesItem,
+  Rect,
+  RingItem,
+  SpriteFrameItem,
+  SpriteName,
+  StrokeRectItem,
+  TextItem,
+  Transform,
+} from "./frameItems";
 
 export interface DisplaySettings {
   gravityWellContours: boolean;
 }
 
-export type Presentation = "match" | "attract";
+export type Viewer = { kind: "attract" } | { kind: "hotSeat" } | { kind: "remote"; localSide: Side };
 
-export type FrameItem =
-  | ImageItem
-  | SpriteFrameItem
-  | RingItem
-  | LinesItem
-  | BloomItem
-  | DotItem
-  | FillRectItem
-  | StrokeRectItem
-  | TextItem
-  | GroupItem;
+export type Notice = "awaitingHost" | "opponentLeft" | "outOfSync" | "versionMismatch";
+
+export const ATTRACT_VIEWER: Viewer = { kind: "attract" };
+export const HOT_SEAT_VIEWER: Viewer = { kind: "hotSeat" };
 
 interface PresentationStyle {
   zoomed: boolean;
@@ -228,13 +141,13 @@ const MESSAGE_WAITING_TEXT = "Waiting for opponent to start the next round";
 
 const NOTICE_HEIGHT = 110;
 const NOTICE_DETAIL_TOP = 65;
-const NOTICE_TITLES: Record<RemoteNotice, string> = {
+const NOTICE_TITLES: Record<Notice, string> = {
   awaitingHost: "Waiting for the host…",
   opponentLeft: "Opponent left",
   outOfSync: "Out of sync",
   versionMismatch: "Different game version, reload both",
 };
-const NOTICE_DETAILS: Record<RemoteNotice, string> = {
+const NOTICE_DETAILS: Record<Notice, string> = {
   awaitingHost: "",
   opponentLeft: "Returning to the main menu",
   outOfSync: "Returning to the main menu",
@@ -247,22 +160,29 @@ const ATTRACT_DIM_COLOUR = "rgba(4, 8, 21, 0.55)";
 
 const PLAYING_AREA: Readonly<Rect> = { left: 0, top: 0, width: PLAYING_AREA_WIDTH, height: PLAYING_AREA_HEIGHT };
 
-const PRESENTATION_STYLES: Record<Presentation, Readonly<PresentationStyle>> = {
-  match: { zoomed: true, hud: true, planetFading: true, dimmed: false },
-  attract: { zoomed: false, hud: false, planetFading: false, dimmed: true },
+const MATCH_STYLE: Readonly<PresentationStyle> = { zoomed: true, hud: true, planetFading: true, dimmed: false };
+const ATTRACT_STYLE: Readonly<PresentationStyle> = { zoomed: false, hud: false, planetFading: false, dimmed: true };
+
+const VIEWER_STYLES: Record<Viewer["kind"], Readonly<PresentationStyle>> = {
+  attract: ATTRACT_STYLE,
+  hotSeat: MATCH_STYLE,
+  remote: MATCH_STYLE,
 };
 
 export function describeFrame(
   view: MatchView,
   display: Readonly<DisplaySettings>,
   debris: readonly Readonly<Particle>[],
-  presentation: Presentation,
-  localSide?: Side,
+  viewer: Readonly<Viewer>,
 ): FrameItem[] {
-  const style = PRESENTATION_STYLES[presentation];
+  const style = VIEWER_STYLES[viewer.kind];
   const scene = sceneItems(view, display, debris, style);
-  const hud = style.hud ? hudItems(view, localSide) : [];
+  const hud = style.hud ? hudItems(view, localSideOf(viewer)) : [];
   return [...scene, ...hud];
+}
+
+function localSideOf(viewer: Readonly<Viewer>): Side | undefined {
+  return viewer.kind === "remote" ? viewer.localSide : undefined;
 }
 
 function hudItems(view: MatchView, localSide: Side | undefined): FrameItem[] {
@@ -294,7 +214,7 @@ function turnItems(view: MatchView, localSide: Side | undefined): TextItem[] {
   return [hudText(text, colour, SCREEN_CENTRE_X, TIMEOUT_INFO_BOTTOM, "center", "bottom")];
 }
 
-export function describeRemoteNotice(notice: RemoteNotice): FrameItem[] {
+export function describeRemoteNotice(notice: Notice): FrameItem[] {
   const box = noticeBox();
   const panel = roundOverPanelItems(box);
   const title = panelTitleItem(NOTICE_TITLES[notice], MESSAGE_TITLE_TOP);

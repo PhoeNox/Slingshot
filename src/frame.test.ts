@@ -23,21 +23,26 @@ import {
 import type { Planet, Side } from "./core/round";
 import { NO_DEBRIS, type Particle } from "./debris";
 import {
+  ATTRACT_VIEWER,
   describeBackdropFrame,
   describeFrame,
   describeRemoteNotice,
-  type BloomItem,
+  HOT_SEAT_VIEWER,
   type DisplaySettings,
-  type DotItem,
-  type FrameItem,
-  type GroupItem,
-  type ImageItem,
-  type LinesItem,
-  type RingItem,
-  type SpriteFrameItem,
-  type StrokeRectItem,
-  type TextItem,
+  type Viewer,
 } from "./frame";
+import type {
+  BloomItem,
+  DotItem,
+  FrameItem,
+  GroupItem,
+  ImageItem,
+  LinesItem,
+  RingItem,
+  SpriteFrameItem,
+  StrokeRectItem,
+  TextItem,
+} from "./frameItems";
 
 const PLAYER_COLOURS: Record<Side, string> = { left: COLOURS.leftPlayer, right: COLOURS.rightPlayer };
 const SHEET_FACING: Record<Side, number> = { left: 90, right: 270 };
@@ -96,19 +101,20 @@ function ringsAround(frame: FrameItem[], planet: Planet): RingItem[] {
 }
 
 function frameOf(match: Match, display = CONTOURS_SHOWN): FrameItem[] {
-  return flatten(describeFrame(matchView(match), display, NO_DEBRIS, "match"));
+  return flatten(describeFrame(matchView(match), display, NO_DEBRIS, HOT_SEAT_VIEWER));
 }
 
 function frameOfView(view: MatchView): FrameItem[] {
-  return flatten(describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS, "match"));
+  return flatten(describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS, HOT_SEAT_VIEWER));
 }
 
 function remoteFrameOfView(view: MatchView, localSide: Side): FrameItem[] {
-  return flatten(describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS, "match", localSide));
+  const viewer: Viewer = { kind: "remote", localSide };
+  return flatten(describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS, viewer));
 }
 
 function attractFrameOf(match: Match, display = CONTOURS_SHOWN): FrameItem[] {
-  return flatten(describeFrame(matchView(match), display, NO_DEBRIS, "attract"));
+  return flatten(describeFrame(matchView(match), display, NO_DEBRIS, ATTRACT_VIEWER));
 }
 
 function flatten(items: FrameItem[]): FrameItem[] {
@@ -547,7 +553,7 @@ describe("planet visibility", () => {
   function roundOverFrameAfter(match: Match, stepsSinceRoundOver: number, display = CONTOURS_SHOWN): FrameItem[] {
     const phase: RoundOverView = { kind: "roundOver", result: HIT, nextShooter: "right", stepsSinceRoundOver };
     const view = { ...matchView(match), phase, roundStepCount: 300 + stepsSinceRoundOver };
-    return flatten(describeFrame(view, display, NO_DEBRIS, "match"));
+    return flatten(describeFrame(view, display, NO_DEBRIS, HOT_SEAT_VIEWER));
   }
 
   test("planets that are always visible stay fully shown throughout the round", () => {
@@ -741,7 +747,7 @@ describe("in-flight frame", () => {
 
   test("the zoomed scene is one group that maps the zoom view onto the screen", () => {
     const groupTransformsOf = (zoom: Zoom) =>
-      describeFrame(zoomedFlightView(24, zoom), CONTOURS_SHOWN, NO_DEBRIS, "match")
+      describeFrame(zoomedFlightView(24, zoom), CONTOURS_SHOWN, NO_DEBRIS, HOT_SEAT_VIEWER)
         .filter((item): item is GroupItem => item.kind === "group")
         .map((item) => item.transform);
 
@@ -753,7 +759,7 @@ describe("in-flight frame", () => {
     const layout = { ...EMPTY_LAYOUT, planets: [{ ...LIGHT_PLANET }] };
     const view = zoomedFlightView(25, CENTRED_HALF_ZOOM, layout);
 
-    const zoomed = flatten(zoomGroupsOf(describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS, "match"))[0].items);
+    const zoomed = flatten(zoomGroupsOf(describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS, HOT_SEAT_VIEWER))[0].items);
 
     expect(imagesOf(zoomed, "planet1")).toHaveLength(1);
     expect(ringsAround(zoomed, LIGHT_PLANET)).toHaveLength(3);
@@ -794,7 +800,7 @@ describe("in-flight frame", () => {
   test("the HUD is drawn outside the zoom group", () => {
     const view = zoomedFlightView(28, CENTRED_HALF_ZOOM);
 
-    const frame = describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS, "match");
+    const frame = describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS, HOT_SEAT_VIEWER);
 
     const zoomed = flatten(zoomGroupsOf(frame)[0].items);
     expect(textsOf(zoomed)).toHaveLength(0);
@@ -805,7 +811,7 @@ describe("in-flight frame", () => {
   test("a faint playing-area outline is drawn on screen where the zoom view puts the playing area", () => {
     const view = zoomedFlightView(29, ABOVE_HALF_ZOOM);
 
-    const outlines = zoomOutlinesOf(describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS, "match"));
+    const outlines = zoomOutlinesOf(describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS, HOT_SEAT_VIEWER));
 
     expect(outlines).toHaveLength(1);
     expect(outlines[0].alpha).toBeLessThan(1);
@@ -1186,7 +1192,7 @@ describe("debris", () => {
   }
 
   test("each particle is drawn as a dot at its position, fading with its remaining lifetime", () => {
-    const dots = dotsOf(describeFrame(matchView(emptyMatch(41)), CONTOURS_SHOWN, DEBRIS, "match"));
+    const dots = dotsOf(describeFrame(matchView(emptyMatch(41)), CONTOURS_SHOWN, DEBRIS, HOT_SEAT_VIEWER));
 
     expect(dots).toEqual([
       { kind: "dot", colour: COLOURS.lock, centre: { x: 120, y: 80 }, size: 3, alpha: 0.5 },
@@ -1201,13 +1207,13 @@ describe("debris", () => {
   test("debris is drawn inside the zoom group at a constant on-screen size", () => {
     const view = zoomedFlightView(43, CENTRED_HALF_ZOOM);
 
-    const zoomed = zoomGroupsOf(describeFrame(view, CONTOURS_SHOWN, [LARGE_PARTICLE], "match"))[0].items;
+    const zoomed = zoomGroupsOf(describeFrame(view, CONTOURS_SHOWN, [LARGE_PARTICLE], HOT_SEAT_VIEWER))[0].items;
 
     expect(dotsOf(zoomed)).toEqual([expect.objectContaining({ centre: { x: 120, y: 80 }, size: 6 })]);
   });
 
   test("debris is drawn in attract mode", () => {
-    const frame = describeFrame(matchView(emptyMatch(44)), CONTOURS_SHOWN, DEBRIS, "attract");
+    const frame = describeFrame(matchView(emptyMatch(44)), CONTOURS_SHOWN, DEBRIS, ATTRACT_VIEWER);
 
     expect(dotsOf(frame)).toHaveLength(2);
   });

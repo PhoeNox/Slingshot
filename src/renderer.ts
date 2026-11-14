@@ -20,7 +20,7 @@ import type {
   SpriteName,
   StrokeRectItem,
   TextItem,
-} from "./frame";
+} from "./frameItems";
 
 export type Sprites = Record<SpriteName, HTMLImageElement>;
 

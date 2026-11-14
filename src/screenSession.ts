@@ -5,7 +5,15 @@ import { createAttractMode, stepAttractMode, type AttractMode } from "./core/att
 import type { Point } from "./core/flight";
 import { adjustAim, createMatch, fire, matchView, step, type AimDelta, type Match, type MatchRules } from "./core/match";
 import { advanceDebris, type Particle } from "./debris";
-import { describeFrame, describeRemoteNotice, type DisplaySettings, type FrameItem } from "./frame";
+import {
+  ATTRACT_VIEWER,
+  describeFrame,
+  describeRemoteNotice,
+  HOT_SEAT_VIEWER,
+  type DisplaySettings,
+  type Viewer,
+} from "./frame";
+import type { FrameItem } from "./frameItems";
 import { playsAttractMode, type RouteScreen } from "./navigation";
 import type { PeerLink } from "./peerConnection";
 import {
@@ -147,7 +155,7 @@ export function describeScreenSessionFrame(
   const state = session.state;
   if (state.screen === "match") {
     const view = matchView(state.match);
-    const items = describeFrame(view, display, session.debris, "match");
+    const items = describeFrame(view, display, session.debris, HOT_SEAT_VIEWER);
     const shake = reducedMotion ? NO_SHAKE : screenShakeOffset(view, session.random);
     return { items, shake };
   }
@@ -155,7 +163,7 @@ export function describeScreenSessionFrame(
     return describeRemoteMatchFrame(session, state.remote, display, reducedMotion);
   }
   const attractView = matchView(state.attract.match);
-  const items = describeFrame(attractView, display, session.debris, "attract");
+  const items = describeFrame(attractView, display, session.debris, ATTRACT_VIEWER);
   return { items, shake: NO_SHAKE };
 }
 
@@ -171,7 +179,8 @@ function describeRemoteMatchFrame(
     return { items: noticeItems, shake: NO_SHAKE };
   }
   const view = matchView(remote.match);
-  const matchItems = describeFrame(view, display, session.debris, "match", remote.localSide);
+  const viewer: Viewer = { kind: "remote", localSide: remote.localSide };
+  const matchItems = describeFrame(view, display, session.debris, viewer);
   const shake = reducedMotion ? NO_SHAKE : screenShakeOffset(view, session.random);
   return { items: [...matchItems, ...noticeItems], shake };
 }
