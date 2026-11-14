@@ -82,6 +82,12 @@ interface TrailSegment {
   to: Point;
 }
 
+interface FiredShot {
+  shooter: Side;
+  shotNumber: number;
+  aim: Aim;
+}
+
 export type PlanetVisibility = "always" | "atRoundStart" | "hidden";
 
 export interface MatchRules {
@@ -113,6 +119,7 @@ interface MatchState {
   ships: Record<Side, Ship>;
   planets: Planet[];
   trails: TrailSegment[];
+  firedShots: FiredShot[];
   attempts: Record<Side, number>;
   zoom: Zoom;
   impact: Point | undefined;
@@ -163,6 +170,7 @@ export function createMatch(
     ships: layout.ships,
     planets: layout.planets,
     trails: [],
+    firedShots: [],
     attempts: { left: 0, right: 0 },
     zoom: { ...NO_ZOOM },
     impact: undefined,
@@ -189,8 +197,7 @@ export function step(match: Match): ShotOutcome | undefined {
 
 function advanceShot(match: Match, missile: Missile): ShotOutcome | undefined {
   const flightStep = flyMissile(missile, match.planets, match.ships);
-  const shotNumber = match.attempts.left + match.attempts.right;
-  const trailSegment = { shooter: match.activePlayer, shotNumber, ...flightStep.segment };
+  const trailSegment = { shooter: match.activePlayer, shotNumber: currentShotNumber(match), ...flightStep.segment };
   match.trails.push(trailSegment);
   if (flightStep.end === "planet" || flightStep.end === "ship") {
     match.impact = flightStep.segment.to;
@@ -205,6 +212,10 @@ function advanceShot(match: Match, missile: Missile): ShotOutcome | undefined {
     endShot(match);
   }
   return outcome;
+}
+
+function currentShotNumber(match: Readonly<Match>): number {
+  return match.attempts.left + match.attempts.right;
 }
 
 function shotOutcomeFor(
@@ -259,6 +270,7 @@ function beginRound(match: Match, shooter: Side): void {
   match.ships = layout.ships;
   match.planets = layout.planets;
   match.trails = [];
+  match.firedShots = [];
   match.attempts = { left: 0, right: 0 };
 }
 
@@ -323,7 +335,10 @@ function launchShot(match: Match): ShotRecord {
 
 function launchShotRecord(match: Match, shot: Readonly<ShotRecord>): void {
   const missile = launchMissileUnderRules(shot, match.rules);
-  match.attempts[match.activePlayer]++;
+  const shooter = match.activePlayer;
+  const { angle, power } = match.ships[shooter].aim;
+  match.attempts[shooter]++;
+  match.firedShots.push({ shooter, shotNumber: currentShotNumber(match), aim: { angle, power } });
   match.phase = { kind: "inFlight", missile };
 }
 
@@ -403,6 +418,7 @@ export function matchView(match: Match): MatchView {
     ships: match.ships,
     planets: match.planets,
     trails: match.trails,
+    firedShots: match.firedShots,
     attempts: match.attempts,
     aimLine,
     powerPenalty,

@@ -8,7 +8,7 @@ Pure, seeded, no DOM, canvas, or clock (ADR-0001).
 
 | Module | Responsibility |
 | --- | --- |
-| `match.ts` | Match state machine: `createMatch`, `step`, `adjustAim`, `fire` (only while aiming; returns the launched shot record), `startNextRound` (only during round over), `fireReceivedShot`, `nextShooter`, `previewShot`, read-only `matchView`; queries other modules ask instead of reading its state (the active side, a side's aim, the phase, whether this step streams aim, how long the round has been over) and `opponentOf` |
+| `match.ts` | Match state machine: `createMatch`, `step`, `adjustAim`, `fire` (only while aiming; returns the launched shot record), `startNextRound` (only during round over), `fireReceivedShot` (each fired shot's aim recorded per round), `nextShooter`, `previewShot`, read-only `matchView`; queries other modules ask instead of reading its state (the active side, a side's aim, the phase, whether this step streams aim, how long the round has been over) and `opponentOf` |
 | `round.ts` | Round layout generation (ships, planets), `Ship`/`Planet`/`Aim` types, `BARREL_DISTANCE` |
 | `flight.ts` | Body and missile physics: `moveBody` (gravity, planet contact, edge reflection under bounce, tracking) shared by missiles and debris; launch, ship collision (`flyMissile`), timeout, `STEPS_PER_SECOND` |
 | `scoring.ts` | Round results, power penalty, next-round shooter |
@@ -48,7 +48,7 @@ Pure, seeded, no DOM, canvas, or clock (ADR-0001).
 | `aimKeyRepeat.ts` | Held-key repeat rules for aim adjustment, behind `playerInput.ts` |
 | `touchAim.ts` | Touch gesture rules, without the DOM, behind `playerInput.ts`: one pointer at a time, a tap below the drag threshold fires, a drag locks to its dominant axis (vertical raises or lowers the aiming side's barrel, toward the opponent adds power) and emits keyboard-sized aim steps per fixed CSS px, carrying the remainder within the drag; cancel, blur or leaving the match ends the touch without firing |
 | `frameItems.ts` | Frame item vocabulary shared by frame description and the renderer: `FrameItem` (sprites, rings, lines, text, rects, groups), `Rect`, `Transform`, `SpriteName`, and the `FrameLayer`s a frame is drawn in (frame items or the star field at a time) |
-| `frame.ts` | Turns a `MatchView` into `FrameItem` data for a `Viewer` (attract mode, hot seat, or a remote match's local side, giving You/Opponent labels and a turn line), plus the lockstep's `RemoteNotice`s; no drawing, no dependency on the remote match beyond that type |
+| `frame.ts` | Turns a `MatchView` into `FrameItem` data for a `Viewer` (attract mode, hot seat, or a remote match's local side, giving You/Opponent labels and a turn line; outside attract mode, while aiming, the aiming side's trails fired with its current aim glow at full strength, from the match view's fired shots), plus the lockstep's `RemoteNotice`s; no drawing, no dependency on the remote match beyond that type |
 | `renderer.ts` | Draws `FrameItem`s and `FrameLayer`s onto the canvas, star field layers through `starLayer.ts` |
 | `animationCurves.ts` | Afterglow, trail fade, explosion, round banner curves |
 | `screenShake.ts` | Shake offset after hits, applied by the screen session frame |

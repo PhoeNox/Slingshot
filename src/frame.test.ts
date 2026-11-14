@@ -44,6 +44,7 @@ import type {
   TextItem,
 } from "./frameItems";
 
+const SIDES: readonly Side[] = ["left", "right"];
 const PLAYER_COLOURS: Record<Side, string> = { left: COLOURS.leftPlayer, right: COLOURS.rightPlayer };
 const SHEET_FACING: Record<Side, number> = { left: 90, right: 270 };
 const HIT_TITLES: Record<Side, string> = { left: "Player 1 hit player 2", right: "Player 2 hit player 1" };
@@ -182,6 +183,26 @@ function opponentOf(side: Side): Side {
 function aimAt(match: Match, angle: number, power: number): void {
   const aim = matchView(match).ships[matchView(match).activePlayer].aim;
   adjustAim(match, { angle: angle - aim.angle, power: power - aim.power });
+}
+
+function fireAndLand(match: Match, angle: number, power: number): void {
+  aimAt(match, angle, power);
+  fire(match);
+  stepUntil(match, () => matchView(match).phase.kind === "aiming");
+}
+
+function trailsOf(frame: FrameItem[], side: Side): LinesItem[] {
+  return linesOf(frame).filter(
+    (item) => item.colour === PLAYER_COLOURS[side] && item.dash.length === 0 && item.segments.length > 1,
+  );
+}
+
+function triedTrailMatch(seed: number): { match: Match; shooter: Side } {
+  const match = emptyMatch(seed);
+  const shooter = matchView(match).activePlayer;
+  fireAndLand(match, 0, 250);
+  fireAndLand(match, 0, 250);
+  return { match, shooter };
 }
 
 function stepUntil(match: Match, done: () => boolean): void {
@@ -479,6 +500,63 @@ describe("missile trail", () => {
     }
 
     expect(afterglowOf(frameOf(match))).toHaveLength(3);
+  });
+});
+
+describe("tried aim", () => {
+  test("aiming again at the aim of earlier own shots highlights each of their trails with glow at latest-trail alpha", () => {
+    const { match, shooter } = triedTrailMatch(50);
+    fireAndLand(match, 0, 250);
+    fireAndLand(match, 4, 250);
+
+    const tried = trailsOf(frameOf(match), shooter).filter((item) => item.glow);
+
+    expect(tried).toHaveLength(2);
+    expect(tried.every((item) => item.alpha === 1)).toBe(true);
+  });
+
+  test("an aim one step away from every earlier shot highlights no trail", () => {
+    const { match, shooter } = triedTrailMatch(51);
+
+    adjustAim(match, { angle: 2, power: 0 });
+    const angleStep = trailsOf(frameOf(match), shooter);
+    adjustAim(match, { angle: -2, power: 10 });
+    const powerStep = trailsOf(frameOf(match), shooter);
+
+    expect([...angleStep, ...powerStep].some((item) => item.glow)).toBe(false);
+  });
+
+  test("the opponent's trail never highlights, even with the same angle and power", () => {
+    const { match, shooter } = triedTrailMatch(52);
+
+    const opponentTrails = trailsOf(frameOf(match), opponentOf(shooter));
+
+    expect(opponentTrails).toHaveLength(1);
+    expect(opponentTrails[0].glow).toBe(false);
+  });
+
+  test("the highlight drops on fire and stays off during flight", () => {
+    const { match, shooter } = triedTrailMatch(53);
+
+    fire(match);
+    step(match);
+
+    expect(trailsOf(frameOf(match), shooter).some((item) => item.glow)).toBe(false);
+  });
+
+  test("both screens of a remote match highlight the aiming side's tried trail", () => {
+    const { match, shooter } = triedTrailMatch(54);
+
+    for (const localSide of SIDES) {
+      const tried = trailsOf(remoteFrameOfView(matchView(match), localSide), shooter).filter((item) => item.glow);
+      expect(tried).toHaveLength(1);
+    }
+  });
+
+  test("attract mode never highlights a tried trail", () => {
+    const { match, shooter } = triedTrailMatch(55);
+
+    expect(trailsOf(attractFrameOf(match), shooter).some((item) => item.glow)).toBe(false);
   });
 });
 

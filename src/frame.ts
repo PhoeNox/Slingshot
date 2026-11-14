@@ -45,6 +45,7 @@ interface PresentationStyle {
   hud: boolean;
   planetFading: boolean;
   dimmed: boolean;
+  triedAims: boolean;
 }
 
 interface ShipPose {
@@ -85,6 +86,7 @@ const LOCAL_TURN_TEXT = "Your turn";
 const OPPONENT_TURN_TEXT = "Opponent's turn";
 const PLAYER_COLOURS: Record<Side, string> = { left: COLOURS.leftPlayer, right: COLOURS.rightPlayer };
 const SOLID: number[] = [];
+const TRIED_TRAIL_ALPHA = 1;
 
 const SCREEN_CENTRE_X = 399;
 const SCREEN_CENTRE_Y = 299;
@@ -159,8 +161,20 @@ const ATTRACT_DIM_COLOUR = "rgba(4, 8, 21, 0.55)";
 
 const PLAYING_AREA: Readonly<Rect> = { left: 0, top: 0, width: PLAYING_AREA_WIDTH, height: PLAYING_AREA_HEIGHT };
 
-const MATCH_STYLE: Readonly<PresentationStyle> = { zoomed: true, hud: true, planetFading: true, dimmed: false };
-const ATTRACT_STYLE: Readonly<PresentationStyle> = { zoomed: false, hud: false, planetFading: false, dimmed: true };
+const MATCH_STYLE: Readonly<PresentationStyle> = {
+  zoomed: true,
+  hud: true,
+  planetFading: true,
+  dimmed: false,
+  triedAims: true,
+};
+const ATTRACT_STYLE: Readonly<PresentationStyle> = {
+  zoomed: false,
+  hud: false,
+  planetFading: false,
+  dimmed: true,
+  triedAims: false,
+};
 
 const VIEWER_STYLES: Record<Viewer["kind"], Readonly<PresentationStyle>> = {
   attract: ATTRACT_STYLE,
@@ -254,7 +268,8 @@ function sceneItems(
   const zoom = style.zoomed ? view.zoom : NO_ZOOM;
   const alpha = style.planetFading ? matchPlanetAlpha(view) : 1;
   const planets = planetItems(view.planets, display, alpha);
-  const trails = trailItems(view.trails);
+  const triedShotNumbers = style.triedAims ? triedShotNumbersOf(view) : new Set<number>();
+  const trails = trailItems(view.trails, triedShotNumbers);
   const particles = debrisItems(debris, 1 / zoom.scale);
   const phase = phaseSceneItems(view, zoom, style.hud);
   const zoomedScene = zoomedSceneItems([...planets, ...trails, ...particles, ...phase], zoom);
@@ -400,19 +415,33 @@ function planetSpriteItem(planet: Readonly<Planet>, alpha: number): ImageItem {
   return imageItem(sprite, box, alpha);
 }
 
-function trailItems(roundTrails: MatchView["trails"]): LinesItem[] {
+function triedShotNumbersOf(view: MatchView): Set<number> {
+  if (view.phase.kind !== "aiming") {
+    return new Set();
+  }
+  const aim = view.ships[view.activePlayer].aim;
+  const tried = view.firedShots.filter((shot) => shot.shooter === view.activePlayer && isSameAim(shot.aim, aim));
+  return new Set(tried.map((shot) => shot.shotNumber));
+}
+
+function isSameAim(fired: Readonly<Aim>, current: Readonly<Aim>): boolean {
+  return fired.angle === current.angle && fired.power === current.power;
+}
+
+function trailItems(roundTrails: MatchView["trails"], triedShotNumbers: ReadonlySet<number>): LinesItem[] {
   const latestShotNumber = roundTrails.at(-1)?.shotNumber ?? 0;
   const shotNumbers = new Set(roundTrails.map((segment) => segment.shotNumber));
   return [...shotNumbers].map((shotNumber) => {
     const segments = roundTrails.filter((segment) => segment.shotNumber === shotNumber);
-    const alpha = trailAlpha(latestShotNumber - shotNumber);
+    const tried = triedShotNumbers.has(shotNumber);
+    const alpha = tried ? TRIED_TRAIL_ALPHA : trailAlpha(latestShotNumber - shotNumber);
     return {
       kind: "lines",
       colour: PLAYER_COLOURS[segments[0].shooter],
       segments,
       alpha,
       dash: SOLID,
-      glow: false,
+      glow: tried,
     };
   });
 }

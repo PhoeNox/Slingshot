@@ -65,6 +65,10 @@ The count of shots a player has fired in the current round; earlier hits earn a 
 The angle and power a player has set on their ship for the next shot.
 _Avoid_: Targeting
 
+**Trail**:
+The drawn path of an earlier shot in the current round, in its shooter's colour, fading with each later shot; while a player aims, any of their own trails fired with exactly that aim stands out at full strength, showing the shot was already tried and how it ended.
+_Avoid_: Trace, path
+
 **Played match**:
 Whatever the current screen plays and draws: a hot-seat match, a remote match, or attract mode's demo round.
 _Avoid_: Active match, game mode

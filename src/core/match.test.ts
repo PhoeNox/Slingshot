@@ -408,6 +408,45 @@ describe("fire", () => {
   });
 });
 
+describe("fired shots", () => {
+  test("each fired shot records its shooter, shot number and aim", () => {
+    const match = createMatch(24, fixedLayout([], 100, 500));
+    const first = matchView(match).activePlayer;
+    aimAt(match, 10, 150);
+    fire(match);
+    stepUntilShotEnds(match, 500);
+    aimAt(match, 20, 200);
+    fire(match);
+
+    expect(matchView(match).firedShots).toEqual([
+      { shooter: first, shotNumber: 1, aim: { angle: 10, power: 150 } },
+      { shooter: opponentOf(first), shotNumber: 2, aim: { angle: 20, power: 200 } },
+    ]);
+  });
+
+  test("the recorded aim stays as fired when the shooter aims again", () => {
+    const match = createMatch(25, fixedLayout([], 100, 500));
+    aimAt(match, 10, 150);
+    fire(match);
+    stepUntilShotEnds(match, 500);
+    missShot(match);
+
+    adjustAim(match, { angle: 2, power: 10 });
+
+    expect(matchView(match).firedShots[0].aim).toEqual({ angle: 10, power: 150 });
+  });
+
+  test("a fired shot's number matches the shot number of its trail", () => {
+    const match = createMatch(26, fixedLayout([], 100, 500));
+    missShot(match);
+    missShot(match);
+
+    const trailShotNumbers = new Set(matchView(match).trails.map((segment) => segment.shotNumber));
+
+    expect(matchView(match).firedShots.map((shot) => shot.shotNumber)).toEqual([...trailShotNumbers]);
+  });
+});
+
 describe("flight", () => {
   test("a missile with no planets flies in a straight line and leaves a trail in the shooter's name", () => {
     const match = createMatch(31, fixedLayout([]));
@@ -774,6 +813,7 @@ describe("round end and next round", () => {
     expect(matchView(match).roundNumber).toBe(2);
     expect(matchView(match).roundStepCount).toBe(0);
     expect(matchView(match).trails).toEqual([]);
+    expect(matchView(match).firedShots).toEqual([]);
     expect(matchView(match).attempts).toEqual({ left: 0, right: 0 });
     expect(matchView(match).ships.left.aim).toEqual({ angle: 90, power: 100 });
     expect(matchView(match).ships.right.aim).toEqual({ angle: 270, power: 100 });
@@ -1428,6 +1468,18 @@ describe("fireReceivedShot", () => {
 
     expect(matchView(match).ships[shooter].aim).toEqual(aimed.aim);
     expect(matchView(match).powerPenalty).toBe(5 * aimed.aim.power);
+  });
+
+  test("records the received aim as the fired shot's aim", () => {
+    const match = createMatch(84, fixedLayout([]));
+    const shooter = matchView(match).activePlayer;
+    aimAt(match, 45, 200);
+    const aimed = sentShot(match);
+    aimAt(match, 0, 100);
+
+    fireReceivedShot(match, aimed.aim, aimed.record);
+
+    expect(matchView(match).firedShots).toEqual([{ shooter, shotNumber: 1, aim: aimed.aim }]);
   });
 
   test("flies the received record as sent rather than recomputing it from the aim", () => {
