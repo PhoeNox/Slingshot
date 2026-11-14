@@ -5,18 +5,17 @@ import { describe, expect, test } from "vitest";
 import { adjustAim, DEFAULT_MATCH_RULES, fire, matchView, nextShooter, step, type Aim, type Match, type Side } from "./core/match";
 import type { PeerLink } from "./peerConnection";
 import { encodeMessage, type RemoteMessage } from "./remoteProtocol";
-import { remoteNotice, type RemoteMatch } from "./remoteMatch";
+import { remoteNotice, type RemoteMatch, type RemoteMatchEnd } from "./remoteMatch";
 import {
   aimMatch,
   createScreenSession,
-  enterHostedRemoteMatch,
-  enterJoinedRemoteMatch,
+  enterRemoteMatch,
   enterScreen,
   fireMatch,
-  isRemoteMatchFinished,
   stepScreenSession,
   type ScreenSession,
 } from "./screenSession";
+import { DEFAULT_SETTINGS, matchRulesFor, type Settings } from "./settings";
 
 interface Endpoint {
   link: PeerLink;
@@ -37,7 +36,13 @@ interface Peers {
   guest: ScreenSession;
 }
 
+interface EndingCase {
+  end: Exclude<RemoteMatchEnd, "left">;
+  endMatch: () => ScreenSession;
+}
+
 const SEED = 7;
+const SEED_RANGE = 2 ** 32;
 const ROUNDS = 3;
 const MAX_SHOTS = 40;
 const MAX_STEPS = 5000;
@@ -90,12 +95,21 @@ function deliver(channel: FakeChannel): void {
   }
 }
 
-function connectedPeers(): Peers {
-  const channel = fakeChannel();
-  const host = createScreenSession(1, () => 0.5);
+function drawsSeed(): number {
+  return SEED / SEED_RANGE;
+}
+
+function joinedGuest(channel: FakeChannel): ScreenSession {
   const guest = createScreenSession(2, () => 0.5);
-  enterHostedRemoteMatch(host, channel.host.link, SEED, DEFAULT_MATCH_RULES);
-  enterJoinedRemoteMatch(guest, channel.guest.link);
+  enterRemoteMatch(guest, "guest", channel.guest.link, DEFAULT_SETTINGS);
+  return guest;
+}
+
+function connectedPeers(hostSettings: Readonly<Settings> = DEFAULT_SETTINGS): Peers {
+  const channel = fakeChannel();
+  const host = createScreenSession(1, drawsSeed);
+  enterRemoteMatch(host, "host", channel.host.link, hostSettings);
+  const guest = joinedGuest(channel);
   deliver(channel);
   return { channel, host, guest };
 }
@@ -176,6 +190,15 @@ function takeShot(peers: Peers, shooter: ScreenSession, wantHit: boolean): void 
   deliver(peers.channel);
 }
 
+function stepsUntilMainMenu(session: ScreenSession): number {
+  for (let steps = 1; steps <= MAX_STEPS; steps++) {
+    if (stepScreenSession(session, false) === "mainMenu") {
+      return steps;
+    }
+  }
+  throw new Error("never returned to the main menu");
+}
+
 function flushPromises(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve));
 }
@@ -194,18 +217,25 @@ describe("starting a remote match", () => {
     expect(matchView(matchOf(guest))).toEqual(matchView(matchOf(host)));
   });
 
+  test("the host's settings set the match rules both peers play under", () => {
+    const hostSettings: Settings = { ...DEFAULT_SETTINGS, bounce: true, timeoutSeconds: 10 };
+
+    const { host, guest } = connectedPeers(hostSettings);
+
+    expect(matchOf(host).rules).toEqual(matchRulesFor(hostSettings));
+    expect(matchOf(guest).rules).toEqual(matchRulesFor(hostSettings));
+  });
+
   test("the guest waits for the host until the hello arrives", () => {
     const channel = fakeChannel();
-    const guest = createScreenSession(2, () => 0.5);
-    enterJoinedRemoteMatch(guest, channel.guest.link);
+    const guest = joinedGuest(channel);
 
     expect(remoteNotice(remoteOf(guest))).toBe("awaitingHost");
   });
 
   test("a hello from a different protocol version ends the match as a version mismatch", () => {
     const channel = fakeChannel();
-    const guest = createScreenSession(2, () => 0.5);
-    enterJoinedRemoteMatch(guest, channel.guest.link);
+    const guest = joinedGuest(channel);
     const hello = { kind: "hello", protocolVersion: 999, rules: {}, seed: 1 };
 
     sendRaw(channel, channel.guest, hello);
@@ -368,15 +398,70 @@ describe("ending a remote match", () => {
     expect(peers.channel.closed).toBe(true);
   });
 
-  test("the opponent-left notice returns to the main menu after a while", () => {
+  test("entering a new remote match over a running one closes the old link", async () => {
     const peers = connectedPeers();
-    sendRaw(peers.channel, peers.channel.guest, { kind: "leave" });
+    const next = fakeChannel();
 
-    stepBoth(peers, END_NOTICE_STEPS - 1);
-    const finishedEarly = isRemoteMatchFinished(peers.guest);
-    stepBoth(peers, 1);
+    enterRemoteMatch(peers.guest, "guest", next.guest.link, DEFAULT_SETTINGS);
+    deliver(peers.channel);
+    await flushPromises();
 
-    expect(finishedEarly).toBe(false);
-    expect(isRemoteMatchFinished(peers.guest)).toBe(true);
+    expect(peers.channel.closed).toBe(true);
+    expect(remoteNotice(remoteOf(peers.host))).toBe("opponentLeft");
+    expect(remoteOf(peers.guest).link).toBe(next.guest.link);
+  });
+});
+
+describe("returning to the main menu", () => {
+  const endings: EndingCase[] = [
+    {
+      end: "opponentLeft",
+      endMatch: () => {
+        const peers = connectedPeers();
+        sendRaw(peers.channel, peers.channel.guest, { kind: "leave" });
+        return peers.guest;
+      },
+    },
+    {
+      end: "outOfSync",
+      endMatch: () => {
+        const peers = connectedPeers();
+        const shot: RemoteMessage = { kind: "shot", aim: { angle: 0, power: 999 }, shot: { x: 0, y: 0, vx: 0, vy: 0 } };
+        peers.channel.guest.inbox.push(encodeMessage(shot));
+        deliver(peers.channel);
+        return peers.guest;
+      },
+    },
+    {
+      end: "versionMismatch",
+      endMatch: () => {
+        const channel = fakeChannel();
+        const guest = joinedGuest(channel);
+        sendRaw(channel, channel.guest, { kind: "hello", protocolVersion: 999, rules: {}, seed: 1 });
+        return guest;
+      },
+    },
+  ];
+
+  test.each(endings)("$end asks for the main menu once its notice has run out", ({ end, endMatch }) => {
+    const session = endMatch();
+    const ended = remoteOf(session);
+
+    expect(ended.end).toBe(end);
+    expect(stepsUntilMainMenu(session)).toBe(END_NOTICE_STEPS);
+  });
+
+  test("leaving is itself the return to the main menu, and the opponent follows once its notice has run out", async () => {
+    const peers = connectedPeers();
+    const leaving = remoteOf(peers.host);
+
+    enterScreen(peers.host, "mainMenu", 3, DEFAULT_MATCH_RULES);
+    deliver(peers.channel);
+    await flushPromises();
+
+    expect(leaving.end).toBe("left");
+    expect(peers.host.state.screen).toBe("mainMenu");
+    expect(stepScreenSession(peers.host, false)).toBe("stay");
+    expect(stepsUntilMainMenu(peers.guest)).toBe(END_NOTICE_STEPS);
   });
 });

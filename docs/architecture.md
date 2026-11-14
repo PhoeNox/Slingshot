@@ -23,9 +23,9 @@ Pure, seeded, no DOM, canvas, or clock (ADR-0001).
 | --- | --- |
 | `main.ts` | Boot: loads assets, binds input and screens, starts the loop |
 | `gameLoop.ts` | Fixed 30 Hz step loop plus render callback |
-| `screenSession.ts` | Current screen as a per-screen union of hot-seat match, remote match or attract mode; routes aim and fire, steps it, describes its frame and shake; leaving a remote match for any route leaves it |
-| `remoteMatch.ts` | Lockstep remote match over a `PeerLink`: host sends hello and plays left, guest builds the match from it and plays right; local input only on the local turn, throttled aim streaming, shots queued while in flight, outcome comparison, endings (left, opponent left, out of sync, version mismatch) and the notice shown before returning to the main menu |
-| `navigation.ts` | Hash routes (including the play menu, the host route and invitation routes carrying an offer code), screens (the remote match has none of its own and is shown over the host or guest route), which screens play attract mode (ADR-0002), menu focus movement (ADR-0003) |
+| `screenSession.ts` | Current screen as a per-screen union of hot-seat match, remote match or attract mode; routes aim and fire, steps it (a step reports `"mainMenu"` once a remote match's end notice has run out), describes its frame and shake; entering any route or another remote match leaves a running remote match first |
+| `remoteMatch.ts` | Lockstep remote match from a role and an open `PeerLink` to the return to the main menu: the host draws the seed, takes the match rules from its settings, sends hello and plays left, guest builds the match from it and plays right; local input only on the local turn, throttled aim streaming, shots queued while in flight, outcome comparison, endings (left, opponent left, out of sync, version mismatch), the notice shown after an ending and the step result asking for the main menu once it has run out |
+| `navigation.ts` | Hash routes (including the play menu, the host route and invitation routes carrying an offer code), screens (the remote match has no route of its own: while it runs, the URL still shows the host route or the guest's invitation route, so reloading starts a new host or guest visit rather than resuming the match), which screens play attract mode (ADR-0002), menu focus movement (ADR-0003) |
 | `screens.ts` | HTML menu/settings/credits overlays, button effects, settings tabs, one table-driven binder for every settings control (located by `data-setting` in the markup), route binding (ADR-0002) |
 | `remoteMatchScreens.ts` | Host and guest screen flow up to an open connection: invitation link and reply code with copy buttons, reply code entry with retry after a rejected code, status and failure messages per role; hands the open link over to start the remote match; each visit closes its pending connection when its route is left |
 | `settings.ts` | Setting rule table (control kind, choices, labels, default, display vs match rule per setting) and the Settings type, defaults, parse/serialise of the stored form and match rules derived from it, stored-form match rules for the wire; planet count drag-along |
@@ -46,4 +46,4 @@ Pure, seeded, no DOM, canvas, or clock (ADR-0001).
 | `colours.ts` | Colour tokens |
 | `scramble.ts` | Menu label scramble effect |
 | `shipHits.test.ts` | End-to-end check: seeded matches through the screen session register ship hits |
-| `remoteMatch.test.ts` | End-to-end check: two screen sessions over an in-memory channel play a remote match in lockstep and end it |
+| `remoteMatch.test.ts` | End-to-end check: two screen sessions over an in-memory channel play a remote match in lockstep and drive each ending through to the main menu step result |

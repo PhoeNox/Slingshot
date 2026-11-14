@@ -11,15 +11,15 @@ import type { PeerLink } from "./peerConnection";
 import {
   aimRemoteMatch,
   fireRemoteMatch,
-  hostRemoteMatch,
-  isRemoteMatchOver,
-  joinRemoteMatch,
   leaveRemoteMatch,
   remoteNotice,
+  startRemoteMatch,
   stepRemoteMatch,
   type RemoteMatch,
+  type RemoteRole,
 } from "./remoteMatch";
 import { NO_SHAKE, screenShakeOffset } from "./screenShake";
+import type { Settings } from "./settings";
 
 export type MenuScreen = Exclude<RouteScreen, "match">;
 
@@ -33,6 +33,8 @@ export interface ScreenSession {
   debris: Particle[];
   random: () => number;
 }
+
+export type ScreenSessionStep = "stay" | "mainMenu";
 
 export interface ScreenSessionFrame {
   items: FrameItem[];
@@ -50,9 +52,7 @@ export function enterScreen(
   seed: number,
   matchRules: Readonly<MatchRules>,
 ): void {
-  if (session.state.screen === "remoteMatch") {
-    leaveRemoteMatch(session.state.remote);
-  }
+  leaveShownRemoteMatch(session);
   if (screen === "match" || !("attract" in session.state)) {
     session.debris = [];
   }
@@ -68,29 +68,26 @@ function nextScreenState(state: ScreenState, screen: RouteScreen, seed: number, 
   return { screen, attract };
 }
 
-export function enterHostedRemoteMatch(
+export function enterRemoteMatch(
   session: ScreenSession,
+  role: RemoteRole,
   link: PeerLink,
-  seed: number,
-  matchRules: Readonly<MatchRules>,
+  settings: Readonly<Settings>,
 ): void {
-  const remote = hostRemoteMatch(link, seed, matchRules);
+  leaveShownRemoteMatch(session);
+  const remote = startRemoteMatch(role, link, settings, session.random);
   session.debris = [];
   session.state = { screen: "remoteMatch", remote };
 }
 
-export function enterJoinedRemoteMatch(session: ScreenSession, link: PeerLink): void {
-  const remote = joinRemoteMatch(link);
-  session.debris = [];
-  session.state = { screen: "remoteMatch", remote };
+function leaveShownRemoteMatch(session: ScreenSession): void {
+  if (session.state.screen === "remoteMatch") {
+    leaveRemoteMatch(session.state.remote);
+  }
 }
 
 export function isMatchActive(session: ScreenSession): boolean {
   return session.state.screen === "match" || session.state.screen === "remoteMatch";
-}
-
-export function isRemoteMatchFinished(session: ScreenSession): boolean {
-  return session.state.screen === "remoteMatch" && isRemoteMatchOver(session.state.remote);
 }
 
 export function aimMatch(session: ScreenSession, delta: AimDelta): void {
@@ -109,8 +106,19 @@ export function fireMatch(session: ScreenSession): void {
   }
 }
 
-export function stepScreenSession(session: ScreenSession, reducedMotion: boolean): void {
-  const steppedMatch = stepShownMatch(session.state, reducedMotion);
+export function stepScreenSession(session: ScreenSession, reducedMotion: boolean): ScreenSessionStep {
+  const state = session.state;
+  if (state.screen === "remoteMatch") {
+    const remoteStep = stepRemoteMatch(state.remote);
+    advanceSessionDebris(session, remoteStep.match, reducedMotion);
+    return remoteStep.returnsToMainMenu ? "mainMenu" : "stay";
+  }
+  const steppedMatch = stepShownMatch(state, reducedMotion);
+  advanceSessionDebris(session, steppedMatch, reducedMotion);
+  return "stay";
+}
+
+function advanceSessionDebris(session: ScreenSession, steppedMatch: Readonly<Match> | undefined, reducedMotion: boolean): void {
   if (reducedMotion) {
     session.debris = [];
   } else if (steppedMatch !== undefined) {
@@ -119,13 +127,10 @@ export function stepScreenSession(session: ScreenSession, reducedMotion: boolean
   }
 }
 
-function stepShownMatch(state: ScreenState, reducedMotion: boolean): Match | undefined {
+function stepShownMatch(state: Exclude<ScreenState, { screen: "remoteMatch" }>, reducedMotion: boolean): Match | undefined {
   if (state.screen === "match") {
     step(state.match);
     return state.match;
-  }
-  if (state.screen === "remoteMatch") {
-    return stepRemoteMatch(state.remote);
   }
   if (playsAttractMode(state.screen, reducedMotion)) {
     stepAttractMode(state.attract);

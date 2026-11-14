@@ -10,7 +10,8 @@ import { startGameLoop } from "./gameLoop";
 import { bindControls, bindEscape } from "./input";
 import { hashFor, MAIN_MENU_ITEMS, PLAY_MENU_ITEMS, type Route } from "./navigation";
 import type { PeerLink } from "./peerConnection";
-import { bindRemoteMatchScreens, type GuestScreenElements, type HostScreenElements, type RemoteRole } from "./remoteMatchScreens";
+import type { RemoteRole } from "./remoteMatch";
+import { bindRemoteMatchScreens, type GuestScreenElements, type HostScreenElements } from "./remoteMatchScreens";
 import { drawFrame, drawShakenFrame } from "./renderer";
 import { bindBracketFlash, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, bindSettingControls, bindSettingsTabs, navigateBack, renderMenuItems, showScreen, traceTitleArc, type ScreenElements } from "./screens";
 import { matchRulesFor, parseSettings, serialiseSettings, type Settings } from "./settings";
@@ -19,12 +20,10 @@ import {
   aimMatch,
   createScreenSession,
   describeScreenSessionFrame,
-  enterHostedRemoteMatch,
-  enterJoinedRemoteMatch,
+  enterRemoteMatch,
   enterScreen,
   fireMatch,
   isMatchActive,
-  isRemoteMatchFinished,
   stepScreenSession,
 } from "./screenSession";
 import { drawStars, renderStarSprites } from "./starLayer";
@@ -126,13 +125,7 @@ async function start(): Promise<void> {
   bindSettingsTabs(elements.settingsTabs);
   bindSettingControls(elements.settings, settings, saveSettings);
   const startRemoteMatch = (role: RemoteRole, link: PeerLink) => {
-    if (role === "host") {
-      const seed = randomSeed();
-      const matchRules = matchRulesFor(settings);
-      enterHostedRemoteMatch(session, link, seed, matchRules);
-    } else {
-      enterJoinedRemoteMatch(session, link);
-    }
+    enterRemoteMatch(session, role, link, settings);
     showScreen(elements, "remoteMatch");
   };
   const enterRemoteRoute = bindRemoteMatchScreens(window, hostElements, guestElements, startRemoteMatch);
@@ -148,8 +141,8 @@ async function start(): Promise<void> {
 
   const mainMenuHash = hashFor("mainMenu");
   const stepSimulation = () => {
-    stepScreenSession(session, reducedMotion.matches);
-    if (isRemoteMatchFinished(session)) {
+    const sessionStep = stepScreenSession(session, reducedMotion.matches);
+    if (sessionStep === "mainMenu") {
       location.hash = mainMenuHash;
     }
   };

@@ -29,6 +29,9 @@ import {
   type RemoteMessage,
   type ShotMessage,
 } from "./remoteProtocol";
+import { matchRulesFor, type Settings } from "./settings";
+
+export type RemoteRole = "host" | "guest";
 
 export type RemoteMatchEnd = "left" | "opponentLeft" | "outOfSync" | "versionMismatch";
 
@@ -46,23 +49,39 @@ export interface RemoteMatch {
   stepsSinceEnd: number;
 }
 
+export interface RemoteMatchStep {
+  readonly match: Match | undefined;
+  readonly returnsToMainMenu: boolean;
+}
+
 const AIM_SEND_INTERVAL_STEPS = 3;
 const END_NOTICE_STEPS = 90;
+const SEED_RANGE = 2 ** 32;
 
 const REJECTION_ENDS: Record<RejectionReason, RemoteMatchEnd> = {
   malformed: "outOfSync",
   protocolMismatch: "versionMismatch",
 };
 
-export function hostRemoteMatch(link: PeerLink, seed: number, rules: Readonly<MatchRules>): RemoteMatch {
+export function startRemoteMatch(
+  role: RemoteRole,
+  link: PeerLink,
+  settings: Readonly<Settings>,
+  random: () => number,
+): RemoteMatch {
+  if (role === "guest") {
+    return listenedRemoteMatch(link, "right");
+  }
+  const seed = Math.floor(random() * SEED_RANGE);
+  const rules = matchRulesFor(settings);
+  return hostRemoteMatch(link, seed, rules);
+}
+
+function hostRemoteMatch(link: PeerLink, seed: number, rules: Readonly<MatchRules>): RemoteMatch {
   const remote = listenedRemoteMatch(link, "left");
   remote.match = createMatch(seed, undefined, rules);
   send(remote, { kind: "hello", protocolVersion: PROTOCOL_VERSION, rules, seed });
   return remote;
-}
-
-export function joinRemoteMatch(link: PeerLink): RemoteMatch {
-  return listenedRemoteMatch(link, "right");
 }
 
 function listenedRemoteMatch(link: PeerLink, localSide: Side): RemoteMatch {
@@ -201,21 +220,29 @@ function isLocalTurn(remote: Readonly<RemoteMatch>): boolean {
     && isAimingTurnOf(remote.match, remote.localSide);
 }
 
-export function stepRemoteMatch(remote: RemoteMatch): Match | undefined {
+export function stepRemoteMatch(remote: RemoteMatch): RemoteMatchStep {
   if (remote.end !== undefined) {
     remote.stepsSinceEnd++;
   }
   const match = remote.match;
-  if (match === undefined) {
-    return undefined;
+  if (match !== undefined) {
+    stepStartedMatch(remote, match);
   }
+  const returnsToMainMenu = isEndNoticeOver(remote);
+  return { match, returnsToMainMenu };
+}
+
+function stepStartedMatch(remote: RemoteMatch, match: Match): void {
   const outcome = step(match);
   if (outcome !== undefined) {
     reportShotOutcome(remote, outcome);
   }
   fireReceivedShots(remote, match);
   sendChangedAim(remote, match);
-  return match;
+}
+
+function isEndNoticeOver(remote: Readonly<RemoteMatch>): boolean {
+  return remote.end !== undefined && remote.stepsSinceEnd >= END_NOTICE_STEPS;
 }
 
 function reportShotOutcome(remote: RemoteMatch, outcome: Readonly<ShotOutcome>): void {
@@ -244,8 +271,4 @@ export function remoteNotice(remote: Readonly<RemoteMatch>): RemoteNotice | unde
     return remote.end;
   }
   return remote.match === undefined ? "awaitingHost" : undefined;
-}
-
-export function isRemoteMatchOver(remote: Readonly<RemoteMatch>): boolean {
-  return remote.end !== undefined && remote.stepsSinceEnd >= END_NOTICE_STEPS;
 }

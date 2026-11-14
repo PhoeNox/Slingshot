@@ -3,8 +3,7 @@
 
 import { invitationHash, type Route } from "./navigation";
 import { hostPeerConnection, joinPeerConnection, PeerConnectionError, type HostInvitation, type PeerConnectionFailure, type PeerLink } from "./peerConnection";
-
-export type RemoteRole = "host" | "guest";
+import type { RemoteRole } from "./remoteMatch";
 
 export type StartRemoteMatch = (role: RemoteRole, link: PeerLink) => void;
 
