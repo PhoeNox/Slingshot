@@ -65,6 +65,26 @@ _Avoid_: Targeting
 Both players share one device and take shots in alternation.
 _Avoid_: Local multiplayer
 
+**Remote match**:
+A match whose two players are on different devices, joined by invitation, exchanging shots instead of sharing one device.
+_Avoid_: Online multiplayer, netplay
+
+**Host**:
+The player who starts a remote match, sends the invitation, and whose match rules it is played under; flies the left ship.
+_Avoid_: Server, owner
+
+**Guest**:
+The player who joins a remote match by invitation; flies the right ship.
+_Avoid_: Client
+
+**Invitation**:
+The link a host sends to let a guest join a remote match.
+_Avoid_: Invite code, room
+
+**Reply code**:
+The text a guest sends back to the host to complete joining a remote match.
+_Avoid_: Answer, token
+
 ### Scoring
 
 **Hit**:
