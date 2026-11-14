@@ -10,6 +10,7 @@ import {
   fireReceivedShot,
   matchView,
   previewShot,
+  showAim,
   step,
   type InFlightView,
   type Match,
@@ -1275,6 +1276,11 @@ interface ReceivedShot {
 
 type AimPlan = (shooter: Side) => Aim;
 
+interface FlownShot {
+  steps: number;
+  outcome: ShotOutcome;
+}
+
 const PLANETLESS_RULES: MatchRules = { ...DEFAULT_MATCH_RULES, planetCount: { min: 0, max: 0 } };
 const MISS_PLAN: AimPlan = () => ({ angle: 0, power: 250 });
 const HIT_PLAN: AimPlan = (shooter) => ({ angle: shooter === "left" ? 90 : 270, power: 100 });
@@ -1297,24 +1303,25 @@ function playLocally(match: Match, plans: AimPlan[]): { shots: ReceivedShot[]; o
     aimAt(match, aim.angle, aim.power);
     shots.push(sentShot(match));
     fire(match);
-    stepUntilShotEnds(match, 1000);
-    outcomes.push(lastOutcome(match));
+    outcomes.push(flyShot(match, 1000).outcome);
   }
   return { shots, outcomes };
 }
 
-function shootAt(match: Match, angle: number, power: number): number {
+function shootAt(match: Match, angle: number, power: number): FlownShot {
   aimAt(match, angle, power);
   fire(match);
-  return stepUntilShotEnds(match, 6000);
+  return flyShot(match, 6000);
 }
 
-function lastOutcome(match: Match): ShotOutcome {
-  const outcome = matchView(match).lastShotOutcome;
-  if (outcome === undefined) {
-    throw new Error("expected a shot outcome");
+function flyShot(match: Match, maxSteps: number): FlownShot {
+  for (let steps = 1; steps <= maxSteps; steps++) {
+    const outcome = step(match);
+    if (outcome !== undefined) {
+      return { steps, outcome };
+    }
   }
-  return outcome;
+  throw new Error(`no shot outcome after ${maxSteps} steps`);
 }
 
 function nextRoundShot(match: Match, angle: number, power: number): ReceivedShot {
@@ -1333,8 +1340,7 @@ describe("fireReceivedShot", () => {
     const outcomes: ShotOutcome[] = [];
     for (const shot of shots) {
       expect(fireReceivedShot(remote, shot.aim, shot.record)).toBe(true);
-      stepUntilShotEnds(remote, 1000);
-      outcomes.push(lastOutcome(remote));
+      outcomes.push(flyShot(remote, 1000).outcome);
     }
 
     expect(matchView(local).roundNumber).toBeGreaterThan(1);
@@ -1426,11 +1432,15 @@ describe("fireReceivedShot", () => {
 });
 
 describe("shot outcome", () => {
-  test("a new match has no shot outcome", () => {
-    expect(matchView(createMatch(90)).lastShotOutcome).toBeUndefined();
+  test("steps while aiming and while the round is over report no outcome", () => {
+    const match = createMatch(90, fixedLayout([]));
+
+    expect(step(match)).toBeUndefined();
+    shootAt(match, opponentAngle(match), 100);
+    expect(step(match)).toBeUndefined();
   });
 
-  test.each<[ShotOutcome["endReason"], () => Match, (match: Match) => number]>([
+  test.each<[ShotOutcome["endReason"], () => Match, (match: Match) => FlownShot]>([
     ["hit", () => createMatch(91, fixedLayout([])), (match) => shootAt(match, opponentAngle(match), 100)],
     ["selfHit", () => selfHitMatch(92), (match) => shootAt(match, 0, 20)],
     ["planet", () => createMatch(93, fixedLayout([planetAt(400, 300, 8, 25)])), (match) => shootAt(match, opponentAngle(match), 100)],
@@ -1439,8 +1449,49 @@ describe("shot outcome", () => {
   ])("reports %s with the steps flown and the final missile position", (endReason, createShotMatch, shoot) => {
     const match = createShotMatch();
 
-    const shotSteps = shoot(match);
+    const { steps, outcome } = shoot(match);
 
-    expect(lastOutcome(match)).toEqual({ endReason, stepsFlown: shotSteps, finalPosition: shotEndPoint(match) });
+    expect(outcome).toEqual({ endReason, stepsFlown: steps, finalPosition: shotEndPoint(match) });
+  });
+});
+
+describe("showAim", () => {
+  const SHOWN_AIM: Aim = { angle: 45, power: 200 };
+
+  test("sets the active player's aim while aiming", () => {
+    const match = createMatch(97, fixedLayout([]));
+
+    showAim(match, matchView(match).activePlayer, SHOWN_AIM);
+
+    expect(activeAim(match)).toEqual(SHOWN_AIM);
+  });
+
+  test("ignores the aim of the inactive player", () => {
+    const match = createMatch(98, fixedLayout([]));
+    const before = structuredClone(match);
+
+    showAim(match, inactivePlayer(match), SHOWN_AIM);
+
+    expect(match).toEqual(before);
+  });
+
+  test("ignores the active player's aim while a shot is in flight", () => {
+    const match = createMatch(99, fixedLayout([]));
+    fire(match);
+    const before = structuredClone(match);
+
+    showAim(match, matchView(match).activePlayer, SHOWN_AIM);
+
+    expect(match).toEqual(before);
+  });
+
+  test("ignores the aim while the round is over", () => {
+    const match = createMatch(100, fixedLayout([]));
+    hitOpponent(match, 100);
+    const before = structuredClone(match);
+
+    showAim(match, matchView(match).activePlayer, SHOWN_AIM);
+
+    expect(match).toEqual(before);
   });
 });

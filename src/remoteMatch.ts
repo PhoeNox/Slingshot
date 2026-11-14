@@ -6,7 +6,11 @@ import {
   createMatch,
   fire,
   fireReceivedShot,
+  isAimingTurnOf,
+  isRoundOver,
+  isShotInFlight,
   nextShooter,
+  showAim,
   step,
   type Aim,
   type AimDelta,
@@ -123,7 +127,7 @@ function receiveMessage(remote: RemoteMatch, message: Readonly<RemoteMessage>): 
   } else if (match === undefined) {
     endRemoteMatch(remote, "outOfSync");
   } else if (message.kind === "aim") {
-    showOpponentAim(match, opponentSide(remote), message.aim);
+    showAim(match, opponentSide(remote), message.aim);
   } else if (message.kind === "shot") {
     remote.receivedShots.push(message);
     fireReceivedShots(remote, match);
@@ -145,14 +149,8 @@ function opponentSide(remote: Readonly<RemoteMatch>): Side {
   return remote.localSide === "left" ? "right" : "left";
 }
 
-function showOpponentAim(match: Match, opponent: Side, aim: Readonly<Aim>): void {
-  if (match.phase.kind === "aiming" && match.activePlayer === opponent) {
-    match.ships[opponent].aim = { angle: aim.angle, power: aim.power };
-  }
-}
-
 function fireReceivedShots(remote: RemoteMatch, match: Match): void {
-  if (remote.end !== undefined || match.phase.kind === "inFlight") {
+  if (remote.end !== undefined || isShotInFlight(match)) {
     return;
   }
   const received = remote.receivedShots.shift();
@@ -186,7 +184,7 @@ export function fireRemoteMatch(remote: RemoteMatch): void {
   if (match === undefined || remote.end !== undefined) {
     return;
   }
-  if (match.phase.kind === "roundOver") {
+  if (isRoundOver(match)) {
     fire(match);
     return;
   }
@@ -200,8 +198,7 @@ export function fireRemoteMatch(remote: RemoteMatch): void {
 function isLocalTurn(remote: Readonly<RemoteMatch>): boolean {
   return remote.end === undefined
     && remote.match !== undefined
-    && remote.match.phase.kind === "aiming"
-    && remote.match.activePlayer === remote.localSide;
+    && isAimingTurnOf(remote.match, remote.localSide);
 }
 
 export function stepRemoteMatch(remote: RemoteMatch): Match | undefined {
@@ -212,10 +209,9 @@ export function stepRemoteMatch(remote: RemoteMatch): Match | undefined {
   if (match === undefined) {
     return undefined;
   }
-  const wasInFlight = match.phase.kind === "inFlight";
-  step(match);
-  if (wasInFlight && match.phase.kind !== "inFlight") {
-    reportShotOutcome(remote, match.lastShotOutcome!);
+  const outcome = step(match);
+  if (outcome !== undefined) {
+    reportShotOutcome(remote, outcome);
   }
   fireReceivedShots(remote, match);
   sendChangedAim(remote, match);

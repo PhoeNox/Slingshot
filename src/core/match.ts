@@ -119,7 +119,6 @@ interface MatchState {
   attempts: Record<Side, number>;
   zoom: Zoom;
   impact: Point | undefined;
-  lastShotOutcome: ShotOutcome | undefined;
 }
 
 type DeepReadonly<T> = { readonly [K in keyof T]: DeepReadonly<T[K]> };
@@ -170,7 +169,6 @@ export function createMatch(
     attempts: { left: 0, right: 0 },
     zoom: { ...NO_ZOOM },
     impact: undefined,
-    lastShotOutcome: undefined,
   };
 }
 
@@ -178,19 +176,21 @@ function drawFirstShooter(rng: Rng): Side {
   return randomInt(rng, 0, 1) === 0 ? "left" : "right";
 }
 
-export function step(match: Match): void {
+export function step(match: Match): ShotOutcome | undefined {
   match.roundStepCount++;
   match.impact = undefined;
+  let outcome: ShotOutcome | undefined;
   if (match.phase.kind === "inFlight") {
-    advanceShot(match, match.phase.missile);
+    outcome = advanceShot(match, match.phase.missile);
   } else if (match.phase.kind === "roundOver") {
     match.phase.stepsSinceRoundOver++;
   }
   const missile = match.phase.kind === "inFlight" ? match.phase.missile : undefined;
   match.zoom = nextZoom(match.zoom, missile);
+  return outcome;
 }
 
-function advanceShot(match: Match, missile: Missile): void {
+function advanceShot(match: Match, missile: Missile): ShotOutcome | undefined {
   const flightStep = flyMissile(missile, match.planets, match.ships);
   const shotNumber = match.attempts.left + match.attempts.right;
   const trailSegment = { shooter: match.activePlayer, shotNumber, ...flightStep.segment };
@@ -198,14 +198,16 @@ function advanceShot(match: Match, missile: Missile): void {
   if (flightStep.end === "planet" || flightStep.end === "ship") {
     match.impact = flightStep.segment.to;
   }
-  if (flightStep.end !== undefined) {
-    match.lastShotOutcome = shotOutcomeFor(match.activePlayer, flightStep.end, flightStep, missile);
+  if (flightStep.end === undefined) {
+    return undefined;
   }
+  const outcome = shotOutcomeFor(match.activePlayer, flightStep.end, flightStep, missile);
   if (flightStep.hitShip !== undefined) {
     endRound(match, flightStep.hitShip);
-  } else if (flightStep.end !== undefined) {
+  } else {
     endShot(match);
   }
+  return outcome;
 }
 
 function shotOutcomeFor(
@@ -261,6 +263,24 @@ export function adjustAim(match: Match, delta: AimDelta): void {
   const aim = match.ships[match.activePlayer].aim;
   aim.angle = (((aim.angle + delta.angle) % FULL_TURN) + FULL_TURN) % FULL_TURN;
   aim.power = Math.min(Math.max(aim.power + delta.power, 0), MAX_POWER);
+}
+
+export function showAim(match: Match, side: Side, aim: Readonly<Aim>): void {
+  if (isAimingTurnOf(match, side)) {
+    match.ships[side].aim = { angle: aim.angle, power: aim.power };
+  }
+}
+
+export function isAimingTurnOf(match: Readonly<Match>, side: Side): boolean {
+  return match.phase.kind === "aiming" && match.activePlayer === side;
+}
+
+export function isShotInFlight(match: Readonly<Match>): boolean {
+  return match.phase.kind === "inFlight";
+}
+
+export function isRoundOver(match: Readonly<Match>): boolean {
+  return match.phase.kind === "roundOver";
 }
 
 export function fire(match: Match): ShotRecord | undefined {
@@ -384,7 +404,6 @@ export function matchView(match: Match): MatchView {
     powerPenalty,
     zoom: match.zoom,
     impact: match.impact,
-    lastShotOutcome: match.lastShotOutcome,
     rules: match.rules,
   };
 }
