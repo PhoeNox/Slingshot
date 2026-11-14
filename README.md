@@ -6,6 +6,8 @@ A browser port of Slingshot, the two-player, turn-based gravity artillery game: 
 
 Controls: ←/→ or A/D angle · ↑/↓ or W/S power · Shift ×2.5 · Space fire · Escape main menu
 
+Touch: drag ↑/↓ angle · drag toward the opponent power · tap fire
+
 ## Development
 
 ```sh

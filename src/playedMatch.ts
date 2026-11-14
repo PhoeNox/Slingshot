@@ -3,6 +3,7 @@
 
 import { stepAttractMode, type AttractMode } from "./core/attract";
 import { adjustAim, fire, matchView, step, type AimDelta, type Match, type MatchView } from "./core/match";
+import type { Side } from "./core/round";
 import { ATTRACT_VIEWER, HOT_SEAT_VIEWER, type Viewer } from "./frame";
 import type { RemoteNotice } from "./lockstep";
 import { playsAttractMode, type Screen } from "./navigation";
@@ -15,6 +16,7 @@ export interface PlayedMatchStep {
 export interface PlayedMatch {
   readonly viewer: Readonly<Viewer>;
   readonly shakes: boolean;
+  aimingSide: () => Side | undefined;
   aim: (delta: AimDelta) => void;
   fire: () => void;
   step: (reducedMotion: boolean) => PlayedMatchStep;
@@ -27,11 +29,13 @@ const UNSTEPPED: PlayedMatchStep = { steppedView: undefined, returnsToMainMenu: 
 
 const ignore = () => {};
 const noNotice = () => undefined;
+const noSide = () => undefined;
 
 export function playHotSeat(match: Match): PlayedMatch {
   return {
     viewer: HOT_SEAT_VIEWER,
     shakes: true,
+    aimingSide: () => match.activePlayer,
     aim: (delta) => adjustAim(match, delta),
     fire: () => fire(match),
     step: () => stepHotSeat(match),
@@ -51,6 +55,7 @@ export function playAttractMode(attract: AttractMode, screen: Screen): PlayedMat
   return {
     viewer: ATTRACT_VIEWER,
     shakes: false,
+    aimingSide: noSide,
     aim: ignore,
     fire: ignore,
     step: (reducedMotion) => stepShownAttractMode(attract, screen, reducedMotion),

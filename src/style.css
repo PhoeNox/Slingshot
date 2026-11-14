@@ -37,6 +37,11 @@ body {
   text-align: center;
 }
 
+html:has(#overlay[hidden]),
+body:has(#overlay[hidden]) {
+  touch-action: none;
+}
+
 #stage {
   position: relative;
   flex: 1;

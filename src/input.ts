@@ -3,6 +3,10 @@
 
 import { RELEASED_AIM_KEY_REPEAT, stepAimKeyRepeat, type AimKeyInput, type AimKeyRepeatStep } from "./aimKeyRepeat";
 import type { AimDelta } from "./core/match";
+import type { Side } from "./core/round";
+import { RELEASED_TOUCH_AIM, stepTouchAim, type TouchAimInput } from "./touchAim";
+
+const TOUCH_POINTER_TYPES = new Set(["touch", "pen"]);
 
 export function bindControls(
   target: Window,
@@ -56,6 +60,71 @@ export function bindControls(
     const input: AimKeyInput = { kind: "blur" };
     apply(input);
   });
+}
+
+export function bindTouchControls(
+  target: Window,
+  isMatchActive: () => boolean,
+  aimingSide: () => Side | undefined,
+  adjustAim: (delta: AimDelta) => void,
+  fire: () => void,
+): void {
+  let touch = RELEASED_TOUCH_AIM;
+
+  const apply = (input: TouchAimInput) => {
+    const step = stepTouchAim(touch, input);
+    touch = step.touch;
+    if (step.aimDelta) {
+      adjustAim(step.aimDelta);
+    }
+    if (step.fire) {
+      fire();
+    }
+  };
+
+  target.addEventListener("pointerdown", (event) => {
+    if (!isTouchPointer(event) || startsOnButton(event)) {
+      return;
+    }
+    const input: TouchAimInput = {
+      kind: "pointerDown",
+      pointerId: event.pointerId,
+      position: { x: event.clientX, y: event.clientY },
+      side: aimingSide(),
+      matchActive: isMatchActive(),
+    };
+    apply(input);
+  });
+  target.addEventListener("pointermove", (event) => {
+    const input: TouchAimInput = {
+      kind: "pointerMove",
+      pointerId: event.pointerId,
+      position: { x: event.clientX, y: event.clientY },
+      side: aimingSide(),
+      matchActive: isMatchActive(),
+    };
+    apply(input);
+  });
+  target.addEventListener("pointerup", (event) => {
+    const input: TouchAimInput = { kind: "pointerUp", pointerId: event.pointerId, matchActive: isMatchActive() };
+    apply(input);
+  });
+  target.addEventListener("pointercancel", (event) => {
+    const input: TouchAimInput = { kind: "pointerCancel", pointerId: event.pointerId };
+    apply(input);
+  });
+  target.addEventListener("blur", () => {
+    const input: TouchAimInput = { kind: "blur" };
+    apply(input);
+  });
+}
+
+function isTouchPointer(event: PointerEvent): boolean {
+  return TOUCH_POINTER_TYPES.has(event.pointerType);
+}
+
+function startsOnButton(event: PointerEvent): boolean {
+  return event.target instanceof Element && event.target.closest("button") !== null;
 }
 
 export function bindEscape(target: Window, onEscape: () => void): void {

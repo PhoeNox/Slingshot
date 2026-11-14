@@ -51,6 +51,7 @@ export function playRemoteMatch(remote: RemoteMatch): PlayedMatch {
   return {
     viewer,
     shakes: true,
+    aimingSide: () => remote.localSide,
     aim: (delta) => aimLockstep(remote, delta),
     fire: () => fireRemoteMatch(remote),
     step: () => stepRemoteMatch(remote),

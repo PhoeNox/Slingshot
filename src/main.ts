@@ -7,7 +7,7 @@ import type { AimDelta } from "./core/match";
 import { applyFit, applyOverlayFit, fitPlayingArea } from "./display";
 import { describeBackdropFrame } from "./frame";
 import { startGameLoop } from "./gameLoop";
-import { bindControls, bindEscape } from "./input";
+import { bindControls, bindEscape, bindTouchControls } from "./input";
 import { MAIN_MENU_ITEMS, PLAY_MENU_ITEMS } from "./navigation";
 import { hostPeerConnection, joinPeerConnection } from "./peerConnection";
 import { bindRemoteMatchScreens, type GuestScreenElements, type HostScreenElements } from "./remoteMatchScreens";
@@ -19,6 +19,7 @@ import { bindBracketFlash, bindMainMenuButton, bindMenuButtonEffects, bindMenuFo
 import { parseSettings, serialiseSettings, type Settings } from "./settings";
 import { readStoredSettings, writeStoredSettings } from "./settingsStorage";
 import {
+  aimingSideOf,
   aimMatch,
   createScreenSession,
   describeScreenSessionFrame,
@@ -94,6 +95,8 @@ async function start(): Promise<void> {
   const aimSessionMatch = (delta: AimDelta) => aimMatch(session, delta);
   const fireSessionMatch = () => fireMatch(session);
   bindControls(window, isSessionMatchActive, aimSessionMatch, fireSessionMatch);
+  const sessionAimingSide = () => aimingSideOf(session);
+  bindTouchControls(window, isSessionMatchActive, sessionAimingSide, aimSessionMatch, fireSessionMatch);
 
   const navigateBackFromCurrentScreen = () => navigateBack(window, session.state.screen);
   bindEscape(window, navigateBackFromCurrentScreen);
