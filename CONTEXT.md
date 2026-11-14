@@ -86,7 +86,7 @@ The link a host sends to let a guest join a remote match.
 _Avoid_: Invite code, room
 
 **Reply code**:
-The text a guest sends back to the host to complete joining a remote match.
+The text a guest sends back to the host to complete joining a remote match by hand, needed only when opening the invitation does not join on its own.
 _Avoid_: Answer, token
 
 ### Scoring
