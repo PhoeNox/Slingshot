@@ -115,6 +115,7 @@ const PARTICLE_SIZES: Record<ParticleSize, number> = { large: 3, small: 1.5 };
 const PARTICLE_COLOURS: Record<ParticleSize, string> = { large: COLOURS.lock, small: COLOURS.phosphor };
 
 const HUD_FONT_SIZE = 14;
+const MIN_HUD_TEXT_CSS_PX = 12;
 const HUD_TOP = 5;
 const ANGLE_INFO_LEFT = 290;
 const POWER_INFO_LEFT = 403;
@@ -127,6 +128,8 @@ const PANEL_OUTLINE_GAP = 4;
 const PANEL_TITLE_FONT_SIZE = 16;
 
 const MESSAGE_WIDTH = 450;
+const PANEL_SIDE_MARGIN = 20;
+const MAX_PANEL_SCALE = (PLAYING_AREA_WIDTH - 2 * PANEL_SIDE_MARGIN) / MESSAGE_WIDTH;
 const MESSAGE_BASE_HEIGHT = 190;
 const MESSAGE_HIT_EXTRA_HEIGHT = 40;
 const MESSAGE_TEXT_CENTRE_X = 224;
@@ -159,6 +162,12 @@ const ZOOM_OUTLINE_ALPHA = 0.5;
 
 const ATTRACT_DIM_COLOUR = "rgba(4, 8, 21, 0.55)";
 
+const TOP_LEFT: Readonly<Point> = { x: 0, y: 0 };
+const TOP_CENTRE: Readonly<Point> = { x: SCREEN_CENTRE_X, y: 0 };
+const TOP_RIGHT: Readonly<Point> = { x: PLAYING_AREA_WIDTH, y: 0 };
+const BOTTOM_CENTRE: Readonly<Point> = { x: SCREEN_CENTRE_X, y: PLAYING_AREA_HEIGHT };
+const SCREEN_CENTRE: Readonly<Point> = { x: SCREEN_CENTRE_X, y: SCREEN_CENTRE_Y };
+
 const PLAYING_AREA: Readonly<Rect> = { left: 0, top: 0, width: PLAYING_AREA_WIDTH, height: PLAYING_AREA_HEIGHT };
 
 const MATCH_STYLE: Readonly<PresentationStyle> = {
@@ -182,15 +191,20 @@ const VIEWER_STYLES: Record<Viewer["kind"], Readonly<PresentationStyle>> = {
   remote: MATCH_STYLE,
 };
 
+export function hudScaleFor(cssScale: number): number {
+  return Math.max(1, MIN_HUD_TEXT_CSS_PX / (HUD_FONT_SIZE * cssScale));
+}
+
 export function describeFrame(
   view: MatchView,
   display: Readonly<DisplaySettings>,
   debris: readonly Readonly<Particle>[],
   viewer: Readonly<Viewer>,
+  hudScale: number,
 ): FrameItem[] {
   const style = VIEWER_STYLES[viewer.kind];
   const scene = sceneItems(view, display, debris, style);
-  const hud = style.hud ? hudItems(view, localSideOf(viewer)) : [];
+  const hud = style.hud ? hudItems(view, localSideOf(viewer), hudScale) : [];
   return [...scene, ...hud];
 }
 
@@ -198,15 +212,36 @@ function localSideOf(viewer: Readonly<Viewer>): Side | undefined {
   return viewer.kind === "remote" ? viewer.localSide : undefined;
 }
 
-function hudItems(view: MatchView, localSide: Side | undefined): FrameItem[] {
+function hudItems(view: MatchView, localSide: Side | undefined, hudScale: number): FrameItem[] {
   const labels = playerLabels(localSide);
   const border = bounceBorderItems(view.rules.bounce);
-  const readouts = phaseReadoutItems(view);
-  const turn = turnItems(view, localSide);
+  const topReadouts = topReadoutItems(view);
+  const bottomReadouts = bottomReadoutItems(view, localSide);
   const message = roundOverMessageItems(view.phase, labels, localSide);
   const scores = scoreItems(view.scores, labels);
   const banner = roundBannerItems(view.roundNumber, view.roundStepCount);
-  return [...border, ...readouts, ...turn, ...message, ...scores, ...banner];
+  const panelScale = panelScaleFor(hudScale);
+  return [
+    ...border,
+    ...scaledAbout(TOP_CENTRE, hudScale, topReadouts),
+    ...scaledAbout(BOTTOM_CENTRE, hudScale, bottomReadouts),
+    ...scaledAbout(SCREEN_CENTRE, panelScale, message),
+    ...scaledAbout(TOP_LEFT, hudScale, [scores.left]),
+    ...scaledAbout(TOP_RIGHT, hudScale, [scores.right]),
+    ...banner,
+  ];
+}
+
+function panelScaleFor(hudScale: number): number {
+  return Math.min(hudScale, MAX_PANEL_SCALE);
+}
+
+function scaledAbout(pivot: Readonly<Point>, scale: number, items: FrameItem[]): FrameItem[] {
+  if (scale === 1 || items.length === 0) {
+    return items;
+  }
+  const transform: Transform = { x: pivot.x * (1 - scale), y: pivot.y * (1 - scale), rotation: 0, scale };
+  return [{ kind: "group", transform, items }];
 }
 
 function playerLabels(localSide: Side | undefined): PlayerLabels {
@@ -219,7 +254,7 @@ function playerLabels(localSide: Side | undefined): PlayerLabels {
 }
 
 function turnItems(view: MatchView, localSide: Side | undefined): TextItem[] {
-  if (localSide === undefined || view.phase.kind !== "aiming") {
+  if (localSide === undefined) {
     return [];
   }
   const text = view.activePlayer === localSide ? LOCAL_TURN_TEXT : OPPONENT_TURN_TEXT;
@@ -227,12 +262,12 @@ function turnItems(view: MatchView, localSide: Side | undefined): TextItem[] {
   return [hudText(text, colour, SCREEN_CENTRE_X, TIMEOUT_INFO_BOTTOM, "center", "bottom")];
 }
 
-export function describeRemoteNotice(notice: RemoteNotice): FrameItem[] {
+export function describeRemoteNotice(notice: RemoteNotice, hudScale: number): FrameItem[] {
   const box = noticeBox();
   const panel = roundOverPanelItems(box);
   const title = panelTitleItem(NOTICE_TITLES[notice], MESSAGE_TITLE_TOP);
   const detail = hudText(NOTICE_DETAILS[notice], COLOURS.instrumentDim, MESSAGE_TEXT_CENTRE_X, NOTICE_DETAIL_TOP, "center", "top");
-  return [
+  const items: FrameItem[] = [
     ...panel,
     {
       kind: "group",
@@ -240,6 +275,8 @@ export function describeRemoteNotice(notice: RemoteNotice): FrameItem[] {
       items: [title, detail],
     },
   ];
+  const panelScale = panelScaleFor(hudScale);
+  return scaledAbout(SCREEN_CENTRE, panelScale, items);
 }
 
 function noticeBox(): Rect {
@@ -348,12 +385,23 @@ function phaseSceneItems(view: MatchView, zoom: Readonly<Zoom>, aimReticle: bool
   }
 }
 
-function phaseReadoutItems(view: MatchView): TextItem[] {
+function topReadoutItems(view: MatchView): TextItem[] {
   switch (view.phase.kind) {
     case "aiming":
       return aimInfoItems(view.ships[view.activePlayer].aim);
     case "inFlight":
-      return flightHudItems(view.powerPenalty, view.phase);
+      return [powerPenaltyItem(view.powerPenalty)];
+    case "roundOver":
+      return [];
+  }
+}
+
+function bottomReadoutItems(view: MatchView, localSide: Side | undefined): TextItem[] {
+  switch (view.phase.kind) {
+    case "aiming":
+      return turnItems(view, localSide);
+    case "inFlight":
+      return timeoutItems(view.phase);
     case "roundOver":
       return [];
   }
@@ -505,10 +553,9 @@ function flightSceneItems(view: MatchView, flight: InFlightView, missileSize: nu
   return [...ships, ...afterglow, missile];
 }
 
-function flightHudItems(powerPenalty: number, flight: InFlightView): TextItem[] {
+function powerPenaltyItem(powerPenalty: number): TextItem {
   const penaltyText = powerPenaltyText(powerPenalty);
-  const timeout = timeoutItems(flight);
-  return [hudText(penaltyText, COLOURS.instrumentDim, SCREEN_CENTRE_X, HUD_TOP, "center", "top"), ...timeout];
+  return hudText(penaltyText, COLOURS.instrumentDim, SCREEN_CENTRE_X, HUD_TOP, "center", "top");
 }
 
 function timeoutItems(flight: InFlightView): TextItem[] {
@@ -530,12 +577,12 @@ function missileItem(flyingMissile: Readonly<Missile>, size: number): ImageItem 
   return imageItem("missile", box, 1);
 }
 
-function scoreItems(matchScores: MatchView["scores"], labels: Readonly<PlayerLabels>): TextItem[] {
+function scoreItems(matchScores: MatchView["scores"], labels: Readonly<PlayerLabels>): Record<Side, TextItem> {
   const texts = scoreTexts(matchScores, labels);
-  return [
-    hudText(texts.left, PLAYER_COLOURS.left, LEFT_SCORE_LEFT, HUD_TOP, "left", "top"),
-    hudText(texts.right, PLAYER_COLOURS.right, RIGHT_SCORE_RIGHT, HUD_TOP, "right", "top"),
-  ];
+  return {
+    left: hudText(texts.left, PLAYER_COLOURS.left, LEFT_SCORE_LEFT, HUD_TOP, "left", "top"),
+    right: hudText(texts.right, PLAYER_COLOURS.right, RIGHT_SCORE_RIGHT, HUD_TOP, "right", "top"),
+  };
 }
 
 function roundBannerItems(round: number, stepsIntoRound: number): TextItem[] {

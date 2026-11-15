@@ -28,6 +28,7 @@ import {
   describeFrame,
   describeRemoteNotice,
   HOT_SEAT_VIEWER,
+  hudScaleFor,
   type DisplaySettings,
   type Viewer,
 } from "./frame";
@@ -38,10 +39,12 @@ import type {
   GroupItem,
   ImageItem,
   LinesItem,
+  Rect,
   RingItem,
   SpriteFrameItem,
   StrokeRectItem,
   TextItem,
+  Transform,
 } from "./frameItems";
 
 const SIDES: readonly Side[] = ["left", "right"];
@@ -50,6 +53,11 @@ const SHEET_FACING: Record<Side, number> = { left: 90, right: 270 };
 const HIT_TITLES: Record<Side, string> = { left: "Player 1 hit player 2", right: "Player 2 hit player 1" };
 
 const CENTRED_HALF_ZOOM: Zoom = { scale: 0.5, left: -400, top: -300 };
+const DESKTOP_HUD_SCALE = 1;
+const SMALLEST_CSS_SCALE = 0.5;
+const ESTIMATED_CHAR_WIDTH_EM = 0.5;
+const IDENTITY: Transform = { x: 0, y: 0, rotation: 0, scale: 1 };
+
 const ABOVE_HALF_ZOOM: Zoom = { scale: 0.5, left: 0, top: -600 };
 
 const CONTOURS_SHOWN: DisplaySettings = { gravityWellContours: true };
@@ -102,20 +110,20 @@ function ringsAround(frame: FrameItem[], planet: Planet): RingItem[] {
 }
 
 function frameOf(match: Match, display = CONTOURS_SHOWN): FrameItem[] {
-  return flatten(describeFrame(matchView(match), display, NO_DEBRIS, HOT_SEAT_VIEWER));
+  return flatten(describeFrame(matchView(match), display, NO_DEBRIS, HOT_SEAT_VIEWER, DESKTOP_HUD_SCALE));
 }
 
 function frameOfView(view: MatchView): FrameItem[] {
-  return flatten(describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS, HOT_SEAT_VIEWER));
+  return flatten(describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS, HOT_SEAT_VIEWER, DESKTOP_HUD_SCALE));
 }
 
 function remoteFrameOfView(view: MatchView, localSide: Side): FrameItem[] {
   const viewer: Viewer = { kind: "remote", localSide };
-  return flatten(describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS, viewer));
+  return flatten(describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS, viewer, DESKTOP_HUD_SCALE));
 }
 
 function attractFrameOf(match: Match, display = CONTOURS_SHOWN): FrameItem[] {
-  return flatten(describeFrame(matchView(match), display, NO_DEBRIS, ATTRACT_VIEWER));
+  return flatten(describeFrame(matchView(match), display, NO_DEBRIS, ATTRACT_VIEWER, DESKTOP_HUD_SCALE));
 }
 
 function flatten(items: FrameItem[]): FrameItem[] {
@@ -253,6 +261,67 @@ function roundOverFrameOf(result: RoundResult): FrameItem[] {
   hitOpponent(match);
   const phase: RoundOverView = { kind: "roundOver", result, nextShooter: "right", stepsSinceRoundOver: 10 };
   return frameOfView({ ...matchView(match), phase });
+}
+
+interface PlacedText {
+  text: string;
+  left: number;
+  right: number;
+  fontSize: number;
+}
+
+function composed(outer: Readonly<Transform>, inner: Readonly<Transform>): Transform {
+  return {
+    x: outer.x + outer.scale * inner.x,
+    y: outer.y + outer.scale * inner.y,
+    rotation: 0,
+    scale: outer.scale * inner.scale,
+  };
+}
+
+function placedTexts(items: FrameItem[], transform: Readonly<Transform> = IDENTITY): PlacedText[] {
+  return items.flatMap((item) => {
+    if (item.kind === "group") {
+      return placedTexts(item.items, composed(transform, item.transform));
+    }
+    if (item.kind !== "text") {
+      return [];
+    }
+    const x = transform.x + transform.scale * item.x;
+    const fontSize = item.fontSize * transform.scale;
+    const width = item.text.length * ESTIMATED_CHAR_WIDTH_EM * fontSize;
+    const left = item.align === "left" ? x : item.align === "right" ? x - width : x - width / 2;
+    return [{ text: item.text, left, right: left + width, fontSize }];
+  });
+}
+
+function placedFillRects(items: FrameItem[], transform: Readonly<Transform> = IDENTITY): Rect[] {
+  return items.flatMap((item) => {
+    if (item.kind === "group") {
+      return placedFillRects(item.items, composed(transform, item.transform));
+    }
+    if (item.kind !== "fillRect") {
+      return [];
+    }
+    const rect = item.rect;
+    return [
+      {
+        left: transform.x + transform.scale * rect.left,
+        top: transform.y + transform.scale * rect.top,
+        width: rect.width * transform.scale,
+        height: rect.height * transform.scale,
+      },
+    ];
+  });
+}
+
+function overlaps(texts: readonly PlacedText[]): boolean {
+  const sorted = [...texts].sort((a, b) => a.left - b.left);
+  return sorted.some((text, index) => index > 0 && text.left < sorted[index - 1].right);
+}
+
+function isWithinPlayingArea(rect: Readonly<Rect>): boolean {
+  return rect.left >= 0 && rect.left + rect.width <= 800 && rect.top >= 0 && rect.top + rect.height <= 600;
 }
 
 describe("aiming frame", () => {
@@ -408,6 +477,79 @@ describe("HUD", () => {
 
     expect(textItemOf(frame, (text) => text.startsWith("Angle")).font).toBe("text");
     expect(textItemOf(frame, (text) => text === "Round 1").font).toBe("title");
+  });
+});
+
+describe("HUD scale", () => {
+  const smallestHudScale = hudScaleFor(SMALLEST_CSS_SCALE);
+
+  test("is 1 at the playing area's own size and larger", () => {
+    expect(hudScaleFor(1)).toBe(1);
+    expect(hudScaleFor(2)).toBe(1);
+  });
+
+  test("keeps HUD text at 12 CSS px on a small canvas", () => {
+    expect(hudScaleFor(0.6) * 14 * 0.6).toBeCloseTo(12);
+    expect(smallestHudScale * 14 * SMALLEST_CSS_SCALE).toBeCloseTo(12);
+  });
+
+  test("leaves the desktop frame unscaled", () => {
+    const match = emptyMatch(52);
+
+    const frame = describeFrame(matchView(match), CONTOURS_SHOWN, NO_DEBRIS, HOT_SEAT_VIEWER, DESKTOP_HUD_SCALE);
+
+    expect(frame.some((item) => item.kind === "group" && item.transform.scale > 1)).toBe(false);
+  });
+
+  test("enlarges the top readouts and scores without overlapping them on the smallest canvas", () => {
+    const match = emptyMatch(52);
+    aimAt(match, 359.98, 350);
+    const viewer: Viewer = { kind: "remote", localSide: "left" };
+    const view = { ...matchView(match), scores: { left: -12000, right: 12000 } };
+
+    const frame = describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS, viewer, smallestHudScale);
+
+    const texts = placedTexts(frame);
+    const topRow = texts.filter((text) => /^(Angle|Power:|You  --|\d)/.test(text.text));
+    expect(topRow).toHaveLength(4);
+    expect(topRow.every((text) => text.fontSize * SMALLEST_CSS_SCALE >= 12 - 1e-9)).toBe(true);
+    expect(topRow.every((text) => text.left >= 0 && text.right <= 800)).toBe(true);
+    expect(overlaps(topRow)).toBe(false);
+  });
+
+  test("keeps the power penalty and timeout centred while enlarging them", () => {
+    const match = createMatch(53, structuredClone(EMPTY_LAYOUT), { ...DEFAULT_MATCH_RULES, timeoutSeconds: 10 });
+    fire(match);
+
+    const texts = placedTexts(describeFrame(matchView(match), CONTOURS_SHOWN, NO_DEBRIS, HOT_SEAT_VIEWER, smallestHudScale));
+
+    const centred = texts.filter((text) => text.text.startsWith("Power penalty") || text.text.startsWith("Timeout"));
+    expect(centred).toHaveLength(2);
+    for (const text of centred) {
+      expect((text.left + text.right) / 2).toBeCloseTo(399);
+      expect(text.fontSize).toBeCloseTo(14 * smallestHudScale);
+    }
+  });
+
+  test("enlarges the round-over message within the playing area", () => {
+    const match = emptyMatch(30);
+    hitOpponent(match);
+    const phase: RoundOverView = { kind: "roundOver", result: HIT, nextShooter: "right", stepsSinceRoundOver: 10 };
+
+    const frame = describeFrame({ ...matchView(match), phase }, CONTOURS_SHOWN, NO_DEBRIS, HOT_SEAT_VIEWER, smallestHudScale);
+
+    const panels = placedFillRects(frame);
+    expect(panels).toHaveLength(1);
+    expect(panels[0].width).toBeGreaterThan(450);
+    expect(isWithinPlayingArea(panels[0])).toBe(true);
+  });
+
+  test("enlarges the remote notice within the playing area", () => {
+    const panels = placedFillRects(describeRemoteNotice("versionMismatch", smallestHudScale));
+
+    expect(panels).toHaveLength(1);
+    expect(panels[0].width).toBeGreaterThan(450);
+    expect(isWithinPlayingArea(panels[0])).toBe(true);
   });
 });
 
@@ -631,7 +773,7 @@ describe("planet visibility", () => {
   function roundOverFrameAfter(match: Match, stepsSinceRoundOver: number, display = CONTOURS_SHOWN): FrameItem[] {
     const phase: RoundOverView = { kind: "roundOver", result: HIT, nextShooter: "right", stepsSinceRoundOver };
     const view = { ...matchView(match), phase, roundStepCount: 300 + stepsSinceRoundOver };
-    return flatten(describeFrame(view, display, NO_DEBRIS, HOT_SEAT_VIEWER));
+    return flatten(describeFrame(view, display, NO_DEBRIS, HOT_SEAT_VIEWER, DESKTOP_HUD_SCALE));
   }
 
   test("planets that are always visible stay fully shown throughout the round", () => {
@@ -825,7 +967,7 @@ describe("in-flight frame", () => {
 
   test("the zoomed scene is one group that maps the zoom view onto the screen", () => {
     const groupTransformsOf = (zoom: Zoom) =>
-      describeFrame(zoomedFlightView(24, zoom), CONTOURS_SHOWN, NO_DEBRIS, HOT_SEAT_VIEWER)
+      describeFrame(zoomedFlightView(24, zoom), CONTOURS_SHOWN, NO_DEBRIS, HOT_SEAT_VIEWER, DESKTOP_HUD_SCALE)
         .filter((item): item is GroupItem => item.kind === "group")
         .map((item) => item.transform);
 
@@ -837,7 +979,7 @@ describe("in-flight frame", () => {
     const layout = { ...EMPTY_LAYOUT, planets: [{ ...LIGHT_PLANET }] };
     const view = zoomedFlightView(25, CENTRED_HALF_ZOOM, layout);
 
-    const zoomed = flatten(zoomGroupsOf(describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS, HOT_SEAT_VIEWER))[0].items);
+    const zoomed = flatten(zoomGroupsOf(describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS, HOT_SEAT_VIEWER, DESKTOP_HUD_SCALE))[0].items);
 
     expect(imagesOf(zoomed, "planet1")).toHaveLength(1);
     expect(ringsAround(zoomed, LIGHT_PLANET)).toHaveLength(3);
@@ -878,7 +1020,7 @@ describe("in-flight frame", () => {
   test("the HUD is drawn outside the zoom group", () => {
     const view = zoomedFlightView(28, CENTRED_HALF_ZOOM);
 
-    const frame = describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS, HOT_SEAT_VIEWER);
+    const frame = describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS, HOT_SEAT_VIEWER, DESKTOP_HUD_SCALE);
 
     const zoomed = flatten(zoomGroupsOf(frame)[0].items);
     expect(textsOf(zoomed)).toHaveLength(0);
@@ -889,7 +1031,7 @@ describe("in-flight frame", () => {
   test("a faint playing-area outline is drawn on screen where the zoom view puts the playing area", () => {
     const view = zoomedFlightView(29, ABOVE_HALF_ZOOM);
 
-    const outlines = zoomOutlinesOf(describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS, HOT_SEAT_VIEWER));
+    const outlines = zoomOutlinesOf(describeFrame(view, CONTOURS_SHOWN, NO_DEBRIS, HOT_SEAT_VIEWER, DESKTOP_HUD_SCALE));
 
     expect(outlines).toHaveLength(1);
     expect(outlines[0].alpha).toBeLessThan(1);
@@ -1148,7 +1290,7 @@ describe("remote match HUD", () => {
 
 describe("remote notice", () => {
   test("shows the reason in a glass panel with the way back", () => {
-    const frame = flatten(describeRemoteNotice("outOfSync"));
+    const frame = flatten(describeRemoteNotice("outOfSync", DESKTOP_HUD_SCALE));
 
     expect(frame.filter((item) => item.kind === "fillRect")).toEqual([
       expect.objectContaining({ rect: { left: 174, top: 244, width: 450, height: 110 } }),
@@ -1162,7 +1304,7 @@ describe("remote notice", () => {
     ["versionMismatch", "Different game version, reload both"],
     ["awaitingHost", "Waiting for the host…"],
   ] as const)("titles %s as %s", (notice, title) => {
-    expect(textsOf(flatten(describeRemoteNotice(notice)))).toContain(title);
+    expect(textsOf(flatten(describeRemoteNotice(notice, DESKTOP_HUD_SCALE)))).toContain(title);
   });
 });
 
@@ -1270,7 +1412,7 @@ describe("debris", () => {
   }
 
   test("each particle is drawn as a dot at its position, fading with its remaining lifetime", () => {
-    const dots = dotsOf(describeFrame(matchView(emptyMatch(41)), CONTOURS_SHOWN, DEBRIS, HOT_SEAT_VIEWER));
+    const dots = dotsOf(describeFrame(matchView(emptyMatch(41)), CONTOURS_SHOWN, DEBRIS, HOT_SEAT_VIEWER, DESKTOP_HUD_SCALE));
 
     expect(dots).toEqual([
       { kind: "dot", colour: COLOURS.lock, centre: { x: 120, y: 80 }, size: 3, alpha: 0.5 },
@@ -1285,13 +1427,13 @@ describe("debris", () => {
   test("debris is drawn inside the zoom group at a constant on-screen size", () => {
     const view = zoomedFlightView(43, CENTRED_HALF_ZOOM);
 
-    const zoomed = zoomGroupsOf(describeFrame(view, CONTOURS_SHOWN, [LARGE_PARTICLE], HOT_SEAT_VIEWER))[0].items;
+    const zoomed = zoomGroupsOf(describeFrame(view, CONTOURS_SHOWN, [LARGE_PARTICLE], HOT_SEAT_VIEWER, DESKTOP_HUD_SCALE))[0].items;
 
     expect(dotsOf(zoomed)).toEqual([expect.objectContaining({ centre: { x: 120, y: 80 }, size: 6 })]);
   });
 
   test("debris is drawn in attract mode", () => {
-    const frame = describeFrame(matchView(emptyMatch(44)), CONTOURS_SHOWN, DEBRIS, ATTRACT_VIEWER);
+    const frame = describeFrame(matchView(emptyMatch(44)), CONTOURS_SHOWN, DEBRIS, ATTRACT_VIEWER, DESKTOP_HUD_SCALE);
 
     expect(dotsOf(frame)).toHaveLength(2);
   });

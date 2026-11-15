@@ -177,11 +177,12 @@ export function describeScreenSessionFrame(
   session: ScreenSession,
   stars: readonly Star[],
   display: Readonly<DisplaySettings>,
+  hudScale: number,
   reducedMotion: boolean,
   timeMs: number,
 ): FrameLayer[] {
   const starsLayer = starsLayerOf(stars, reducedMotion, timeMs);
-  const playedLayer = shakenPlayedLayer(session, display, reducedMotion);
+  const playedLayer = shakenPlayedLayer(session, display, hudScale, reducedMotion);
   return [BACKDROP_LAYER, starsLayer, playedLayer];
 }
 
@@ -193,12 +194,13 @@ function starsLayerOf(stars: readonly Star[], reducedMotion: boolean, timeMs: nu
 function shakenPlayedLayer(
   session: ScreenSession,
   display: Readonly<DisplaySettings>,
+  hudScale: number,
   reducedMotion: boolean,
 ): ItemsLayer {
   const played = session.played;
   const view = played.view();
-  const matchItems = view === undefined ? [] : describeFrame(view, display, session.debris, played.viewer);
-  const noticeItems = noticeItemsOf(played.notice());
+  const matchItems = view === undefined ? [] : describeFrame(view, display, session.debris, played.viewer, hudScale);
+  const noticeItems = noticeItemsOf(played.notice(), hudScale);
   const shakes = played.shakes && !reducedMotion;
   const shake = shakes && view !== undefined ? screenShakeOffset(view, session.random) : NO_SHAKE;
   const items = [...matchItems, ...noticeItems];
@@ -211,6 +213,6 @@ function shakenGroup(items: FrameItem[], shake: Readonly<Point>): GroupItem {
   return { kind: "group", transform, items };
 }
 
-function noticeItemsOf(notice: RemoteNotice | undefined): FrameItem[] {
-  return notice === undefined ? [] : describeRemoteNotice(notice);
+function noticeItemsOf(notice: RemoteNotice | undefined, hudScale: number): FrameItem[] {
+  return notice === undefined ? [] : describeRemoteNotice(notice, hudScale);
 }

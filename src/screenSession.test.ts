@@ -36,6 +36,7 @@ interface PlayedFrame {
 }
 
 const MAX_STEPS = 5000;
+const DESKTOP_HUD_SCALE = 1;
 const ANGLE_DELTAS = Array.from({ length: 36 }, (_, i) => i * 10);
 const POWER_DELTAS = [0, 50, 100, 150, 200];
 
@@ -58,7 +59,7 @@ function shownView(session: ScreenSession): MatchView {
 }
 
 function frameOf(session: ScreenSession, reducedMotion: boolean): FrameLayer[] {
-  return describeScreenSessionFrame(session, STARS, CONTOURS_HIDDEN, reducedMotion, FRAME_TIME_MS);
+  return describeScreenSessionFrame(session, STARS, CONTOURS_HIDDEN, DESKTOP_HUD_SCALE, reducedMotion, FRAME_TIME_MS);
 }
 
 function shakenGroupOf(frame: FrameLayer[]): GroupItem {
@@ -318,7 +319,7 @@ describe("describing the frame", () => {
     const session = sessionOn("match");
 
     expect(playedFrameOf(session).items).toEqual(
-      describeFrame(shownView(session), CONTOURS_HIDDEN, session.debris, HOT_SEAT_VIEWER),
+      describeFrame(shownView(session), CONTOURS_HIDDEN, session.debris, HOT_SEAT_VIEWER, DESKTOP_HUD_SCALE),
     );
   });
 
@@ -326,7 +327,7 @@ describe("describing the frame", () => {
     const session = sessionOn("mainMenu", "credits");
 
     expect(playedFrameOf(session).items).toEqual(
-      describeFrame(shownView(session), CONTOURS_HIDDEN, session.debris, ATTRACT_VIEWER),
+      describeFrame(shownView(session), CONTOURS_HIDDEN, session.debris, ATTRACT_VIEWER, DESKTOP_HUD_SCALE),
     );
   });
 });
@@ -341,7 +342,7 @@ describe("frame layers", () => {
     expect(frame[0]).toEqual({ kind: "items", items: describeBackdropFrame() });
     expect(frame[1]).toEqual({ kind: "stars", stars: STARS, timeMs: FRAME_TIME_MS });
     expect(shakenGroupOf(frame).items).toEqual(
-      describeFrame(shownView(session), CONTOURS_HIDDEN, session.debris, HOT_SEAT_VIEWER),
+      describeFrame(shownView(session), CONTOURS_HIDDEN, session.debris, HOT_SEAT_VIEWER, DESKTOP_HUD_SCALE),
     );
   });
 

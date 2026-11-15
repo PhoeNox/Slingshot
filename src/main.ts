@@ -4,6 +4,7 @@
 import "./style.css";
 import { loadFonts, loadSprites } from "./assets";
 import { applyFit, applyOverlayFit, fitPlayingArea } from "./display";
+import { hudScaleFor } from "./frame";
 import { startGameLoop } from "./gameLoop";
 import { bindEscape, bindPlayerInput } from "./input";
 import { MAIN_MENU_ITEMS, PLAY_MENU_ITEMS } from "./navigation";
@@ -69,10 +70,12 @@ async function start(): Promise<void> {
   const settingsStorage = localSettingsStorage(window);
   const settings = createSettingsStore(settingsStorage);
 
+  let hudScale = 1;
   const fitStage = () => {
     const fit = fitPlayingArea(stage.clientWidth, stage.clientHeight, window.devicePixelRatio);
     applyFit(canvas, context, fit);
     applyOverlayFit(elements.overlay, fit);
+    hudScale = hudScaleFor(fit.cssScale);
   };
   window.addEventListener("resize", fitStage);
   fitStage();
@@ -128,7 +131,7 @@ async function start(): Promise<void> {
   const stars = generateStars(Math.random);
   const starSprites = renderStarSprites();
   const render = (timeMs: number) => {
-    const frame = describeScreenSessionFrame(session, stars, settings.display(), reducedMotion.matches, timeMs);
+    const frame = describeScreenSessionFrame(session, stars, settings.display(), hudScale, reducedMotion.matches, timeMs);
     drawLayers(context, sprites, starSprites, frame);
     const gestureHintShown = awaitsFirstShot(session);
     showGestureHint(elements.keyHint, gestureHintShown);

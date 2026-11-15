@@ -4,6 +4,7 @@
 import { PLAYING_AREA_HEIGHT, PLAYING_AREA_WIDTH } from "./core/playingArea";
 
 export interface CanvasFit {
+  cssScale: number;
   cssWidth: number;
   cssHeight: number;
   backingWidth: number;
@@ -15,6 +16,7 @@ export function fitPlayingArea(availableWidth: number, availableHeight: number, 
   const cssWidth = Math.floor(PLAYING_AREA_WIDTH * cssScale);
   const cssHeight = Math.floor(PLAYING_AREA_HEIGHT * cssScale);
   return {
+    cssScale,
     cssWidth,
     cssHeight,
     backingWidth: Math.round(cssWidth * devicePixelRatio),
