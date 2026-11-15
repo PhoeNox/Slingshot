@@ -570,6 +570,39 @@ body:has(#overlay[hidden]) {
   }
 }
 
+@media (pointer: coarse) and (orientation: landscape) {
+  body {
+    flex-direction: row;
+  }
+
+  .key-hint {
+    order: -1;
+    box-sizing: border-box;
+    flex: 0 0 144px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px 8px;
+  }
+
+  .key-hint .gesture-hint {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .hint-separator {
+    display: none;
+  }
+
+  .key-hint .hint-button {
+    margin: 0;
+  }
+
+  #match-menu-button {
+    margin-top: auto;
+  }
+}
+
 .rotate-prompt {
   display: none;
 }
