@@ -4,7 +4,7 @@
 import { COLOURS } from "./colours";
 import type { PlanetCountRange } from "./core/match";
 import { canEnterFullscreen, enterLandscapeFullscreen, isFullscreen, toggleLandscapeFullscreen } from "./fullscreen";
-import { backTargetFor, hashFor, moveFocus, resolveHash, showsMatch, type FixedRouteScreen, type FocusStep, type MenuItem, type Route, type Screen } from "./navigation";
+import { moveFocus, showsMatch, type FixedRouteScreen, type FocusStep, type MenuItem, type Screen } from "./navigation";
 import { scrambleLabel } from "./scramble";
 import { SETTING_KEYS, SETTING_RULES, withRangeEnd, type AnySettingRule, type RangeEnd, type SettingChoice, type SettingKey, type Settings } from "./settings";
 import type { SettingsStore } from "./settingsStore";
@@ -56,18 +56,19 @@ const TITLE_ARC_TRACE_OPTIONS: KeyframeAnimationOptions = {
   fill: "backwards",
 };
 
-export function renderMenuItems(menu: HTMLElement, items: readonly MenuItem[]): void {
-  const buttons = items.map(menuButton);
+export type NavigateTo = (screen: FixedRouteScreen) => void;
+
+export function renderMenuItems(menu: HTMLElement, items: readonly MenuItem[], navigateTo: NavigateTo): void {
+  const buttons = items.map((item) => menuButton(item, navigateTo));
   menu.replaceChildren(...buttons);
 }
 
-function menuButton(item: MenuItem): HTMLButtonElement {
-  const hash = hashFor(item.screen);
+function menuButton(item: MenuItem, navigateTo: NavigateTo): HTMLButtonElement {
   const button = document.createElement("button");
   button.type = "button";
   button.textContent = item.label;
   button.addEventListener("click", () => {
-    location.hash = hash;
+    navigateTo(item.screen);
   });
   return button;
 }
@@ -335,33 +336,8 @@ function chosenValue<T>(select: HTMLSelectElement, choices: readonly SettingChoi
   return choices[select.selectedIndex].value;
 }
 
-export function bindMainMenuButton(button: HTMLButtonElement): void {
-  const mainMenuHash = hashFor("mainMenu");
+export function bindMainMenuButton(button: HTMLButtonElement, navigateTo: NavigateTo): void {
   button.addEventListener("click", () => {
-    location.hash = mainMenuHash;
+    navigateTo("mainMenu");
   });
-}
-
-export function navigateBack(target: Window, screen: Screen): void {
-  const backTarget = backTargetFor(screen);
-  if (backTarget !== undefined) {
-    navigateTo(target, backTarget);
-  }
-}
-
-export function navigateTo(target: Window, screen: FixedRouteScreen): void {
-  target.location.hash = hashFor(screen);
-}
-
-export function bindScreenRoutes(target: Window, enterRoute: (route: Route) => void): void {
-  const applyHash = () => {
-    const route = resolveHash(target.location.hash);
-    if (route.replace) {
-      const canonicalHash = hashFor(route.screen);
-      target.history.replaceState(null, "", canonicalHash);
-    }
-    enterRoute(route);
-  };
-  target.addEventListener("hashchange", applyHash);
-  applyHash();
 }

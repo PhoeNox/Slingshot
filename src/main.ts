@@ -6,6 +6,7 @@ import { loadFonts, loadSprites } from "./assets";
 import { applyFit, applyOverlayFit, fitPlayingArea } from "./display";
 import { hudScaleFor } from "./frame";
 import { startGameLoop } from "./gameLoop";
+import { createHashNavigation, windowHashLocation } from "./hashNavigation";
 import { bindEscape, bindPlayerInput } from "./input";
 import { MAIN_MENU_ITEMS, PLAY_MENU_ITEMS } from "./navigation";
 import { hostPeerConnection, joinPeerConnection } from "./peerConnection";
@@ -13,7 +14,7 @@ import { bindRemoteMatchScreens, type GuestScreenElements, type HostScreenElemen
 import type { PeerConnectors } from "./remoteVisit";
 import { drawLayers } from "./renderer";
 import { nostrReplyRelay } from "./replyRelay";
-import { bindBracketFlash, bindFullscreenButton, bindFullscreenToggle, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, bindSettingControls, bindSettingsTabs, navigateBack, navigateTo, renderMenuItems, showGestureHint, showScreen, traceTitleArc, type ScreenElements } from "./screens";
+import { bindBracketFlash, bindFullscreenButton, bindFullscreenToggle, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindSettingControls, bindSettingsTabs, renderMenuItems, showGestureHint, showScreen, traceTitleArc, type ScreenElements } from "./screens";
 import { localSettingsStorage } from "./settingsStorage";
 import { createSettingsStore } from "./settingsStore";
 import { createScreenSession, type ScreenSessionAdapters } from "./screenSession";
@@ -81,9 +82,12 @@ async function start(): Promise<void> {
   window.addEventListener("resize", fitStage);
   fitStage();
 
-  renderMenuItems(menu, MAIN_MENU_ITEMS);
+  const hashLocation = windowHashLocation(window);
+  const navigation = createHashNavigation(hashLocation);
+
+  renderMenuItems(menu, MAIN_MENU_ITEMS, navigation.navigateTo);
   bindMenuFocusKeys(menu);
-  renderMenuItems(playMenu, PLAY_MENU_ITEMS);
+  renderMenuItems(playMenu, PLAY_MENU_ITEMS, navigation.navigateTo);
   bindMenuFocusKeys(playMenu);
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   const menuButtons = elements.overlay.querySelectorAll<HTMLButtonElement>(".menu button");
@@ -91,15 +95,15 @@ async function start(): Promise<void> {
     bindMenuButtonEffects(button, reducedMotion);
   }
   bindBracketFlash(matchMenuButton);
-  bindMainMenuButton(matchMenuButton);
+  bindMainMenuButton(matchMenuButton, navigation.navigateTo);
   bindBracketFlash(rotateFullscreenButton);
   bindFullscreenButton(rotateFullscreenButton, window);
   bindBracketFlash(fullscreenToggleButton);
   bindFullscreenToggle(fullscreenToggleButton, window);
-  bindMainMenuButton(settingsBackButton);
-  bindMainMenuButton(elements.creditsBackButton);
-  bindMainMenuButton(elements.hostBackButton);
-  bindMainMenuButton(elements.guestBackButton);
+  bindMainMenuButton(settingsBackButton, navigation.navigateTo);
+  bindMainMenuButton(elements.creditsBackButton, navigation.navigateTo);
+  bindMainMenuButton(elements.hostBackButton, navigation.navigateTo);
+  bindMainMenuButton(elements.guestBackButton, navigation.navigateTo);
   const codeButtons = elements.overlay.querySelectorAll<HTMLButtonElement>(".code-button");
   for (const button of codeButtons) {
     bindBracketFlash(button);
@@ -116,7 +120,7 @@ async function start(): Promise<void> {
     random: Math.random,
     settings,
     showScreen: (screen) => showScreen(elements, screen),
-    navigateTo: (screen) => navigateTo(window, screen),
+    navigateTo: navigation.navigateTo,
     peers,
     relay,
     visitScreens,
@@ -125,10 +129,10 @@ async function start(): Promise<void> {
 
   bindPlayerInput(window, session);
 
-  const navigateBackFromCurrentScreen = () => navigateBack(window, session.screen());
+  const navigateBackFromCurrentScreen = () => navigation.navigateBack(session.screen());
   bindEscape(window, navigateBackFromCurrentScreen);
 
-  bindScreenRoutes(window, session.enterRoute);
+  navigation.bindRoutes(session.enterRoute);
   traceTitleArc(titleArc, reducedMotion);
 
   const wakeLock = screenWakeLock(window);
