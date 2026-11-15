@@ -13,10 +13,10 @@ import type { PeerConnectors } from "./remoteVisit";
 import { drawLayers } from "./renderer";
 import { nostrReplyRelay } from "./replyRelay";
 import { createRouteController, randomSeed, type RouteAdapters } from "./routeController";
-import { bindBracketFlash, bindFullscreenButton, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, bindSettingControls, bindSettingsTabs, navigateBack, navigateTo, renderMenuItems, showScreen, traceTitleArc, type ScreenElements } from "./screens";
+import { bindBracketFlash, bindFullscreenButton, bindFullscreenToggle, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, bindSettingControls, bindSettingsTabs, navigateBack, navigateTo, renderMenuItems, showGestureHint, showScreen, traceTitleArc, type ScreenElements } from "./screens";
 import { localSettingsStorage } from "./settingsStorage";
 import { createSettingsStore } from "./settingsStore";
-import { createScreenSession, describeScreenSessionFrame, submitReplyCode } from "./screenSession";
+import { awaitsFirstShot, createScreenSession, describeScreenSessionFrame, submitReplyCode } from "./screenSession";
 import { renderStarSprites } from "./starLayer";
 import { generateStars } from "./stars";
 
@@ -58,6 +58,7 @@ async function start(): Promise<void> {
   const playMenu = document.querySelector<HTMLElement>("#play-menu .menu")!;
   const matchMenuButton = document.querySelector<HTMLButtonElement>("#match-menu-button")!;
   const rotateFullscreenButton = document.querySelector<HTMLButtonElement>("#rotate-fullscreen-button")!;
+  const fullscreenToggleButton = document.querySelector<HTMLButtonElement>("#fullscreen-toggle-button")!;
   const settingsBackButton = document.querySelector<HTMLButtonElement>("#settings-back-button")!;
   const titleArc = document.querySelector<SVGPathElement>("#main-menu .title-arc path")!;
 
@@ -94,6 +95,8 @@ async function start(): Promise<void> {
   bindMainMenuButton(matchMenuButton);
   bindBracketFlash(rotateFullscreenButton);
   bindFullscreenButton(rotateFullscreenButton, window);
+  bindBracketFlash(fullscreenToggleButton);
+  bindFullscreenToggle(fullscreenToggleButton, window);
   bindMainMenuButton(settingsBackButton);
   bindMainMenuButton(elements.creditsBackButton);
   bindMainMenuButton(elements.hostBackButton);
@@ -127,6 +130,8 @@ async function start(): Promise<void> {
   const render = (timeMs: number) => {
     const frame = describeScreenSessionFrame(session, stars, settings.display(), reducedMotion.matches, timeMs);
     drawLayers(context, sprites, starSprites, frame);
+    const gestureHintShown = awaitsFirstShot(session);
+    showGestureHint(elements.keyHint, gestureHintShown);
   };
   startGameLoop(stepSimulation, render);
 }

@@ -164,6 +164,15 @@ function advanceSessionDebris(session: ScreenSession, steppedView: MatchView | u
   }
 }
 
+export function awaitsFirstShot(session: ScreenSession): boolean {
+  const view = session.played.view();
+  return view !== undefined && isBeforeFirstShot(view);
+}
+
+function isBeforeFirstShot(view: MatchView): boolean {
+  return view.roundNumber === 1 && view.attempts.left + view.attempts.right === 0;
+}
+
 export function describeScreenSessionFrame(
   session: ScreenSession,
   stars: readonly Star[],

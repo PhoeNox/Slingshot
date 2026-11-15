@@ -13,3 +13,15 @@ export async function enterLandscapeFullscreen(document: Document, screen: Scree
     return;
   }
 }
+
+export function isFullscreen(document: Document): boolean {
+  return document.fullscreenElement !== null;
+}
+
+export async function toggleLandscapeFullscreen(document: Document, screen: Screen): Promise<void> {
+  if (isFullscreen(document)) {
+    await document.exitFullscreen();
+  } else {
+    await enterLandscapeFullscreen(document, screen);
+  }
+}

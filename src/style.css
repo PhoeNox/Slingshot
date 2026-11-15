@@ -541,6 +541,29 @@ body:has(#overlay[hidden]) {
   letter-spacing: 0.1em;
 }
 
+.coarse-pointer-only {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .fine-pointer-only {
+    display: none;
+  }
+
+  .coarse-pointer-only {
+    display: revert;
+  }
+
+  .coarse-pointer-only[hidden],
+  .key-hint:not([data-gesture-hint]) .gesture-hint {
+    display: none;
+  }
+
+  .key-hint .hint-button {
+    min-height: 44px;
+  }
+}
+
 .rotate-prompt {
   display: none;
 }

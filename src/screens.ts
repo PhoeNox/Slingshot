@@ -3,7 +3,7 @@
 
 import { COLOURS } from "./colours";
 import type { PlanetCountRange } from "./core/match";
-import { canEnterFullscreen, enterLandscapeFullscreen } from "./fullscreen";
+import { canEnterFullscreen, enterLandscapeFullscreen, isFullscreen, toggleLandscapeFullscreen } from "./fullscreen";
 import { backTargetFor, hashFor, moveFocus, resolveHash, showsMatch, type FixedRouteScreen, type FocusStep, type MenuItem, type Route, type Screen } from "./navigation";
 import { scrambleLabel } from "./scramble";
 import { SETTING_KEYS, SETTING_RULES, withRangeEnd, type AnySettingRule, type RangeEnd, type SettingChoice, type SettingKey, type Settings } from "./settings";
@@ -113,6 +113,26 @@ export function bindFullscreenButton(button: HTMLButtonElement, target: Window):
   button.addEventListener("click", () => {
     void enterLandscapeFullscreen(target.document, target.screen);
   });
+}
+
+export function bindFullscreenToggle(button: HTMLButtonElement, target: Window): void {
+  const showLabel = () => {
+    button.textContent = fullscreenToggleLabel(target.document);
+  };
+  button.hidden = !canEnterFullscreen(target.document);
+  button.addEventListener("click", () => {
+    void toggleLandscapeFullscreen(target.document, target.screen);
+  });
+  target.document.addEventListener("fullscreenchange", showLabel);
+  showLabel();
+}
+
+function fullscreenToggleLabel(document: Document): string {
+  return isFullscreen(document) ? "Exit fullscreen" : "Fullscreen";
+}
+
+export function showGestureHint(keyHint: HTMLElement, shown: boolean): void {
+  keyHint.toggleAttribute("data-gesture-hint", shown);
 }
 
 export function traceTitleArc(arc: SVGPathElement, reducedMotion: MediaQueryList): void {

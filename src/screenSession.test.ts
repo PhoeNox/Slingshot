@@ -18,6 +18,7 @@ import type { Point } from "./core/flight";
 import { ATTRACT_VIEWER, describeBackdropFrame, describeFrame, HOT_SEAT_VIEWER, type DisplaySettings } from "./frame";
 import type { FrameItem, FrameLayer, GroupItem } from "./frameItems";
 import {
+  awaitsFirstShot,
   createScreenSession,
   describeScreenSessionFrame,
   stepScreenSession,
@@ -225,6 +226,39 @@ describe("aiming and firing", () => {
     session.played.fire();
 
     expect(shownView(session)).toEqual(before);
+  });
+});
+
+describe("awaiting the first shot", () => {
+  test("awaits it when a match starts", () => {
+    expect(awaitsFirstShot(sessionOn("match"))).toBe(true);
+  });
+
+  test("stops awaiting it once the first shot is fired", () => {
+    const session = sessionOn("match");
+
+    session.played.fire();
+
+    expect(awaitsFirstShot(session)).toBe(false);
+  });
+
+  test("does not await it again in a later round", () => {
+    const session = sessionOn("match");
+    playUntil(session, isRoundOver, false);
+
+    session.played.fire();
+
+    expect(awaitsFirstShot(session)).toBe(false);
+  });
+
+  test("awaits it again in the next match", () => {
+    const session = sessionOn("match");
+    session.played.fire();
+
+    enterScreen(session, "mainMenu", 2, DEFAULT_MATCH_RULES);
+    enterScreen(session, "match", 3, DEFAULT_MATCH_RULES);
+
+    expect(awaitsFirstShot(session)).toBe(true);
   });
 });
 
