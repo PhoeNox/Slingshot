@@ -164,6 +164,10 @@ function advanceSessionDebris(session: ScreenSession, steppedView: MatchView | u
   }
 }
 
+export function keepsScreenAwake(session: ScreenSession): boolean {
+  return session.played.takesInput;
+}
+
 export function awaitsFirstShot(session: ScreenSession): boolean {
   const view = session.played.view();
   return view !== undefined && isBeforeFirstShot(view);

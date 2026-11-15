@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- SPDX-FileCopyrightText: 2026 Thomas Eggerling -->
+  <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+  <rect width="512" height="512" fill="#040815"/>
+  <path d="M 96 352 Q 256 64 416 352" fill="none" stroke="#bfefff" stroke-width="28" stroke-linecap="round" stroke-dasharray="1 56"/>
+  <circle cx="256" cy="300" r="56" fill="none" stroke="#4a6a86" stroke-width="14"/>
+  <circle cx="96" cy="352" r="26" fill="#ffb066"/>
+  <circle cx="416" cy="352" r="26" fill="#7fb8ff"/>
+</svg>

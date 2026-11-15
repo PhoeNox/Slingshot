@@ -17,9 +17,10 @@ import { createRouteController, randomSeed, type RouteAdapters } from "./routeCo
 import { bindBracketFlash, bindFullscreenButton, bindFullscreenToggle, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, bindSettingControls, bindSettingsTabs, navigateBack, navigateTo, renderMenuItems, showGestureHint, showScreen, traceTitleArc, type ScreenElements } from "./screens";
 import { localSettingsStorage } from "./settingsStorage";
 import { createSettingsStore } from "./settingsStore";
-import { awaitsFirstShot, createScreenSession, describeScreenSessionFrame, submitReplyCode } from "./screenSession";
+import { awaitsFirstShot, createScreenSession, describeScreenSessionFrame, keepsScreenAwake, submitReplyCode } from "./screenSession";
 import { renderStarSprites } from "./starLayer";
 import { generateStars } from "./stars";
+import { screenWakeLock } from "./wakeLock";
 
 async function start(): Promise<void> {
   const stage = document.querySelector<HTMLElement>("#stage")!;
@@ -129,7 +130,12 @@ async function start(): Promise<void> {
   bindScreenRoutes(window, routes.enterRoute);
   traceTitleArc(titleArc, reducedMotion);
 
-  const stepSimulation = () => routes.stepSession(reducedMotion.matches);
+  const wakeLock = screenWakeLock(window);
+  const stepSimulation = () => {
+    routes.stepSession(reducedMotion.matches);
+    const awake = keepsScreenAwake(session);
+    wakeLock.keepAwake(awake);
+  };
   const stars = generateStars(Math.random);
   const starSprites = renderStarSprites();
   const render = (timeMs: number) => {

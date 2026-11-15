@@ -39,6 +39,7 @@ path = [
   "package.json",
   "package-lock.json",
   "tsconfig.json",
+  "public/manifest.webmanifest",
 ]
 SPDX-FileCopyrightText = "2026 Thomas Eggerling"
 SPDX-License-Identifier = "GPL-3.0-or-later"

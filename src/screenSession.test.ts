@@ -21,6 +21,7 @@ import {
   awaitsFirstShot,
   createScreenSession,
   describeScreenSessionFrame,
+  keepsScreenAwake,
   stepScreenSession,
   type ScreenSession,
 } from "./screenSession";
@@ -227,6 +228,21 @@ describe("aiming and firing", () => {
     session.played.fire();
 
     expect(shownView(session)).toEqual(before);
+  });
+});
+
+describe("keeping the screen awake", () => {
+  test("keeps it awake during a hot-seat match", () => {
+    expect(keepsScreenAwake(sessionOn("match"))).toBe(true);
+  });
+
+  test("lets it sleep behind attract mode on the menus", () => {
+    expect(keepsScreenAwake(sessionOn("mainMenu"))).toBe(false);
+    expect(keepsScreenAwake(sessionOn("mainMenu", "settings"))).toBe(false);
+  });
+
+  test("lets it sleep again once the match is left", () => {
+    expect(keepsScreenAwake(sessionOn("match", "mainMenu"))).toBe(false);
   });
 });
 

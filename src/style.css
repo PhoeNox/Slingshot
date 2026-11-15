@@ -57,6 +57,12 @@ body:has(#overlay[hidden]) {
   outline: none;
 }
 
+#game,
+.key-hint {
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
 #overlay {
   position: absolute;
   inset: 0;

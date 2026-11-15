@@ -10,6 +10,7 @@ import type { RemoteMatch, RemoteRole } from "./remoteMatch";
 import {
   createScreenSession,
   enterRemoteMatch,
+  keepsScreenAwake,
   stepScreenSession,
   type ScreenSession,
 } from "./screenSession";
@@ -243,6 +244,13 @@ describe("starting a remote match", () => {
 
     expect(matchOf(host).rules).toEqual(matchRulesFor(hostSettings));
     expect(matchOf(guest).rules).toEqual(matchRulesFor(hostSettings));
+  });
+
+  test("keeps both screens awake while the remote match is played", () => {
+    const { host, guest } = connectedPeers();
+
+    expect(keepsScreenAwake(host)).toBe(true);
+    expect(keepsScreenAwake(guest)).toBe(true);
   });
 
   test("the guest waits for the host until the hello arrives", () => {
