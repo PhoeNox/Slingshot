@@ -34,6 +34,7 @@ path = [
   "docs/**",
   ".githooks/**",
   ".oxlintrc.json",
+  ".stylelintrc.json",
   ".github/**",
   ".gitignore",
   "package.json",

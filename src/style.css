@@ -8,7 +8,7 @@
   --left-player: #ffb066;
   --right-player: #7fb8ff;
   --lock: #ffe9a8;
-  --title-font: Michroma, sans-serif;
+  --title-font: "Michroma", sans-serif;
   --text-font: "Barlow Semi Condensed", sans-serif;
   --phosphor-glow: 0 0 0.25em color-mix(in srgb, var(--phosphor) 45%, transparent);
   --phosphor-glow-strong:
@@ -500,16 +500,16 @@ body:has(#overlay[hidden]) {
   color: var(--phosphor);
   opacity: 0;
   pointer-events: none;
-  filter: drop-shadow(0 0 3px currentColor);
+  filter: drop-shadow(0 0 3px currentcolor);
   background:
-    linear-gradient(currentColor 0 0) left top / var(--bracket-length) var(--bracket-thickness),
-    linear-gradient(currentColor 0 0) left top / var(--bracket-thickness) var(--bracket-length),
-    linear-gradient(currentColor 0 0) right top / var(--bracket-length) var(--bracket-thickness),
-    linear-gradient(currentColor 0 0) right top / var(--bracket-thickness) var(--bracket-length),
-    linear-gradient(currentColor 0 0) left bottom / var(--bracket-length) var(--bracket-thickness),
-    linear-gradient(currentColor 0 0) left bottom / var(--bracket-thickness) var(--bracket-length),
-    linear-gradient(currentColor 0 0) right bottom / var(--bracket-length) var(--bracket-thickness),
-    linear-gradient(currentColor 0 0) right bottom / var(--bracket-thickness) var(--bracket-length);
+    linear-gradient(currentcolor 0 0) left top / var(--bracket-length) var(--bracket-thickness),
+    linear-gradient(currentcolor 0 0) left top / var(--bracket-thickness) var(--bracket-length),
+    linear-gradient(currentcolor 0 0) right top / var(--bracket-length) var(--bracket-thickness),
+    linear-gradient(currentcolor 0 0) right top / var(--bracket-thickness) var(--bracket-length),
+    linear-gradient(currentcolor 0 0) left bottom / var(--bracket-length) var(--bracket-thickness),
+    linear-gradient(currentcolor 0 0) left bottom / var(--bracket-thickness) var(--bracket-length),
+    linear-gradient(currentcolor 0 0) right bottom / var(--bracket-length) var(--bracket-thickness),
+    linear-gradient(currentcolor 0 0) right bottom / var(--bracket-thickness) var(--bracket-length);
   background-repeat: no-repeat;
   transition:
     inset var(--bracket-snap),

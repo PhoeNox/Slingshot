@@ -1,6 +1,6 @@
 # Module map
 
-Read the modules a change touches; skip the rest. Tests sit next to their module as `<module>.test.ts`. Domain terms are defined in `CONTEXT.md`.
+Read the modules a change touches; skip the rest. Each row is the module's gist; its code and `CONTEXT.md` hold the detail. Tests sit next to their module as `<module>.test.ts`.
 
 ## `src/core/`: deterministic simulation
 
@@ -8,61 +8,69 @@ Pure, seeded, no DOM, canvas, or clock (ADR-0001).
 
 | Module | Responsibility |
 | --- | --- |
-| `match.ts` | Match state machine: `createMatch`, `step`, `adjustAim`, `fire` (only while aiming; returns the launched shot record), `startNextRound` (only during round over), `fireReceivedShot` (each fired shot's aim recorded per round), `nextShooter`, `previewShot`, read-only `matchView`; queries other modules ask instead of reading its state (the active side, a side's aim, the phase, whether this step streams aim, how long the round has been over) and `opponentOf` |
-| `round.ts` | Round layout generation (ships, planets), `Ship`/`Planet`/`Aim` types, `BARREL_DISTANCE` |
-| `flight.ts` | Body and missile physics: `moveBody` (gravity, planet contact, edge reflection under bounce, tracking) shared by missiles and debris; launch, ship collision (`flyMissile`), timeout, `STEPS_PER_SECOND` |
+| `match.ts` | Match state machine (`createMatch`, `step`, `adjustAim`, `fire`, `startNextRound`) and the read-only `matchView` and queries other modules ask |
+| `round.ts` | Round layout generation (ships, planets) and the `Ship`/`Planet`/`Aim` types |
+| `flight.ts` | Body and missile physics: gravity, planet contact, edge reflection, ship collision, timeout |
 | `scoring.ts` | Round results, power penalty, next-round shooter |
-| `zoom.ts` | View zoom per step: `nextZoom(previous, missile)` fits an out-of-area missile, leans toward its side, eases back |
+| `zoom.ts` | View zoom per step that fits an out-of-area missile and eases back |
 | `attract.ts` | Self-playing demo match behind the main menu |
 | `playingArea.ts` | Playing and tracking area bounds |
 | `random.ts` | Seeded PRNG |
+
+## Static shell: markup and layout
+
+| File | Responsibility |
+| --- | --- |
+| `index.html` | All DOM: the `#stage` with canvas and `#overlay` panels (`data-screen` per overlay screen, `data-setting` per settings control), the hint bar `.key-hint` (gesture hint, Menu, Fullscreen) and the rotate prompt |
+| `src/style.css` | All layout and styling, including the media-query branches per device (`pointer: coarse`, `orientation: landscape`/`portrait`) that place the hint bar and show the rotate prompt |
 
 ## `src/`: presentation and wiring
 
 | Module | Responsibility |
 | --- | --- |
-| `main.ts` | Boot: queries elements (the overlay panels located by the screen table), loads assets, builds the settings store over `localStorage` (passing its display settings and the HUD scale of the current canvas fit to every frame), builds the screen session once with its adapters (`Math.random`, the settings store, screen display, hash navigation, the browser peer connections, the Nostr reply relay and the host and guest screens' renderers), binds player input to the screen session, builds the hash navigation over the window, binds escape to navigate back from the session's current screen through it, binds route changes to the session's route entry, binds the screens (passing host reply codes to the screen session), generates the star field, keeps the screen awake after each step while the screen session asks for it, starts the loop whose render callback describes the screen session frame and hands its layers to the renderer |
+| `main.ts` | Boot: queries elements, loads assets, builds the settings store and the screen session with their adapters, binds input, navigation and screens, starts the loop |
 | `gameLoop.ts` | Fixed 30 Hz step loop plus render callback |
-| `screenSession.ts` | Built once from its injected adapters (random source, the settings store's match rules, screen display, hash navigation, the peer connectors, the reply relay and the host and guest screens' renderers); holds the current screen plus the one current `PlayedMatch` (hot-seat match, remote match or attract mode) and the current host or guest visit, read only through queries (the current screen, which escape navigates back from; the played match, which player input reads; the debris); entering a route takes only the route and, in one place and in this order, draws the seed, takes a snapshot of the match rules from the settings store, keeps the played match if it is kept behind the new screen (attract mode between menu screens, with its debris) and otherwise leaves it and clears the debris, leaves the previous visit, makes the new screen's played match, starts a fresh visit on the host or invitation route (so reloading either starts a new one, ADR-0003), then shows the route's screen; a visit's handover starts the remote match under the seed and match rules drawn on that route entry and shows the remote match screen; passes reply code submissions to the host visit only; steps it (navigating to the main menu once the played match asks for it) and advances the debris from the stepped view, describes the whole frame as ordered layers in one call (backdrop, star field, then the played match's view for its viewer and any notice in one shaken group), reading reduced motion once: the stars hold still and the shake (only for a played match that shakes) is off under reduced motion, without branching per mode; starts a remote match from the role, link, seed and match rules it is given and returns it; answers whether the screen is kept awake (while the played match takes input: a hot-seat or remote match, never attract mode) and whether the played match still awaits its first shot (round one, no attempt yet), which shows the gesture hint; entering another remote match leaves the played match and any visit first |
-| `playedMatch.ts` | The `PlayedMatch` interface every played match presents to the screen session (whether it takes player input, the aiming side, aim, fire, step, the match view to draw, the `Viewer`, whether it shakes, any notice, leave, the played match it stays as behind another menu screen), with the hot-seat and attract-mode adapters; the aiming side is the side player aim would set right now, or none (hot seat: the active player while aiming; a remote match: the local side only on the local turn); attract mode takes no input, ignores aim and fire, never shakes, steps only on screens that play it and is kept behind every menu screen, while a hot-seat or remote match is never kept (ADR-0002) |
-| `remoteMatch.ts` | Remote match over an open `PeerLink`, from a role to the return to the main menu: the host plays left under the seed and match rules it is given, the guest plays right; drives the lockstep through the effect loop: decodes received text and feeds it, local aim and fire, steps and the link closing to the lockstep as events, encodes and sends each message it returns and closes the link on its ending; presented to the screen session as a `PlayedMatch` (`playRemoteMatch`) viewed from its local side, whose step asks for the main menu once the end notice has run out |
-| `lockstep.ts` | Lockstep rules of a remote match, with no link, encoder or decoder: one transition takes each event (start as host, local aim, local fire, a decoded or rejected message, a step, an ending), updates the lockstep state and returns the effects to perform (messages to send, the ending it reached); the host's hello, the guest building the match from it, local input only on the local turn, round starts only by the next shooter (through the match's `startNextRound`) and sent to the opponent, aim streaming of changed aims on the steps the match marks for it, opponent moves (aim, shot, round start) applied in order once the local flight has ended, outcome comparison, endings (left, opponent left, out of sync, version mismatch) with a leave sent unless the opponent left, the notice shown and when it has run out |
-| `navigation.ts` | Hash routes (including the play menu, the host route and invitation routes carrying an offer code and a room secret), screens (the remote match has no route of its own: while it runs, the URL still shows the host route or the guest's invitation route, so reloading starts a new host or guest visit rather than resuming the match), which screens play attract mode (ADR-0002), menu focus movement (ADR-0003) |
-| `screens.ts` | HTML menu/settings/credits overlays shown from one table keyed by every screen (each overlay screen's panel, located by `data-screen` in the markup, and the focus target within it; a match shows no panel and focuses the canvas), so showing a screen hides every other panel in one loop; button effects, settings tabs, one table-driven binder for every settings control (located by `data-setting` in the markup) that reads and changes settings only through the settings store; menu buttons and every button marked `data-main-menu-button` (back buttons, the match menu button) navigate through an injected navigate-to-screen callback |
-| `hashNavigation.ts` | The one module that reads and writes the URL hash, over a `HashLocation` port (window adapter over `location.hash`, `history.replaceState` and `hashchange`; in-memory adapter for tests): resolves the current route on binding and on every hash change and enters it, replacing a non-canonical hash with the main menu's without a new history entry (ADR-0002), navigates to a screen and back from a screen (escape, back and main menu buttons, the screen session's return to the main menu) |
-| `remoteVisit.ts` | Host and guest visit up to an open connection, without the DOM, driving the visit transitions through the effect loop: starts the host or guest visit, performs each effect they return (connect or join through the injected `PeerConnectors`, open the relay room, accept a reply code, deliver the reply, start and cancel the `REPLY_FALLBACK_MS` timer, show a `VisitState`, close a handle, hand the open link over with its role through the callback the screen session passes) and feeds every settled promise (as its arrival or its failure, classified into `PeerConnectionError` reasons or unexpected and carrying the error), relayed or pasted reply and timer tick back as an event; a rethrow effect throws the unexpected failure's error, so it rejects the promise (`settled` or `submitReply`) whose chain met it |
-| `effectLoop.ts` | The one driver loop of the lockstep and the visit: feeding an event runs it through the transition (event in, effects out), performs each effect in order, and feeds every arrival an effect returns back as an event, stale ones included (the rules decide what a late arrival means); an effect may also feed events later (a timer, a relayed reply); the returned promise settles once every arrival it led to was fed back and rejects with an unexpected failure its chain met |
-| `visitTransition.ts` | Visit rules of the host and the guest, with no connector, relay, timer or promise: each event updates the visit's progress and returns the effects to perform; pending, then for the host the invitation (offer code and the room secret of the relay room it listens on) and connecting, for the guest joining (reply delivered through the relay) and the reply code fallback (shown once, when no relay accepted the reply or the fallback timer fired first, never after the link opened or the guest left), then handed over or failed; reply codes are taken only once the room is open, the first one, relayed or pasted, while it connects; the room closes on handover, a final failure or leaving; retry only after a rejected reply code (malformed, wrong kind, protocol mismatch) while still on the screen; a connection, room or link arriving after leaving is closed instead of adopted, and nothing is shown after leaving; an unexpected failure is rethrown with the error it arrived with |
-| `remoteMatchScreens.ts` | DOM side of the host and guest screens, starting and leaving no visits: renders each `VisitState` (invitation link and reply code with copy buttons, and share buttons where Web Share accepts them, a cancelled share sheet ignored, reply code entry as the host's secondary option, status and failure messages per role) and forwards reply code submissions |
-| `settings.ts` | Setting rule table (control kind, choices, labels, default, display vs match rule per setting) and the Settings type, defaults, parse/serialise of the stored form and the match rules and display settings derived from it, stored-form match rules for the wire; planet count drag-along |
-| `remoteProtocol.ts` | Remote match wire messages (hello, aim, shot, nextRound, outcome, leave): JSON encode, never-throwing decode with validation, `PROTOCOL_VERSION`, shot outcome comparison |
-| `signalingCode.ts` | Compact, URL-safe signaling codes: a non-trickle offer or answer reduced to its connection fields (ICE credentials, DTLS fingerprint, setup role, candidates), deflated and base64url-encoded with the protocol version; never-throwing decode back to an SDP from a fixed data-channel template, rejecting garbage, wrong kind and version mismatch |
-| `peerConnection.ts` | Browser `RTCPeerConnection` with one ordered, reliable data channel for host and guest: non-trickle offer and reply codes over public STUN only, a connect timeout after the host accepts a reply (the guest waits until its connection opens or fails) and a no-candidates failure as `PeerConnectionError`, and an open link to send and receive text plus a closed signal that fires once; connection factory injectable for tests; `HostPeerConnection` and `JoinPeerConnection` types for injecting the host and guest functions |
-| `replyRelay.ts` | Carries the guest's reply code to the host through a fixed list of public Nostr relays (ADR-0004): the host opens a fresh room and subscribes to its tag on every relay, taking each reply once however many relays forward it; the guest seals and publishes its reply to every relay, `accepted` on the first relay acknowledgement or `unreached` when every relay rejected it, went away, or stayed silent for `RELAY_ACK_TIMEOUT_MS`; relay sockets are injectable for tests |
-| `relayRoom.ts` | Room secret and the relay room derived from it with WebCrypto: the room tag relays filter on and AES-GCM sealing and opening, so relays see only opaque data; opening never throws |
-| `nostrEvent.ts` | Nostr wire format for relay rooms: ephemeral room events signed by a throwaway Schnorr key (`@noble/curves`), publish and subscribe messages, never-throwing parse of relay acknowledgements and events |
-| `settingsStore.ts` | The settings in one place: loads them from a `SettingsStorage`, changes one setting at a time and saves on every change, and hands out snapshots of the match rules (a match keeps its rules when settings change) and the current display settings (shown live behind the settings screen, ADR-0002) |
-| `settingsStorage.ts` | `SettingsStorage` adapters behind the settings store: `localStorage`, tolerating unavailable storage, and in memory for tests |
-| `input.ts` | Thin DOM adapter: passes key, touch and pen Pointer Events (overlay buttons and the rotate prompt excluded) and blur across the window to the player input, with the window's clock and timers; escape binding |
-| `playerInput.ts` | Player input without the DOM: turns key down/up, pointer down/move/up/cancel, blur and repeat timer ticks into aim and fire on the current played match, through the key repeat and gesture rules and an injected clock; reports whether a key is consumed; a touch ends without firing once the match it started on is no longer played |
-| `aimKeyRepeat.ts` | Held-key repeat rules for aim adjustment, behind `playerInput.ts` |
-| `touchAim.ts` | Touch gesture rules, without the DOM, behind `playerInput.ts`: one pointer at a time, a tap below the drag threshold fires, a drag locks to its dominant axis (vertical raises or lowers the aiming side's barrel, toward the opponent adds power) and emits keyboard-sized aim steps per fixed CSS px, carrying the remainder within the drag; cancel, blur or leaving the match ends the touch without firing |
-| `frameItems.ts` | Frame item vocabulary shared by frame description and the renderer: `FrameItem` (sprites, rings, lines, text, rects, groups), `Rect`, `Transform`, `SpriteName`, and the `FrameLayer`s a frame is drawn in (frame items or the star field at a time) |
-| `frame.ts` | Turns a `MatchView` into `FrameItem` data for a `Viewer` (attract mode, hot seat, or a remote match's local side, giving You/Opponent labels and a turn line; outside attract mode, while aiming, the aiming side's trails fired with its current aim glow at full strength, from the match view's fired shots), plus the lockstep's `RemoteNotice`s; on a small canvas the HUD scale enlarges HUD texts to at least 12 CSS px, each group about its anchor (top edge, bottom edge, corners) and the message and notice panels about the screen centre, kept within the playing area; no drawing, no dependency on the remote match beyond that type |
-| `renderer.ts` | Draws `FrameItem`s and `FrameLayer`s onto the canvas, star field layers through `starLayer.ts` |
+| `screenSession.ts` | Owns the current screen, the one current `PlayedMatch` and the host or guest visit; enters routes, steps the played match and describes each frame as layers |
+| `playedMatch.ts` | The `PlayedMatch` interface the screen session drives, with the hot-seat and attract-mode adapters (ADR-0002) |
+| `remoteMatch.ts` | Remote match over an open `PeerLink`, presented as a `PlayedMatch`, driving the lockstep through the effect loop |
+| `lockstep.ts` | Lockstep rules of a remote match as a pure transition (event in, effects out), with no link, encoder or decoder |
+| `navigation.ts` | Hash routes, screens, which screens play attract mode (ADR-0002), menu focus movement (ADR-0003) |
+| `screens.ts` | HTML overlays shown from one table keyed by every screen, button effects, settings tabs, the table-driven settings control binder |
+| `hashNavigation.ts` | The one module that reads and writes the URL hash, over a `HashLocation` port (window and in-memory adapters) |
+| `remoteVisit.ts` | Host and guest visit up to an open connection, performing the visit transition's effects through the effect loop |
+| `effectLoop.ts` | The one driver loop of the lockstep and the visit: performs effects in order and feeds every arrival back as an event |
+| `visitTransition.ts` | Visit rules of the host and the guest as a pure transition, with no connector, relay, timer or promise |
+| `remoteMatchScreens.ts` | DOM side of the host and guest screens: renders each `VisitState` and forwards reply code submissions |
+| `settings.ts` | Setting rule table, the `Settings` type, defaults, parse/serialise, derived match rules and display settings |
+| `remoteProtocol.ts` | Remote match wire messages: JSON encode, never-throwing decode, `PROTOCOL_VERSION`, shot outcome comparison |
+| `signalingCode.ts` | Compact, URL-safe signaling codes for a non-trickle offer or answer, with never-throwing decode |
+| `peerConnection.ts` | Browser `RTCPeerConnection` with one reliable data channel for host and guest, and its `PeerConnectionError` failures |
+| `replyRelay.ts` | Carries the guest's reply code to the host through public Nostr relays (ADR-0004) |
+| `relayRoom.ts` | Room secret, room tag and AES-GCM sealing with WebCrypto |
+| `nostrEvent.ts` | Nostr wire format for relay rooms: signed ephemeral events, publish and subscribe messages, never-throwing parse |
+| `settingsStore.ts` | The settings in one place: load, change and save, plus snapshots of match rules and display settings (ADR-0002) |
+| `settingsStorage.ts` | `SettingsStorage` adapters: `localStorage` and in-memory |
+| `input.ts` | Thin DOM adapter that passes key, pointer and blur events to the player input |
+| `playerInput.ts` | Player input without the DOM: turns key, pointer and timer events into aim and fire on the current played match |
+| `aimKeyRepeat.ts` | Held-key repeat rules for aim adjustment |
+| `touchAim.ts` | Touch gesture rules without the DOM: tap fires, a drag locks to an axis and emits aim steps |
+| `frameItems.ts` | Frame item vocabulary shared by frame description and the renderer (`FrameItem`, `FrameLayer`) |
+| `frame.ts` | Turns a `MatchView` into `FrameItem` data for a `Viewer`, including the HUD scale on small canvases |
+| `renderer.ts` | Draws `FrameItem`s and `FrameLayer`s onto the canvas |
 | `animationCurves.ts` | Afterglow, trail fade, explosion, round banner curves |
-| `screenShake.ts` | Shake offset after hits, applied by the screen session frame |
-| `debris.ts` | Cosmetic impact particles: advancing from a match view, bursts, motion via core `moveBody`, splitting on planets, fade-out; state and unseeded randomness stay outside the core |
+| `screenShake.ts` | Shake offset after hits |
+| `debris.ts` | Cosmetic impact particles, unseeded, kept outside the core |
 | `stars.ts` / `starLayer.ts` | Star field generation (unseeded, at boot) / drawing |
-| `wakeLock.ts` | Screen wake lock adapter: keeps the screen awake while asked to, requesting the lock again once the page is visible after the browser released it, releasing it when no longer wanted (including a lock that arrives late), and giving up after a refusal until it is wanted anew; does nothing without the Wake Lock API |
-| `display.ts` | Fits canvas and overlay to the window, with the fit's CSS scale |
-| `fullscreen.ts` | Whether fullscreen is available and shown, entering it with the orientation locked to landscape where the device allows (the rotate prompt's button), and toggling it (the hint bar's toggle) |
+| `wakeLock.ts` | Screen wake lock adapter that keeps the screen awake while asked to |
+| `display.ts` | Fits canvas and overlay to the stage's size, with the fit's CSS scale |
+| `fullscreen.ts` | Fullscreen availability, entering it with the orientation locked to landscape, and toggling it |
 | `assets.ts` | Sprite and font loading |
 | `colours.ts` | Colour tokens |
 | `scramble.ts` | Menu label scramble effect |
-| `shipHits.test.ts` | End-to-end check: seeded matches through the screen session register ship hits |
-| `lockstep.test.ts` | Unit checks of every lockstep rule, peers relayed in-process without a link |
-| `effectLoop.test.ts` | Unit checks of the effect loop: effect order, arrivals fed back, stale and late events, and rejecting with unexpected failures |
-| `visitTransition.test.ts` | Unit checks of every visit rule, synchronous, without connectors, relay or timers |
-| `hashNavigation.test.ts` | Unit checks of the hash navigation through the in-memory adapter: route entry on binding and on hash changes, canonical hash replacement, navigating to a screen and back from a screen |
-| `remoteMatch.test.ts` | End-to-end check: two screen sessions over an in-memory channel play a remote match in lockstep and drive each ending through to the main menu navigation |
+
+## Cross-module tests
+
+| Test | Checks |
+| --- | --- |
+| `shipHits.test.ts` | Seeded matches through the screen session register ship hits |
+| `remoteMatch.test.ts` | Two screen sessions over an in-memory channel play a remote match to each ending |

@@ -13,7 +13,7 @@ Issues and specs (you may know a spec as a PRD) for this repo live as markdown f
 
 ## Closing a ticket
 
-Before the `git commit` that completes a ticket, set its `Status:` to `done` and tick its checkboxes. `.scratch/` is git-ignored, so the file stays out of the commit. Scope dropped on the user's request goes under `## Comments` with a one-line reason.
+Once the `git commit` that completes a ticket succeeds, set its `Status:` to `done` and tick its checkboxes. A successful commit means verification passed: the user approves a commit only after verifying, and the pre-commit hook passed. Until then the ticket keeps its status and unticked boxes. `.scratch/` is git-ignored, so this edit needs no commit. Scope dropped on the user's request goes under `## Comments` with a one-line reason.
 
 ## Bugs found along the way
 
