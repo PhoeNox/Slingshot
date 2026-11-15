@@ -5,6 +5,7 @@ import type { Point } from "./core/flight";
 import { createPlayerInput, type InputClock, type KeyPress, type KeyRelease, type PlayedMatchSource } from "./playerInput";
 
 const TOUCH_POINTER_TYPES = new Set(["touch", "pen"]);
+const NON_AIMING_SURFACES = "button, .rotate-prompt";
 
 export function bindPlayerInput(target: Window, source: PlayedMatchSource): void {
   const clock: InputClock = {
@@ -25,7 +26,7 @@ export function bindPlayerInput(target: Window, source: PlayedMatchSource): void
     input.keyUp(key);
   });
   target.addEventListener("pointerdown", (event) => {
-    if (isTouchPointer(event) && !startsOnButton(event)) {
+    if (isTouchPointer(event) && !startsOnNonAimingSurface(event)) {
       input.pointerDown(event.pointerId, positionOf(event));
     }
   });
@@ -47,8 +48,8 @@ function isTouchPointer(event: PointerEvent): boolean {
   return TOUCH_POINTER_TYPES.has(event.pointerType);
 }
 
-function startsOnButton(event: PointerEvent): boolean {
-  return event.target instanceof Element && event.target.closest("button") !== null;
+function startsOnNonAimingSurface(event: PointerEvent): boolean {
+  return event.target instanceof Element && event.target.closest(NON_AIMING_SURFACES) !== null;
 }
 
 function positionOf(event: PointerEvent): Point {

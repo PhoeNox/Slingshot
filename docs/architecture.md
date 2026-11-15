@@ -43,7 +43,7 @@ Pure, seeded, no DOM, canvas, or clock (ADR-0001).
 | `nostrEvent.ts` | Nostr wire format for relay rooms: ephemeral room events signed by a throwaway Schnorr key (`@noble/curves`), publish and subscribe messages, never-throwing parse of relay acknowledgements and events |
 | `settingsStore.ts` | The settings in one place: loads them from a `SettingsStorage`, changes one setting at a time and saves on every change, and hands out snapshots of the match rules (a match keeps its rules when settings change) and the current display settings (shown live behind the settings screen, ADR-0002) |
 | `settingsStorage.ts` | `SettingsStorage` adapters behind the settings store: `localStorage`, tolerating unavailable storage, and in memory for tests |
-| `input.ts` | Thin DOM adapter: passes key, touch and pen Pointer Events (overlay buttons excluded) and blur across the window to the player input, with the window's clock and timers; escape binding |
+| `input.ts` | Thin DOM adapter: passes key, touch and pen Pointer Events (overlay buttons and the rotate prompt excluded) and blur across the window to the player input, with the window's clock and timers; escape binding |
 | `playerInput.ts` | Player input without the DOM: turns key down/up, pointer down/move/up/cancel, blur and repeat timer ticks into aim and fire on the current played match, through the key repeat and gesture rules and an injected clock; reports whether a key is consumed; a touch ends without firing once the match it started on is no longer played |
 | `aimKeyRepeat.ts` | Held-key repeat rules for aim adjustment, behind `playerInput.ts` |
 | `touchAim.ts` | Touch gesture rules, without the DOM, behind `playerInput.ts`: one pointer at a time, a tap below the drag threshold fires, a drag locks to its dominant axis (vertical raises or lowers the aiming side's barrel, toward the opponent adds power) and emits keyboard-sized aim steps per fixed CSS px, carrying the remainder within the drag; cancel, blur or leaving the match ends the touch without firing |
@@ -55,6 +55,7 @@ Pure, seeded, no DOM, canvas, or clock (ADR-0001).
 | `debris.ts` | Cosmetic impact particles: advancing from a match view, bursts, motion via core `moveBody`, splitting on planets, fade-out; state and unseeded randomness stay outside the core |
 | `stars.ts` / `starLayer.ts` | Star field generation (unseeded, at boot) / drawing |
 | `display.ts` | Fits canvas and overlay to the window |
+| `fullscreen.ts` | Whether fullscreen is available, and entering it with the orientation locked to landscape where the device allows (the rotate prompt's button) |
 | `assets.ts` | Sprite and font loading |
 | `colours.ts` | Colour tokens |
 | `scramble.ts` | Menu label scramble effect |

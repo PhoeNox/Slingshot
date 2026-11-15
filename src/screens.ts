@@ -3,6 +3,7 @@
 
 import { COLOURS } from "./colours";
 import type { PlanetCountRange } from "./core/match";
+import { canEnterFullscreen, enterLandscapeFullscreen } from "./fullscreen";
 import { backTargetFor, hashFor, moveFocus, resolveHash, showsMatch, type FixedRouteScreen, type FocusStep, type MenuItem, type Route, type Screen } from "./navigation";
 import { scrambleLabel } from "./scramble";
 import { SETTING_KEYS, SETTING_RULES, withRangeEnd, type AnySettingRule, type RangeEnd, type SettingChoice, type SettingKey, type Settings } from "./settings";
@@ -104,6 +105,13 @@ export function bindMenuButtonEffects(button: HTMLButtonElement, reducedMotion: 
 export function bindBracketFlash(button: HTMLButtonElement): void {
   button.addEventListener("click", () => {
     button.animate(BRACKET_FLASH_KEYFRAMES, BRACKET_FLASH_OPTIONS);
+  });
+}
+
+export function bindFullscreenButton(button: HTMLButtonElement, target: Window): void {
+  button.hidden = !canEnterFullscreen(target.document);
+  button.addEventListener("click", () => {
+    void enterLandscapeFullscreen(target.document, target.screen);
   });
 }
 

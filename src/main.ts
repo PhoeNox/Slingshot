@@ -13,7 +13,7 @@ import type { PeerConnectors } from "./remoteVisit";
 import { drawLayers } from "./renderer";
 import { nostrReplyRelay } from "./replyRelay";
 import { createRouteController, randomSeed, type RouteAdapters } from "./routeController";
-import { bindBracketFlash, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, bindSettingControls, bindSettingsTabs, navigateBack, navigateTo, renderMenuItems, showScreen, traceTitleArc, type ScreenElements } from "./screens";
+import { bindBracketFlash, bindFullscreenButton, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, bindSettingControls, bindSettingsTabs, navigateBack, navigateTo, renderMenuItems, showScreen, traceTitleArc, type ScreenElements } from "./screens";
 import { localSettingsStorage } from "./settingsStorage";
 import { createSettingsStore } from "./settingsStore";
 import { createScreenSession, describeScreenSessionFrame, submitReplyCode } from "./screenSession";
@@ -57,6 +57,7 @@ async function start(): Promise<void> {
   const menu = document.querySelector<HTMLElement>("#main-menu .menu")!;
   const playMenu = document.querySelector<HTMLElement>("#play-menu .menu")!;
   const matchMenuButton = document.querySelector<HTMLButtonElement>("#match-menu-button")!;
+  const rotateFullscreenButton = document.querySelector<HTMLButtonElement>("#rotate-fullscreen-button")!;
   const settingsBackButton = document.querySelector<HTMLButtonElement>("#settings-back-button")!;
   const titleArc = document.querySelector<SVGPathElement>("#main-menu .title-arc path")!;
 
@@ -91,6 +92,8 @@ async function start(): Promise<void> {
   }
   bindBracketFlash(matchMenuButton);
   bindMainMenuButton(matchMenuButton);
+  bindBracketFlash(rotateFullscreenButton);
+  bindFullscreenButton(rotateFullscreenButton, window);
   bindMainMenuButton(settingsBackButton);
   bindMainMenuButton(elements.creditsBackButton);
   bindMainMenuButton(elements.hostBackButton);
