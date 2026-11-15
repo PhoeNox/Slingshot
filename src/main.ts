@@ -13,11 +13,10 @@ import { bindRemoteMatchScreens, type GuestScreenElements, type HostScreenElemen
 import type { PeerConnectors } from "./remoteVisit";
 import { drawLayers } from "./renderer";
 import { nostrReplyRelay } from "./replyRelay";
-import { createRouteController, randomSeed, type RouteAdapters } from "./routeController";
 import { bindBracketFlash, bindFullscreenButton, bindFullscreenToggle, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindScreenRoutes, bindSettingControls, bindSettingsTabs, navigateBack, navigateTo, renderMenuItems, showGestureHint, showScreen, traceTitleArc, type ScreenElements } from "./screens";
 import { localSettingsStorage } from "./settingsStorage";
 import { createSettingsStore } from "./settingsStore";
-import { awaitsFirstShot, createScreenSession, describeScreenSessionFrame, keepsScreenAwake, submitReplyCode } from "./screenSession";
+import { createScreenSession, type ScreenSessionAdapters } from "./screenSession";
 import { renderStarSprites } from "./starLayer";
 import { generateStars } from "./stars";
 import { screenWakeLock } from "./wakeLock";
@@ -69,7 +68,6 @@ async function start(): Promise<void> {
   const sprites = await loadSprites();
   await loadFonts();
 
-  const session = createScreenSession(randomSeed(Math.random), Math.random);
   const settingsStorage = localSettingsStorage(window);
   const settings = createSettingsStore(settingsStorage);
 
@@ -82,11 +80,6 @@ async function start(): Promise<void> {
   };
   window.addEventListener("resize", fitStage);
   fitStage();
-
-  bindPlayerInput(window, session);
-
-  const navigateBackFromCurrentScreen = () => navigateBack(window, session.screen);
-  bindEscape(window, navigateBackFromCurrentScreen);
 
   renderMenuItems(menu, MAIN_MENU_ITEMS);
   bindMenuFocusKeys(menu);
@@ -116,32 +109,40 @@ async function start(): Promise<void> {
   const peers: PeerConnectors = { host: hostPeerConnection, join: joinPeerConnection };
   const relay = nostrReplyRelay();
   const submitReply = (replyCode: string) => {
-    submitReplyCode(session, replyCode);
+    session.submitReplyCode(replyCode);
   };
   const visitScreens = bindRemoteMatchScreens(window, hostElements, guestElements, submitReply);
-  const routeAdapters: RouteAdapters = {
+  const sessionAdapters: ScreenSessionAdapters = {
+    random: Math.random,
+    settings,
     showScreen: (screen) => showScreen(elements, screen),
     navigateTo: (screen) => navigateTo(window, screen),
     peers,
     relay,
     visitScreens,
   };
-  const routes = createRouteController(session, settings, routeAdapters);
-  bindScreenRoutes(window, routes.enterRoute);
+  const session = createScreenSession(sessionAdapters);
+
+  bindPlayerInput(window, session);
+
+  const navigateBackFromCurrentScreen = () => navigateBack(window, session.screen());
+  bindEscape(window, navigateBackFromCurrentScreen);
+
+  bindScreenRoutes(window, session.enterRoute);
   traceTitleArc(titleArc, reducedMotion);
 
   const wakeLock = screenWakeLock(window);
   const stepSimulation = () => {
-    routes.stepSession(reducedMotion.matches);
-    const awake = keepsScreenAwake(session);
+    session.step(reducedMotion.matches);
+    const awake = session.keepsScreenAwake();
     wakeLock.keepAwake(awake);
   };
   const stars = generateStars(Math.random);
   const starSprites = renderStarSprites();
   const render = (timeMs: number) => {
-    const frame = describeScreenSessionFrame(session, stars, settings.display(), hudScale, reducedMotion.matches, timeMs);
+    const frame = session.describeFrame(stars, settings.display(), hudScale, reducedMotion.matches, timeMs);
     drawLayers(context, sprites, starSprites, frame);
-    const gestureHintShown = awaitsFirstShot(session);
+    const gestureHintShown = session.awaitsFirstShot();
     showGestureHint(elements.keyHint, gestureHintShown);
   };
   startGameLoop(stepSimulation, render);

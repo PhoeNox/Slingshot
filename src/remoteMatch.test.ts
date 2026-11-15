@@ -4,17 +4,11 @@
 import { describe, expect, test } from "vitest";
 import { adjustAim, DEFAULT_MATCH_RULES, fire, matchView, nextShooter, step, type Aim, type Match, type MatchRules, type Side } from "./core/match";
 import { remoteNotice, type RemoteMatchEnd } from "./lockstep";
+import type { FixedRouteScreen } from "./navigation";
 import type { PeerLink } from "./peerConnection";
 import { encodeMessage, type RemoteMessage } from "./remoteProtocol";
 import type { RemoteMatch, RemoteRole } from "./remoteMatch";
-import {
-  createScreenSession,
-  enterRemoteMatch,
-  keepsScreenAwake,
-  stepScreenSession,
-  type ScreenSession,
-} from "./screenSession";
-import { enterScreen } from "./screenSession.fixtures";
+import { createScreenSession, type ScreenSession, type ScreenSessionAdapters } from "./screenSession";
 import { DEFAULT_SETTINGS, matchRulesFor, type Settings } from "./settings";
 
 interface Endpoint {
@@ -103,21 +97,56 @@ function deliver(channel: FakeChannel): void {
 }
 
 const remotes = new WeakMap<ScreenSession, RemoteMatch>();
+const navigations = new WeakMap<ScreenSession, FixedRouteScreen[]>();
+
+function noVisit(): never {
+  throw new Error("expected no host or guest visit");
+}
+
+function remoteSession(): ScreenSession {
+  const navigated: FixedRouteScreen[] = [];
+  const adapters: ScreenSessionAdapters = {
+    random: () => 0.5,
+    settings: { matchRules: () => DEFAULT_MATCH_RULES },
+    showScreen: () => {},
+    navigateTo: (screen) => {
+      navigated.push(screen);
+    },
+    peers: { host: noVisit, join: noVisit },
+    relay: { awaitReplies: noVisit, deliverReply: noVisit },
+    visitScreens: { showHostState: noVisit, showGuestState: noVisit },
+  };
+  const session = createScreenSession(adapters);
+  navigations.set(session, navigated);
+  return session;
+}
+
+function navigationsOf(session: ScreenSession): FixedRouteScreen[] {
+  const navigated = navigations.get(session);
+  if (navigated === undefined) {
+    throw new Error("expected a remote session");
+  }
+  return navigated;
+}
 
 function playRemote(session: ScreenSession, role: RemoteRole, link: PeerLink, rules: Readonly<MatchRules>): void {
-  const remote = enterRemoteMatch(session, role, link, SEED, rules);
+  const remote = session.enterRemoteMatch(role, link, SEED, rules);
   remotes.set(session, remote);
 }
 
+function leaveForMainMenu(session: ScreenSession): void {
+  session.enterRoute({ screen: "mainMenu", replace: false });
+}
+
 function joinedGuest(channel: FakeChannel): ScreenSession {
-  const guest = createScreenSession(2, () => 0.5);
+  const guest = remoteSession();
   playRemote(guest, "guest", channel.guest.link, DEFAULT_MATCH_RULES);
   return guest;
 }
 
 function connectedPeers(hostSettings: Readonly<Settings> = DEFAULT_SETTINGS): Peers {
   const channel = fakeChannel();
-  const host = createScreenSession(1, () => 0.5);
+  const host = remoteSession();
   playRemote(host, "host", channel.host.link, matchRulesFor(hostSettings));
   const guest = joinedGuest(channel);
   deliver(channel);
@@ -150,15 +179,15 @@ function otherSession(peers: Peers, session: ScreenSession): ScreenSession {
 
 function settle(peers: Peers, session: ScreenSession): void {
   for (let i = 0; i < MAX_STEPS && matchOf(session).phase.kind === "inFlight"; i++) {
-    stepScreenSession(session, false);
+    session.step(false);
     deliver(peers.channel);
   }
 }
 
 function stepBoth(peers: Peers, steps: number): void {
   for (let i = 0; i < steps; i++) {
-    stepScreenSession(peers.host, false);
-    stepScreenSession(peers.guest, false);
+    peers.host.step(false);
+    peers.guest.step(false);
     deliver(peers.channel);
   }
 }
@@ -193,11 +222,11 @@ function takeShot(peers: Peers, shooter: ScreenSession, wanted: ShotResult): voi
   settle(peers, shooter);
   const match = matchOf(shooter);
   if (match.phase.kind === "roundOver") {
-    shooter.played.fire();
+    shooter.played().fire();
   }
   const target = findAim(match, wanted);
-  shooter.played.aim(aimDeltaTo(match, target));
-  shooter.played.fire();
+  shooter.played().aim(aimDeltaTo(match, target));
+  shooter.played().fire();
   deliver(peers.channel);
 }
 
@@ -212,7 +241,8 @@ function roundOverOnBoth(peers: Peers): RoundOverSessions {
 
 function stepsUntilMainMenu(session: ScreenSession): number {
   for (let steps = 1; steps <= MAX_STEPS; steps++) {
-    if (stepScreenSession(session, false) === "mainMenu") {
+    session.step(false);
+    if (navigationsOf(session).length > 0) {
       return steps;
     }
   }
@@ -249,8 +279,8 @@ describe("starting a remote match", () => {
   test("keeps both screens awake while the remote match is played", () => {
     const { host, guest } = connectedPeers();
 
-    expect(keepsScreenAwake(host)).toBe(true);
-    expect(keepsScreenAwake(guest)).toBe(true);
+    expect(host.keepsScreenAwake()).toBe(true);
+    expect(guest.keepsScreenAwake()).toBe(true);
   });
 
   test("the guest waits for the host until the hello arrives", () => {
@@ -302,7 +332,7 @@ describe("playing a remote match", () => {
     const hostBefore = structuredClone(matchView(matchOf(peers.host)));
     const guestBefore = structuredClone(matchView(matchOf(peers.guest)));
 
-    waiting.played.fire();
+    waiting.played().fire();
     deliver(peers.channel);
 
     expect(matchView(matchOf(peers.host))).toEqual(hostBefore);
@@ -313,7 +343,7 @@ describe("playing a remote match", () => {
     const peers = connectedPeers();
     const { next, waiting } = roundOverOnBoth(peers);
 
-    next.played.fire();
+    next.played().fire();
     const waitingPhaseBeforeDelivery = matchOf(waiting).phase.kind;
     deliver(peers.channel);
 
@@ -327,9 +357,9 @@ describe("playing a remote match", () => {
     const { next, waiting } = roundOverOnBoth(peers);
     const side = nextShooter(matchOf(next));
 
-    next.played.fire();
+    next.played().fire();
     deliver(peers.channel);
-    next.played.aim({ angle: 10, power: 20 });
+    next.played().aim({ angle: 10, power: 20 });
     stepBoth(peers, 3);
 
     expect(matchOf(waiting).ships[side].aim).toEqual(matchOf(next).ships[side].aim);
@@ -342,9 +372,9 @@ describe("playing a remote match", () => {
     const receiver = otherSession(peers, shooter);
     const side = matchOf(shooter).activePlayer;
     const earlierAim = findAim(matchOf(shooter), "hit");
-    shooter.played.aim(aimDeltaTo(matchOf(shooter), earlierAim));
+    shooter.played().aim(aimDeltaTo(matchOf(shooter), earlierAim));
     stepBoth(peers, 3);
-    shooter.played.fire();
+    shooter.played().fire();
     deliver(peers.channel);
     settle(peers, shooter);
     settle(peers, receiver);
@@ -352,7 +382,7 @@ describe("playing a remote match", () => {
     settle(peers, receiver);
     settle(peers, shooter);
 
-    shooter.played.aim(aimDeltaTo(matchOf(shooter), earlierAim));
+    shooter.played().aim(aimDeltaTo(matchOf(shooter), earlierAim));
     stepBoth(peers, 3);
 
     expect(matchOf(shooter).roundNumber).toBe(2);
@@ -385,8 +415,8 @@ describe("playing a remote match", () => {
     const hostBefore = structuredClone(matchView(matchOf(peers.host)));
     const guestBefore = structuredClone(matchView(matchOf(peers.guest)));
 
-    waiting.played.aim({ angle: 30, power: 50 });
-    waiting.played.fire();
+    waiting.played().aim({ angle: 30, power: 50 });
+    waiting.played().fire();
     deliver(peers.channel);
 
     expect(matchView(matchOf(peers.host))).toEqual(hostBefore);
@@ -399,7 +429,7 @@ describe("playing a remote match", () => {
     const receiver = otherSession(peers, shooter);
     const side = matchOf(shooter).activePlayer;
 
-    shooter.played.aim({ angle: 10, power: 20 });
+    shooter.played().aim({ angle: 10, power: 20 });
     stepBoth(peers, 3);
 
     expect(matchOf(receiver).ships[side].aim).toEqual(matchOf(shooter).ships[side].aim);
@@ -463,11 +493,11 @@ describe("ending a remote match", () => {
   test("escape leaves for the main menu and shows opponent left on the other side", async () => {
     const peers = connectedPeers();
 
-    enterScreen(peers.host, "mainMenu", 3, DEFAULT_MATCH_RULES);
+    leaveForMainMenu(peers.host);
     deliver(peers.channel);
     await flushPromises();
 
-    expect(peers.host.screen).toBe("mainMenu");
+    expect(peers.host.screen()).toBe("mainMenu");
     expect(remoteNotice(remoteOf(peers.guest))).toBe("opponentLeft");
     expect(peers.channel.closed).toBe(true);
   });
@@ -529,13 +559,14 @@ describe("returning to the main menu", () => {
     const peers = connectedPeers();
     const leaving = remoteOf(peers.host);
 
-    enterScreen(peers.host, "mainMenu", 3, DEFAULT_MATCH_RULES);
+    leaveForMainMenu(peers.host);
     deliver(peers.channel);
     await flushPromises();
 
     expect(leaving.end).toBe("left");
-    expect(peers.host.screen).toBe("mainMenu");
-    expect(stepScreenSession(peers.host, false)).toBe("stay");
+    expect(peers.host.screen()).toBe("mainMenu");
+    peers.host.step(false);
+    expect(navigationsOf(peers.host)).toEqual([]);
     expect(stepsUntilMainMenu(peers.guest)).toBe(END_NOTICE_STEPS);
   });
 });

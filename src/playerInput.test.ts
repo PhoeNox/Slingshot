@@ -19,7 +19,7 @@ import {
 } from "./core/match";
 import type { PeerLink } from "./peerConnection";
 import { playAttractMode, playHotSeat, type PlayedMatch } from "./playedMatch";
-import { createPlayerInput, type InputClock, type PlayerInput } from "./playerInput";
+import { createPlayerInput, type InputClock, type PlayedMatchSource, type PlayerInput } from "./playerInput";
 import { playRemoteMatch, startRemoteMatch, type RemoteMatch } from "./remoteMatch";
 import { ANGLE_STEP_PX, POWER_STEP_PX } from "./touchAim";
 
@@ -47,7 +47,7 @@ interface RemotePeers {
 }
 
 interface Player {
-  source: { played: PlayedMatch };
+  shown: { played: PlayedMatch };
   input: PlayerInput;
   clock: FakeClock;
 }
@@ -93,10 +93,11 @@ function fakeClock(): FakeClock {
 }
 
 function playerOf(played: PlayedMatch): Player {
-  const source = { played };
+  const shown = { played };
+  const source: PlayedMatchSource = { played: () => shown.played };
   const clock = fakeClock();
   const input = createPlayerInput(source, clock);
-  return { source, input, clock };
+  return { shown, input, clock };
 }
 
 function hotSeatMatch(): Match {
@@ -243,7 +244,7 @@ describe("keyboard", () => {
     player.input.keyDown({ code: "ArrowRight", shiftKey: false, repeat: false });
     const before = bothAims(match);
 
-    player.source.played = attractMode();
+    player.shown.played = attractMode();
     player.clock.advance(REPEAT_DELAY_MS);
 
     expect(bothAims(match)).toEqual(before);
@@ -302,7 +303,7 @@ describe("leaving the match mid-touch", () => {
     const player = playerOf(playHotSeat(match));
     pressAt(player.input);
 
-    player.source.played = attractMode();
+    player.shown.played = attractMode();
     player.input.pointerUp(1);
 
     expect(isAiming(match)).toBe(true);
@@ -313,7 +314,7 @@ describe("leaving the match mid-touch", () => {
     pressAt(player.input);
     const next = hotSeatMatch();
 
-    player.source.played = playHotSeat(next);
+    player.shown.played = playHotSeat(next);
     player.input.pointerUp(1);
 
     expect(isAiming(next)).toBe(true);
@@ -325,9 +326,9 @@ describe("leaving the match mid-touch", () => {
     pressAt(player.input);
     const before = bothAims(match);
 
-    player.source.played = attractMode();
+    player.shown.played = attractMode();
     drag(player.input, 0, -ANGLE_STEP_PX * 2);
-    player.source.played = playHotSeat(match);
+    player.shown.played = playHotSeat(match);
     drag(player.input, 0, -ANGLE_STEP_PX * 4);
 
     expect(bothAims(match)).toEqual(before);

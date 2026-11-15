@@ -19,7 +19,7 @@ export interface InputClock {
 }
 
 export interface PlayedMatchSource {
-  readonly played: PlayedMatch;
+  played: () => PlayedMatch;
 }
 
 export interface KeyPress {
@@ -61,22 +61,22 @@ export function createPlayerInput(source: PlayedMatchSource, clock: InputClock):
     const step = stepAimKeyRepeat(state.repeat, input, clock.now());
     state.repeat = step.repeat;
     rescheduleRepeat(state, clock, step.nextTickInMs, tick);
-    playStep(source.played, step);
+    playStep(source.played(), step);
     return step;
   };
   const tick = () => {
     state.timer = undefined;
-    const input: AimKeyInput = { kind: "tick", matchActive: source.played.takesInput };
+    const input: AimKeyInput = { kind: "tick", matchActive: source.played().takesInput };
     applyKey(input);
   };
   const applyTouch = (input: TouchAimInput) => {
     const step = stepTouchAim(state.touch, input);
     state.touch = step.touch;
-    playStep(source.played, step);
+    playStep(source.played(), step);
   };
   return {
     keyDown: (key) => {
-      const input: AimKeyInput = { kind: "keyDown", ...key, matchActive: source.played.takesInput };
+      const input: AimKeyInput = { kind: "keyDown", ...key, matchActive: source.played().takesInput };
       return applyKey(input).consumesKey;
     },
     keyUp: (key) => {
@@ -84,7 +84,7 @@ export function createPlayerInput(source: PlayedMatchSource, clock: InputClock):
       applyKey(input);
     },
     pointerDown: (pointerId, position) => {
-      const played = source.played;
+      const played = source.played();
       if (state.touch.pointerId === undefined) {
         state.touchedMatch = played;
       }
@@ -102,7 +102,7 @@ export function createPlayerInput(source: PlayedMatchSource, clock: InputClock):
         kind: "pointerMove",
         pointerId,
         position,
-        side: source.played.aimingSide(),
+        side: source.played().aimingSide(),
         matchActive: isTouchedMatchPlayed(state, source),
       };
       applyTouch(input);
@@ -137,7 +137,8 @@ function rescheduleRepeat(
 }
 
 function isTouchedMatchPlayed(state: Readonly<PlayerInputState>, source: PlayedMatchSource): boolean {
-  return source.played === state.touchedMatch && source.played.takesInput;
+  const played = source.played();
+  return played === state.touchedMatch && played.takesInput;
 }
 
 function playStep(played: PlayedMatch, step: Readonly<AimKeyRepeatStep | TouchAimStep>): void {
