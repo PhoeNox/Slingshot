@@ -4,26 +4,19 @@
 import { COLOURS } from "./colours";
 import type { PlanetCountRange } from "./core/match";
 import { canEnterFullscreen, enterLandscapeFullscreen, isFullscreen, toggleLandscapeFullscreen } from "./fullscreen";
-import { moveFocus, showsMatch, type FixedRouteScreen, type FocusStep, type MenuItem, type Screen } from "./navigation";
+import { moveFocus, type FixedRouteScreen, type FocusStep, type MenuItem, type Screen } from "./navigation";
 import { scrambleLabel } from "./scramble";
 import { SETTING_KEYS, SETTING_RULES, withRangeEnd, type AnySettingRule, type RangeEnd, type SettingChoice, type SettingKey, type Settings } from "./settings";
 import type { SettingsStore } from "./settingsStore";
 
 export interface ScreenElements {
   overlay: HTMLElement;
-  mainMenu: HTMLElement;
-  playMenu: HTMLElement;
-  settings: HTMLElement;
-  settingsTabs: HTMLElement;
-  credits: HTMLElement;
-  creditsBackButton: HTMLButtonElement;
-  host: HTMLElement;
-  hostBackButton: HTMLButtonElement;
-  guest: HTMLElement;
-  guestBackButton: HTMLButtonElement;
+  panels: ReadonlyMap<Screen, HTMLElement>;
   keyHint: HTMLElement;
   canvas: HTMLCanvasElement;
 }
+
+type ScreenView = { shows: "panel"; focus: string } | { shows: "match" };
 
 interface SettingField {
   read(): unknown;
@@ -43,6 +36,22 @@ const TAB_STEPS: Record<string, FocusStep> = {
   ArrowRight: 1,
   KeyD: 1,
 };
+
+const MENU_FOCUS = ".menu button";
+const MAIN_MENU_BUTTON_FOCUS = "[data-main-menu-button]";
+
+const SCREEN_VIEWS: Record<Screen, ScreenView> = {
+  mainMenu: { shows: "panel", focus: MENU_FOCUS },
+  playMenu: { shows: "panel", focus: MENU_FOCUS },
+  settings: { shows: "panel", focus: '[role="tab"][aria-selected="true"]' },
+  credits: { shows: "panel", focus: MAIN_MENU_BUTTON_FOCUS },
+  host: { shows: "panel", focus: MAIN_MENU_BUTTON_FOCUS },
+  guest: { shows: "panel", focus: MAIN_MENU_BUTTON_FOCUS },
+  match: { shows: "match" },
+  remoteMatch: { shows: "match" },
+};
+
+const SCREENS = Object.keys(SCREEN_VIEWS) as Screen[];
 
 const SCRAMBLE_DURATION_MS = 200;
 const BRACKET_FLASH_KEYFRAMES: Keyframe[] = [{ color: COLOURS.lock }, { color: COLOURS.phosphor }];
@@ -162,38 +171,48 @@ function resetScrambles(overlay: HTMLElement): void {
   }
 }
 
+export function locateScreenElements(overlay: HTMLElement, keyHint: HTMLElement, canvas: HTMLCanvasElement): ScreenElements {
+  const panelScreens = SCREENS.filter((screen) => SCREEN_VIEWS[screen].shows === "panel");
+  const panelEntries = panelScreens.map((screen) => [screen, locatePanel(overlay, screen)] as const);
+  const panels = new Map(panelEntries);
+  return { overlay, panels, keyHint, canvas };
+}
+
+function locatePanel(overlay: HTMLElement, screen: Screen): HTMLElement {
+  const panel = overlay.querySelector<HTMLElement>(`[data-screen="${screen}"]`);
+  if (panel === null) {
+    throw new Error(`No overlay panel for "${screen}"`);
+  }
+  return panel;
+}
+
+export function screenPanel(elements: ScreenElements, screen: Screen): HTMLElement {
+  const panel = elements.panels.get(screen);
+  if (panel === undefined) {
+    throw new Error(`"${screen}" shows no overlay panel`);
+  }
+  return panel;
+}
+
 export function showScreen(elements: ScreenElements, screen: Screen): void {
   resetScrambles(elements.overlay);
-  const matchShown = showsMatch(screen);
+  const view = SCREEN_VIEWS[screen];
+  const matchShown = view.shows === "match";
   elements.overlay.hidden = matchShown;
-  elements.mainMenu.hidden = screen !== "mainMenu";
-  elements.playMenu.hidden = screen !== "playMenu";
-  elements.settings.hidden = screen !== "settings";
-  elements.credits.hidden = screen !== "credits";
-  elements.host.hidden = screen !== "host";
-  elements.guest.hidden = screen !== "guest";
+  for (const [panelScreen, panel] of elements.panels) {
+    panel.hidden = panelScreen !== screen;
+  }
   elements.keyHint.style.visibility = matchShown ? "visible" : "hidden";
-  if (screen === "mainMenu") {
-    elements.mainMenu.querySelector("button")!.focus();
+  const focusTarget = focusTargetOf(elements, screen, view);
+  focusTarget.focus();
+}
+
+function focusTargetOf(elements: ScreenElements, screen: Screen, view: ScreenView): HTMLElement {
+  if (view.shows === "match") {
+    return elements.canvas;
   }
-  if (screen === "playMenu") {
-    elements.playMenu.querySelector("button")!.focus();
-  }
-  if (screen === "settings") {
-    elements.settingsTabs.querySelector<HTMLButtonElement>('[aria-selected="true"]')!.focus();
-  }
-  if (screen === "credits") {
-    elements.creditsBackButton.focus();
-  }
-  if (screen === "host") {
-    elements.hostBackButton.focus();
-  }
-  if (screen === "guest") {
-    elements.guestBackButton.focus();
-  }
-  if (matchShown) {
-    elements.canvas.focus();
-  }
+  const panel = screenPanel(elements, screen);
+  return panel.querySelector<HTMLElement>(view.focus)!;
 }
 
 export function bindSettingsTabs(tabList: HTMLElement): void {

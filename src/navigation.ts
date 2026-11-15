@@ -83,10 +83,6 @@ export function backTargetFor(screen: Screen): FixedRouteScreen | undefined {
   return BACK_TARGETS[screen];
 }
 
-export function showsMatch(screen: Screen): boolean {
-  return screen === "match" || screen === "remoteMatch";
-}
-
 export function playsAttractMode(screen: Screen, reducedMotion: boolean): boolean {
   return ATTRACT_PLAYING_SCREENS.has(screen) && !reducedMotion;
 }

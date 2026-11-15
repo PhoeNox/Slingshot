@@ -14,7 +14,7 @@ import { bindRemoteMatchScreens, type GuestScreenElements, type HostScreenElemen
 import type { PeerConnectors } from "./remoteVisit";
 import { drawLayers } from "./renderer";
 import { nostrReplyRelay } from "./replyRelay";
-import { bindBracketFlash, bindFullscreenButton, bindFullscreenToggle, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindSettingControls, bindSettingsTabs, renderMenuItems, showGestureHint, showScreen, traceTitleArc, type ScreenElements } from "./screens";
+import { bindBracketFlash, bindFullscreenButton, bindFullscreenToggle, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindSettingControls, bindSettingsTabs, locateScreenElements, renderMenuItems, screenPanel, showGestureHint, showScreen, traceTitleArc } from "./screens";
 import { localSettingsStorage } from "./settingsStorage";
 import { createSettingsStore } from "./settingsStore";
 import { createScreenSession, type ScreenSessionAdapters } from "./screenSession";
@@ -26,21 +26,9 @@ async function start(): Promise<void> {
   const stage = document.querySelector<HTMLElement>("#stage")!;
   const canvas = document.querySelector<HTMLCanvasElement>("#game")!;
   const context = canvas.getContext("2d")!;
-  const elements: ScreenElements = {
-    overlay: document.querySelector<HTMLElement>("#overlay")!,
-    mainMenu: document.querySelector<HTMLElement>("#main-menu")!,
-    playMenu: document.querySelector<HTMLElement>("#play-menu")!,
-    settings: document.querySelector<HTMLElement>("#settings")!,
-    settingsTabs: document.querySelector<HTMLElement>("#settings .settings-tabs")!,
-    credits: document.querySelector<HTMLElement>("#credits")!,
-    creditsBackButton: document.querySelector<HTMLButtonElement>("#credits-back-button")!,
-    host: document.querySelector<HTMLElement>("#host")!,
-    hostBackButton: document.querySelector<HTMLButtonElement>("#host-back-button")!,
-    guest: document.querySelector<HTMLElement>("#guest")!,
-    guestBackButton: document.querySelector<HTMLButtonElement>("#guest-back-button")!,
-    keyHint: document.querySelector<HTMLElement>(".key-hint")!,
-    canvas,
-  };
+  const overlay = document.querySelector<HTMLElement>("#overlay")!;
+  const keyHint = document.querySelector<HTMLElement>(".key-hint")!;
+  const elements = locateScreenElements(overlay, keyHint, canvas);
   const hostElements: HostScreenElements = {
     invitationField: document.querySelector<HTMLElement>("#invitation-field")!,
     invitationLink: document.querySelector<HTMLInputElement>("#invitation-link")!,
@@ -63,7 +51,7 @@ async function start(): Promise<void> {
   const matchMenuButton = document.querySelector<HTMLButtonElement>("#match-menu-button")!;
   const rotateFullscreenButton = document.querySelector<HTMLButtonElement>("#rotate-fullscreen-button")!;
   const fullscreenToggleButton = document.querySelector<HTMLButtonElement>("#fullscreen-toggle-button")!;
-  const settingsBackButton = document.querySelector<HTMLButtonElement>("#settings-back-button")!;
+  const mainMenuButtons = document.querySelectorAll<HTMLButtonElement>("[data-main-menu-button]");
   const titleArc = document.querySelector<SVGPathElement>("#main-menu .title-arc path")!;
 
   const sprites = await loadSprites();
@@ -95,21 +83,21 @@ async function start(): Promise<void> {
     bindMenuButtonEffects(button, reducedMotion);
   }
   bindBracketFlash(matchMenuButton);
-  bindMainMenuButton(matchMenuButton, navigation.navigateTo);
   bindBracketFlash(rotateFullscreenButton);
   bindFullscreenButton(rotateFullscreenButton, window);
   bindBracketFlash(fullscreenToggleButton);
   bindFullscreenToggle(fullscreenToggleButton, window);
-  bindMainMenuButton(settingsBackButton, navigation.navigateTo);
-  bindMainMenuButton(elements.creditsBackButton, navigation.navigateTo);
-  bindMainMenuButton(elements.hostBackButton, navigation.navigateTo);
-  bindMainMenuButton(elements.guestBackButton, navigation.navigateTo);
+  for (const button of mainMenuButtons) {
+    bindMainMenuButton(button, navigation.navigateTo);
+  }
   const codeButtons = elements.overlay.querySelectorAll<HTMLButtonElement>(".code-button");
   for (const button of codeButtons) {
     bindBracketFlash(button);
   }
-  bindSettingsTabs(elements.settingsTabs);
-  bindSettingControls(elements.settings, settings);
+  const settingsPanel = screenPanel(elements, "settings");
+  const settingsTabs = settingsPanel.querySelector<HTMLElement>(".settings-tabs")!;
+  bindSettingsTabs(settingsTabs);
+  bindSettingControls(settingsPanel, settings);
   const peers: PeerConnectors = { host: hostPeerConnection, join: joinPeerConnection };
   const relay = nostrReplyRelay();
   const submitReply = (replyCode: string) => {

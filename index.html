@@ -14,7 +14,7 @@
     <main id="stage">
       <canvas id="game" tabindex="0" aria-label="Slingshot playing area"></canvas>
       <div id="overlay">
-        <section id="main-menu" class="overlay-screen" hidden>
+        <section id="main-menu" data-screen="mainMenu" class="overlay-screen" hidden>
           <div class="title-block">
             <h1>Slingshot</h1>
             <svg class="title-arc" viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true">
@@ -23,11 +23,11 @@
           </div>
           <nav class="menu" aria-label="Main menu"></nav>
         </section>
-        <section id="play-menu" class="overlay-screen" hidden>
+        <section id="play-menu" data-screen="playMenu" class="overlay-screen" hidden>
           <h1>Play</h1>
           <nav class="menu" aria-label="Play"></nav>
         </section>
-        <section id="settings" class="overlay-screen" hidden>
+        <section id="settings" data-screen="settings" class="overlay-screen" hidden>
           <h1>Settings</h1>
           <div class="settings-body">
             <div class="settings-tabs" role="tablist" aria-label="Settings groups">
@@ -76,10 +76,10 @@
             </div>
           </div>
           <nav class="menu" aria-label="Settings">
-            <button id="settings-back-button" type="button">Back</button>
+            <button data-main-menu-button type="button">Back</button>
           </nav>
         </section>
-        <section id="credits" class="overlay-screen" hidden>
+        <section id="credits" data-screen="credits" class="overlay-screen" hidden>
           <h1>Credits</h1>
           <div class="credits-text">
             <p>
@@ -120,10 +120,10 @@
             </p>
           </div>
           <nav class="menu" aria-label="Credits">
-            <button id="credits-back-button" type="button">Back</button>
+            <button data-main-menu-button type="button">Back</button>
           </nav>
         </section>
-        <section id="host" class="overlay-screen remote-screen" hidden>
+        <section id="host" data-screen="host" class="overlay-screen remote-screen" hidden>
           <h1>Host remote match</h1>
           <div class="remote-body">
             <p class="remote-note">Both players see each other's IP address. Joining passes an encrypted message through public Nostr relays.</p>
@@ -147,10 +147,10 @@
             <p id="host-status" class="remote-status" role="status"></p>
           </div>
           <nav class="menu" aria-label="Host remote match">
-            <button id="host-back-button" type="button">Back</button>
+            <button data-main-menu-button type="button">Back</button>
           </nav>
         </section>
-        <section id="guest" class="overlay-screen remote-screen" hidden>
+        <section id="guest" data-screen="guest" class="overlay-screen remote-screen" hidden>
           <h1>Join remote match</h1>
           <div class="remote-body">
             <p class="remote-note">Both players see each other's IP address. Joining passes an encrypted message through public Nostr relays.</p>
@@ -165,7 +165,7 @@
             <p id="guest-status" class="remote-status" role="status"></p>
           </div>
           <nav class="menu" aria-label="Join remote match">
-            <button id="guest-back-button" type="button">Back</button>
+            <button data-main-menu-button type="button">Back</button>
           </nav>
         </section>
       </div>
@@ -177,7 +177,7 @@
     <p class="key-hint" style="visibility: hidden">
       <span class="fine-pointer-only">←/→ or A/D angle · ↑/↓ or W/S power · Shift ×2.5 · Space fire</span>
       <span class="coarse-pointer-only gesture-hint">Drag ↕ angle · drag ↔ power · tap fire</span>
-      <button id="match-menu-button" class="hint-button" type="button"><span class="fine-pointer-only">Esc menu</span><span class="coarse-pointer-only">Menu</span></button>
+      <button id="match-menu-button" data-main-menu-button class="hint-button" type="button"><span class="fine-pointer-only">Esc menu</span><span class="coarse-pointer-only">Menu</span></button>
       <button id="fullscreen-toggle-button" class="hint-button coarse-pointer-only" type="button">Fullscreen</button>
     </p>
     <script type="module" src="./src/main.ts"></script>
