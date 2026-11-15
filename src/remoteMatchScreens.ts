@@ -11,6 +11,7 @@ export interface HostScreenElements {
   invitationField: HTMLElement;
   invitationLink: HTMLInputElement;
   invitationCopyButton: HTMLButtonElement;
+  invitationShareButton: HTMLButtonElement;
   replyForm: HTMLFormElement;
   replyFields: HTMLFieldSetElement;
   replyCodeInput: HTMLInputElement;
@@ -21,10 +22,18 @@ export interface GuestScreenElements {
   replyCodeField: HTMLElement;
   replyCode: HTMLInputElement;
   replyCodeCopyButton: HTMLButtonElement;
+  replyCodeShareButton: HTMLButtonElement;
   status: HTMLElement;
 }
 
 export type SubmitReplyCode = (replyCode: string) => void;
+
+export type ShareNavigator = Partial<Pick<Navigator, "canShare" | "share">>;
+
+type ShareDataOf = (value: string) => ShareData;
+
+const invitationShareData: ShareDataOf = (url) => ({ url });
+const replyCodeShareData: ShareDataOf = (text) => ({ text });
 
 const COPY_LABEL = "Copy";
 const COPIED_LABEL = "Copied";
@@ -59,13 +68,15 @@ export function bindRemoteMatchScreens(
 ): VisitScreens {
   bindCopyButton(target, host.invitationCopyButton, host.invitationLink);
   bindCopyButton(target, guest.replyCodeCopyButton, guest.replyCode);
+  bindShareButton(target, host.invitationShareButton, host.invitationLink, invitationShareData);
+  bindShareButton(target, guest.replyCodeShareButton, guest.replyCode, replyCodeShareData);
   host.replyForm.addEventListener("submit", (event) => {
     event.preventDefault();
     const replyCode = host.replyCodeInput.value.trim();
     submitReply(replyCode);
   });
   const showHostState = (state: VisitState) => showHostScreen(target, host, state);
-  const showGuestState = (state: VisitState) => showGuestScreen(guest, state);
+  const showGuestState = (state: VisitState) => showGuestScreen(target, guest, state);
   return { showHostState, showGuestState };
 }
 
@@ -91,18 +102,19 @@ function showHostScreen(target: Window, elements: HostScreenElements, state: Vis
   }
 }
 
-function showGuestScreen(elements: GuestScreenElements, state: VisitState): void {
+function showGuestScreen(target: Window, elements: GuestScreenElements, state: VisitState): void {
   switch (state.phase) {
     case "pending":
       elements.replyCodeField.hidden = true;
       elements.replyCodeCopyButton.textContent = COPY_LABEL;
+      elements.replyCodeShareButton.hidden = true;
       showStatus(elements.status, "Preparing to join…", false);
       return;
     case "joining":
       showStatus(elements.status, "Joining…", false);
       return;
     case "replyCode":
-      showReplyCode(elements, state.code);
+      showReplyCode(target, elements, state.code);
       return;
     case "handedOver":
       elements.replyCodeField.hidden = true;
@@ -124,6 +136,7 @@ function offerReplyRetry(elements: HostScreenElements, retry: boolean): void {
 function resetHostScreen(elements: HostScreenElements): void {
   elements.invitationField.hidden = true;
   elements.invitationCopyButton.textContent = COPY_LABEL;
+  elements.invitationShareButton.hidden = true;
   elements.replyForm.hidden = true;
   elements.replyForm.reset();
   elements.replyFields.disabled = false;
@@ -131,15 +144,20 @@ function resetHostScreen(elements: HostScreenElements): void {
 
 function showInvitation(target: Window, elements: HostScreenElements, invitation: Invitation): void {
   const hash = invitationHash(invitation.offerCode, invitation.roomSecret);
-  elements.invitationLink.value = new URL(hash, target.location.href).href;
+  const link = new URL(hash, target.location.href).href;
+  elements.invitationLink.value = link;
+  const shareData = invitationShareData(link);
+  elements.invitationShareButton.hidden = !canShareCode(target.navigator, shareData);
   elements.invitationField.hidden = false;
   elements.replyForm.hidden = false;
   elements.invitationCopyButton.focus();
   showStatus(elements.status, "Waiting for the guest to join", false);
 }
 
-function showReplyCode(elements: GuestScreenElements, replyCode: string): void {
+function showReplyCode(target: Window, elements: GuestScreenElements, replyCode: string): void {
   elements.replyCode.value = replyCode;
+  const shareData = replyCodeShareData(replyCode);
+  elements.replyCodeShareButton.hidden = !canShareCode(target.navigator, shareData);
   elements.replyCodeField.hidden = false;
   elements.replyCodeCopyButton.focus();
   showStatus(elements.status, "Couldn't join automatically, send this code to the host", false);
@@ -172,4 +190,29 @@ function bindCopyButton(target: Window, button: HTMLButtonElement, field: HTMLIn
       button.textContent = COPY_BLOCKED_LABEL;
     }
   });
+}
+
+function bindShareButton(target: Window, button: HTMLButtonElement, field: HTMLInputElement, shareDataOf: ShareDataOf): void {
+  button.addEventListener("click", () => {
+    const shareData = shareDataOf(field.value);
+    void shareCode(target.navigator, shareData);
+  });
+}
+
+export function canShareCode(navigator: ShareNavigator, shareData: ShareData): boolean {
+  return navigator.canShare !== undefined && navigator.share !== undefined && navigator.canShare(shareData);
+}
+
+export async function shareCode(navigator: ShareNavigator, shareData: ShareData): Promise<void> {
+  try {
+    await navigator.share!(shareData);
+  } catch (error) {
+    if (!isShareCancelled(error)) {
+      throw error;
+    }
+  }
+}
+
+function isShareCancelled(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
 }

@@ -44,6 +44,7 @@ async function start(): Promise<void> {
     invitationField: document.querySelector<HTMLElement>("#invitation-field")!,
     invitationLink: document.querySelector<HTMLInputElement>("#invitation-link")!,
     invitationCopyButton: document.querySelector<HTMLButtonElement>("#invitation-copy-button")!,
+    invitationShareButton: document.querySelector<HTMLButtonElement>("#invitation-share-button")!,
     replyForm: document.querySelector<HTMLFormElement>("#reply-form")!,
     replyFields: document.querySelector<HTMLFieldSetElement>("#reply-form fieldset")!,
     replyCodeInput: document.querySelector<HTMLInputElement>("#reply-code-input")!,
@@ -53,6 +54,7 @@ async function start(): Promise<void> {
     replyCodeField: document.querySelector<HTMLElement>("#reply-code-field")!,
     replyCode: document.querySelector<HTMLInputElement>("#reply-code")!,
     replyCodeCopyButton: document.querySelector<HTMLButtonElement>("#reply-code-copy-button")!,
+    replyCodeShareButton: document.querySelector<HTMLButtonElement>("#reply-code-share-button")!,
     status: document.querySelector<HTMLElement>("#guest-status")!,
   };
   const menu = document.querySelector<HTMLElement>("#main-menu .menu")!;
