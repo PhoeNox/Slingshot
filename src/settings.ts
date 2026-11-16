@@ -3,7 +3,7 @@
 
 import { DEFAULT_MATCH_RULES, type MatchRules, type PlanetCountRange, type PlanetVisibility } from "./core/match";
 
-export type SettingKind = "display" | "matchRule";
+export type SettingKind = "display" | "matchRule" | "sound";
 
 export interface SettingChoice<T> {
   value: T;
@@ -60,6 +60,8 @@ export const SETTING_RULES = {
   timeoutSeconds: choiceSetting("matchRule", TIMEOUT_CHOICES, DEFAULT_MATCH_RULES.timeoutSeconds),
   bounce: toggleSetting("matchRule", DEFAULT_MATCH_RULES.bounce),
   planetVisibility: choiceSetting("matchRule", PLANET_VISIBILITY_CHOICES, DEFAULT_MATCH_RULES.planetVisibility),
+  music: toggleSetting("sound", true),
+  soundEffects: toggleSetting("sound", true),
 };
 
 export type AnySettingRule =

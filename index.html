@@ -33,6 +33,7 @@
             <div class="settings-tabs" role="tablist" aria-label="Settings groups">
               <button id="rules-tab" type="button" role="tab" aria-selected="true" aria-controls="rules-panel">Match rules</button>
               <button id="display-tab" type="button" role="tab" aria-selected="false" aria-controls="display-panel" tabindex="-1">Display</button>
+              <button id="sound-tab" type="button" role="tab" aria-selected="false" aria-controls="sound-panel" tabindex="-1">Sound</button>
             </div>
             <div class="settings-panels">
               <div id="rules-panel" class="settings-list" role="tabpanel" aria-labelledby="rules-tab">
@@ -71,6 +72,16 @@
                 <label class="setting">
                   <input data-setting="gravityWellContours" type="checkbox" />
                   Gravity-well contours
+                </label>
+              </div>
+              <div id="sound-panel" class="settings-list" role="tabpanel" aria-labelledby="sound-tab" hidden>
+                <label class="setting">
+                  <input data-setting="music" type="checkbox" />
+                  Music
+                </label>
+                <label class="setting">
+                  <input data-setting="soundEffects" type="checkbox" />
+                  Sound effects
                 </label>
               </div>
             </div>

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import type { SoundName, Sounds } from "./audio";
 import type { SpriteName } from "./frameItems";
 import type { Sprites } from "./renderer";
 
@@ -10,6 +11,13 @@ const TEXT_FONT_DESCRIPTORS: FontFaceDescriptors = { weight: "500" };
 export const TITLE_FONT_FAMILY = "Michroma";
 const TITLE_FONT_SOURCE = "url(data/Michroma-Regular.ttf)";
 const PLANET_SPRITES = [1, 2, 3, 4, 5, 6, 7, 8];
+const SOUND_FILES: Readonly<Record<SoundName, string>> = {
+  music: "data/music.mp3",
+  launch: "data/launch.mp3",
+  planetImpact: "data/planet_impact.mp3",
+  shipExplosion: "data/ship_explosion.mp3",
+  menuSelect: "data/menu_select.mp3",
+};
 
 async function loadImage(url: string): Promise<HTMLImageElement> {
   const image = new Image();
@@ -40,6 +48,24 @@ export async function loadSprites(): Promise<Sprites> {
     missile: await missileLoad,
     explosion: await explosionLoad,
   };
+}
+
+async function loadSound(context: BaseAudioContext, name: SoundName): Promise<[SoundName, AudioBuffer]> {
+  const url = SOUND_FILES[name];
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Cannot load sound ${url}: HTTP ${response.status}`);
+  }
+  const data = await response.arrayBuffer();
+  const buffer = await context.decodeAudioData(data);
+  return [name, buffer];
+}
+
+export async function loadSounds(context: BaseAudioContext): Promise<Sounds> {
+  const names = Object.keys(SOUND_FILES) as SoundName[];
+  const soundLoads = names.map((name) => loadSound(context, name));
+  const soundEntries = await Promise.all(soundLoads);
+  return Object.fromEntries(soundEntries) as Sounds;
 }
 
 async function loadFontFace(family: string, source: string, descriptors?: FontFaceDescriptors): Promise<void> {

@@ -64,7 +64,8 @@ Pure, seeded, no DOM, canvas, or clock (ADR-0001).
 | `wakeLock.ts` | Screen wake lock adapter that keeps the screen awake while asked to |
 | `display.ts` | Fits canvas and overlay to the stage's size, with the fit's CSS scale |
 | `fullscreen.ts` | Fullscreen availability, entering it with the orientation locked to landscape, and toggling it |
-| `assets.ts` | Sprite and font loading |
+| `assets.ts` | Sprite, font and sound loading |
+| `audio.ts` | Web Audio adapter: the audio context held back until the first user activation and suspended while the page is hidden, and the gapless music loop |
 | `colours.ts` | Colour tokens |
 | `scramble.ts` | Menu label scramble effect |
 

@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import "./style.css";
-import { loadFonts, loadSprites } from "./assets";
+import { loadFonts, loadSounds, loadSprites } from "./assets";
+import { bindAudioContext, loopedMusic } from "./audio";
 import { applyFit, applyOverlayFit, fitPlayingArea } from "./display";
 import { hudScaleFor } from "./frame";
 import { startGameLoop } from "./gameLoop";
@@ -54,8 +55,13 @@ async function start(): Promise<void> {
   const mainMenuButtons = document.querySelectorAll<HTMLButtonElement>("[data-main-menu-button]");
   const titleArc = document.querySelector<SVGPathElement>("#main-menu .title-arc path")!;
 
+  const audioContext = new AudioContext();
+  bindAudioContext(window, audioContext);
+
   const sprites = await loadSprites();
   await loadFonts();
+  const sounds = await loadSounds(audioContext);
+  const music = loopedMusic(audioContext, sounds.music);
 
   const settingsStorage = localSettingsStorage(window);
   const settings = createSettingsStore(settingsStorage);
@@ -128,6 +134,8 @@ async function start(): Promise<void> {
     session.step(reducedMotion.matches);
     const awake = session.keepsScreenAwake();
     wakeLock.keepAwake(awake);
+    const musicOn = settings.current().music;
+    music.keepPlaying(musicOn);
   };
   const stars = generateStars(Math.random);
   const starSprites = renderStarSprites();

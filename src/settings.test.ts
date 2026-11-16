@@ -15,13 +15,15 @@ import {
 } from "./settings";
 
 describe("parseSettings", () => {
-  test("shows contours and always-visible planets, with 2 to 4 planets, a 25 s timeout and no bounce by default", () => {
+  test("shows contours and always-visible planets, with 2 to 4 planets, a 25 s timeout, no bounce, music and sound effects by default", () => {
     expect(DEFAULT_SETTINGS).toEqual({
       gravityWellContours: true,
       planetCount: { min: 2, max: 4 },
       timeoutSeconds: 25,
       bounce: false,
       planetVisibility: "always",
+      music: true,
+      soundEffects: true,
     });
   });
 
@@ -37,6 +39,8 @@ describe("parseSettings", () => {
   const SINGLE_CHOICE_CHANGES: Partial<Settings>[] = [
     ...[true, false].map((gravityWellContours) => ({ gravityWellContours })),
     ...[true, false].map((bounce) => ({ bounce })),
+    ...[true, false].map((music) => ({ music })),
+    ...[true, false].map((soundEffects) => ({ soundEffects })),
     ...SETTING_RULES.timeoutSeconds.choices.map((choice) => ({ timeoutSeconds: choice.value })),
     ...SETTING_RULES.planetVisibility.choices.map((choice) => ({ planetVisibility: choice.value })),
     ...SETTING_RULES.planetCount.choices.map((choice) => ({ planetCount: { min: choice.value, max: choice.value } })),
@@ -59,6 +63,8 @@ describe("parseSettings", () => {
       timeoutSeconds: undefined,
       bounce: true,
       planetVisibility: "atRoundStart",
+      music: true,
+      soundEffects: true,
     });
   });
 
@@ -67,7 +73,7 @@ describe("parseSettings", () => {
 
     expect(serialiseSettings(settings)).toBe(
       '{"gravityWellContours":true,"planetCount":{"min":2,"max":4},"timeoutSeconds":null,"bounce":false,' +
-        '"planetVisibility":"hidden"}',
+        '"planetVisibility":"hidden","music":true,"soundEffects":true}',
     );
   });
 
@@ -101,6 +107,8 @@ describe("parseSettings", () => {
       timeoutSeconds: 25,
       bounce: false,
       planetVisibility: "always",
+      music: true,
+      soundEffects: true,
     });
   });
 
@@ -118,6 +126,8 @@ describe("parseSettings", () => {
       timeoutSeconds: 25,
       bounce: false,
       planetVisibility: "always",
+      music: true,
+      soundEffects: true,
     });
   });
 
@@ -136,6 +146,8 @@ describe("parseSettings", () => {
       timeoutSeconds: 10,
       bounce: false,
       planetVisibility: "always",
+      music: true,
+      soundEffects: true,
     });
   });
 
@@ -155,6 +167,8 @@ describe("parseSettings", () => {
       timeoutSeconds: 10,
       bounce: false,
       planetVisibility: "always",
+      music: true,
+      soundEffects: true,
     });
   });
 
@@ -169,6 +183,8 @@ describe("parseSettings", () => {
       timeoutSeconds: undefined,
       bounce: true,
       planetVisibility: "hidden",
+      music: true,
+      soundEffects: true,
     });
   });
 });
@@ -230,7 +246,7 @@ describe("planet visibility choices", () => {
 });
 
 describe("setting kinds", () => {
-  test("treat contours as a display setting and the rest as match rules", () => {
+  test("treat contours as a display setting, music and sound effects as sound settings and the rest as match rules", () => {
     const kinds = Object.fromEntries(Object.entries(SETTING_RULES).map(([key, rule]) => [key, rule.kind]));
 
     expect(kinds).toEqual({
@@ -239,6 +255,8 @@ describe("setting kinds", () => {
       timeoutSeconds: "matchRule",
       bounce: "matchRule",
       planetVisibility: "matchRule",
+      music: "sound",
+      soundEffects: "sound",
     });
   });
 });
@@ -251,6 +269,8 @@ describe("matchRulesFor", () => {
       timeoutSeconds: 10,
       bounce: true,
       planetVisibility: "atRoundStart",
+      music: true,
+      soundEffects: true,
     };
 
     expect(matchRulesFor(settings)).toEqual({
