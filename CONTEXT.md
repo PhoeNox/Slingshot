@@ -19,7 +19,7 @@ The screen, reached from Play on the main menu, offering a hot-seat match or hos
 _Avoid_: Mode select, lobby
 
 **Settings**:
-The screen, reached from the main menu, where players choose how future matches are played and how the game is drawn; choices are remembered between visits.
+The screen, reached from the main menu, where players choose how future matches are played, how the game is drawn, and whether music and sound effects play; choices are remembered between visits.
 _Avoid_: Options, preferences, config
 
 **Credits**:
@@ -143,3 +143,13 @@ _Avoid_: Gravity field, aura, halo
 **Missile**:
 The projectile of a shot, moved only by its launch velocity and planetary gravity.
 _Avoid_: Bullet, shell, particle
+
+### Sound
+
+**Music**:
+One ambient loop that plays seamlessly behind every screen, attract mode included; it starts only after the player's first tap or key press and pauses while the game is hidden.
+_Avoid_: Soundtrack, BGM
+
+**Sound effect**:
+A short sound marking one event: a missile launch, a planet impact, or a ship explosion (the same for hit and self-hit) in a match, or a menu select whenever a screen's button is activated; attract mode plays none.
+_Avoid_: SFX, noise
