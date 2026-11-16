@@ -33,6 +33,7 @@ function seededSession(seed: number): ScreenSession {
     peers: { host: noVisit, join: noVisit },
     relay: { awaitReplies: noVisit, deliverReply: noVisit },
     visitScreens: { showHostState: noVisit, showGuestState: noVisit },
+    playSoundEffect: () => {},
   };
   return createScreenSession(adapters);
 }

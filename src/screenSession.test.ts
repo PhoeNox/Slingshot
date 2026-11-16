@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import type { SoundEffect } from "./audio";
 import {
   adjustAim,
   createMatch,
@@ -78,6 +79,7 @@ interface Harness {
   invitations: FakeInvitation[];
   replies: FakeReply[];
   rooms: FakeRoom[];
+  soundEffects: SoundEffect[];
 }
 
 const SEED = 1;
@@ -196,6 +198,7 @@ function harness(settings: MatchRulesSource = DEFAULT_RULES): Harness {
   const invitations: FakeInvitation[] = [];
   const replies: FakeReply[] = [];
   const rooms: FakeRoom[] = [];
+  const soundEffects: SoundEffect[] = [];
   const adapters: ScreenSessionAdapters = {
     random: seededRandom,
     settings,
@@ -212,9 +215,12 @@ function harness(settings: MatchRulesSource = DEFAULT_RULES): Harness {
       showHostState: (state) => hostStates.push(state),
       showGuestState: (state) => guestStates.push(state),
     },
+    playSoundEffect: (effect) => {
+      soundEffects.push(effect);
+    },
   };
   const session = createScreenSession(adapters);
-  return { session, shownScreens, navigations, hostStates, guestStates, invitations, replies, rooms };
+  return { session, shownScreens, navigations, hostStates, guestStates, invitations, replies, rooms, soundEffects };
 }
 
 function enterScreen(session: ScreenSession, screen: MenuOrMatchScreen): void {
@@ -716,6 +722,66 @@ describe("debris", () => {
     const dots = playedFrameOf(session).items.filter((item) => item.kind === "dot");
 
     expect(dots).toHaveLength(BURST_COUNT.large);
+  });
+});
+
+describe("sound effects", () => {
+  function matchHarness(): Harness {
+    const h = harness();
+    enterScreen(h.session, "match");
+    return h;
+  }
+
+  test("a fired shot plays the launch on its first step", () => {
+    const h = matchHarness();
+    h.session.played().fire();
+
+    h.session.step(false);
+
+    expect(h.soundEffects).toEqual(["launch"]);
+  });
+
+  test("a shot in flight plays nothing after its launch", () => {
+    const h = matchHarness();
+    h.session.played().fire();
+    h.session.step(false);
+
+    h.session.step(false);
+
+    expect(h.soundEffects).toEqual(["launch"]);
+  });
+
+  test("a planet hit plays the planet impact", () => {
+    const h = matchHarness();
+
+    playUntil(h.session, isPlanetHit, false);
+
+    expect(h.soundEffects).toEqual(["launch", "planetImpact"]);
+  });
+
+  test("a ship hit plays the ship explosion", () => {
+    const h = matchHarness();
+
+    playUntil(h.session, isRoundOver, false);
+
+    expect(h.soundEffects).toEqual(["launch", "shipExplosion"]);
+  });
+
+  test("plays under reduced motion too", () => {
+    const h = matchHarness();
+
+    playUntil(h.session, isPlanetHit, true);
+
+    expect(h.soundEffects).toEqual(["launch", "planetImpact"]);
+  });
+
+  test("attract mode plays none", () => {
+    const h = harness();
+
+    stepUntilDebris(h.session);
+
+    expect(h.session.debris().length).toBeGreaterThan(0);
+    expect(h.soundEffects).toEqual([]);
   });
 });
 

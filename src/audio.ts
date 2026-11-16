@@ -5,9 +5,15 @@ export type SoundName = "music" | "launch" | "planetImpact" | "shipExplosion" | 
 
 export type Sounds = Readonly<Record<SoundName, AudioBuffer>>;
 
+export type SoundEffect = Exclude<SoundName, "music">;
+
+export type MatchSoundEffect = Exclude<SoundEffect, "menuSelect">;
+
 export interface Music {
   keepPlaying: (playing: boolean) => void;
 }
+
+export type PlaySoundEffect = (effect: SoundEffect) => void;
 
 // Events that count as a user activation in every target browser, so resuming the context inside them is allowed.
 const ACTIVATION_EVENTS = ["pointerdown", "touchend", "keydown"] as const;
@@ -48,5 +54,14 @@ export function loopedMusic(context: AudioContext, loop: AudioBuffer): Music {
     keepPlaying: (playing) => {
       gain.gain.value = playing ? 1 : 0;
     },
+  };
+}
+
+export function soundEffectPlayer(context: AudioContext, sounds: Sounds): PlaySoundEffect {
+  return (effect) => {
+    const source = context.createBufferSource();
+    source.buffer = sounds[effect];
+    source.connect(context.destination);
+    source.start();
   };
 }

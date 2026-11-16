@@ -58,6 +58,7 @@ export function playRemoteMatch(remote: RemoteMatch): PlayedMatch {
   return {
     viewer,
     shakes: true,
+    playsSoundEffects: true,
     takesInput: true,
     aimingSide: () => remoteAimingSide(remote),
     aim: (delta) => aimRemoteMatch(remote, delta),

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import type { MatchSoundEffect, PlaySoundEffect } from "./audio";
 import { createAttractMode } from "./core/attract";
 import type { Point } from "./core/flight";
 import { createMatch, type MatchRules, type MatchView } from "./core/match";
@@ -40,6 +41,7 @@ export interface ScreenSessionAdapters {
   peers: PeerConnectors;
   relay: ReplyRelay;
   visitScreens: VisitScreens;
+  playSoundEffect: PlaySoundEffect;
 }
 
 export interface ScreenSession {
@@ -77,6 +79,7 @@ interface RouteEntry {
 }
 
 const SEED_RANGE = 2 ** 32;
+const LAUNCH_STEP = 1;
 const STATIC_STAR_TIME_MS = 0;
 const BACKDROP_LAYER: ItemsLayer = { kind: "items", items: describeBackdropFrame() };
 
@@ -209,6 +212,7 @@ function leaveVisit(state: SessionState): void {
 function stepSession(state: SessionState, reducedMotion: boolean, adapters: Readonly<ScreenSessionAdapters>): void {
   const played = state.played.step(reducedMotion);
   advanceSessionDebris(state, played.steppedView, reducedMotion, adapters.random);
+  playMatchSoundEffects(state.played, played.steppedView, adapters.playSoundEffect);
   if (played.returnsToMainMenu) {
     adapters.navigateTo("mainMenu");
   }
@@ -225,6 +229,31 @@ function advanceSessionDebris(
   } else if (steppedView !== undefined) {
     state.debris = advanceDebris(state.debris, steppedView, random);
   }
+}
+
+function playMatchSoundEffects(
+  played: Readonly<PlayedMatch>,
+  steppedView: MatchView | undefined,
+  playSoundEffect: PlaySoundEffect,
+): void {
+  if (!played.playsSoundEffects || steppedView === undefined) {
+    return;
+  }
+  for (const effect of matchSoundEffectsOf(steppedView)) {
+    playSoundEffect(effect);
+  }
+}
+
+function matchSoundEffectsOf(view: MatchView): MatchSoundEffect[] {
+  const effects: MatchSoundEffect[] = [];
+  if (view.phase.kind === "inFlight" && view.phase.stepsFlown === LAUNCH_STEP) {
+    effects.push("launch");
+  }
+  if (view.impact !== undefined) {
+    const impactEffect = view.phase.kind === "roundOver" ? "shipExplosion" : "planetImpact";
+    effects.push(impactEffect);
+  }
+  return effects;
 }
 
 function awaitsFirstShot(state: Readonly<SessionState>): boolean {

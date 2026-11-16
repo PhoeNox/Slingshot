@@ -27,6 +27,7 @@ export interface PlayedMatchStep {
 export interface PlayedMatch {
   readonly viewer: Readonly<Viewer>;
   readonly shakes: boolean;
+  readonly playsSoundEffects: boolean;
   readonly takesInput: boolean;
   aimingSide: () => Side | undefined;
   aim: (delta: AimDelta) => void;
@@ -49,6 +50,7 @@ export function playHotSeat(match: Match): PlayedMatch {
   return {
     viewer: HOT_SEAT_VIEWER,
     shakes: true,
+    playsSoundEffects: true,
     takesInput: true,
     aimingSide: () => hotSeatAimingSide(match),
     aim: (delta) => adjustAim(match, delta),
@@ -81,6 +83,7 @@ export function playAttractMode(attract: AttractMode, screen: Screen): PlayedMat
   return {
     viewer: ATTRACT_VIEWER,
     shakes: false,
+    playsSoundEffects: false,
     takesInput: false,
     aimingSide: noSide,
     aim: ignore,

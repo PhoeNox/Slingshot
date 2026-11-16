@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Thomas Eggerling
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import type { PlaySoundEffect } from "./audio";
 import { COLOURS } from "./colours";
 import type { PlanetCountRange } from "./core/match";
 import { canEnterFullscreen, enterLandscapeFullscreen, isFullscreen, toggleLandscapeFullscreen } from "./fullscreen";
@@ -110,6 +111,27 @@ export function bindMenuButtonEffects(button: HTMLButtonElement, reducedMotion: 
     playScramble(button, label);
   });
   bindBracketFlash(button);
+}
+
+// A click also fires for a button activated by keyboard, and a change for a setting control from any input.
+export function bindMenuSelectSound(overlay: HTMLElement, playSoundEffect: PlaySoundEffect): void {
+  const playMenuSelect = () => {
+    playSoundEffect("menuSelect");
+  };
+  overlay.addEventListener("click", (event) => {
+    if (isTargetWithin(event, "button")) {
+      playMenuSelect();
+    }
+  });
+  overlay.addEventListener("change", (event) => {
+    if (isTargetWithin(event, "[data-setting]")) {
+      playMenuSelect();
+    }
+  });
+}
+
+function isTargetWithin(event: Event, selector: string): boolean {
+  return event.target instanceof Element && event.target.closest(selector) !== null;
 }
 
 export function bindBracketFlash(button: HTMLButtonElement): void {

@@ -115,6 +115,7 @@ function remoteSession(): ScreenSession {
     peers: { host: noVisit, join: noVisit },
     relay: { awaitReplies: noVisit, deliverReply: noVisit },
     visitScreens: { showHostState: noVisit, showGuestState: noVisit },
+    playSoundEffect: () => {},
   };
   const session = createScreenSession(adapters);
   navigations.set(session, navigated);

@@ -30,12 +30,12 @@ Pure, seeded, no DOM, canvas, or clock (ADR-0001).
 | --- | --- |
 | `main.ts` | Boot: queries elements, loads assets, builds the settings store and the screen session with their adapters, binds input, navigation and screens, starts the loop |
 | `gameLoop.ts` | Fixed 30 Hz step loop plus render callback |
-| `screenSession.ts` | Owns the current screen, the one current `PlayedMatch` and the host or guest visit; enters routes, steps the played match and describes each frame as layers |
+| `screenSession.ts` | Owns the current screen, the one current `PlayedMatch` and the host or guest visit; enters routes, steps the played match, plays its sound effects and describes each frame as layers |
 | `playedMatch.ts` | The `PlayedMatch` interface the screen session drives, with the hot-seat and attract-mode adapters (ADR-0002) |
 | `remoteMatch.ts` | Remote match over an open `PeerLink`, presented as a `PlayedMatch`, driving the lockstep through the effect loop |
 | `lockstep.ts` | Lockstep rules of a remote match as a pure transition (event in, effects out), with no link, encoder or decoder |
 | `navigation.ts` | Hash routes, screens, which screens play attract mode (ADR-0002), menu focus movement (ADR-0003) |
-| `screens.ts` | HTML overlays shown from one table keyed by every screen, button effects, settings tabs, the table-driven settings control binder |
+| `screens.ts` | HTML overlays shown from one table keyed by every screen, button effects, the menu select sound, settings tabs, the table-driven settings control binder |
 | `hashNavigation.ts` | The one module that reads and writes the URL hash, over a `HashLocation` port (window and in-memory adapters) |
 | `remoteVisit.ts` | Host and guest visit up to an open connection, performing the visit transition's effects through the effect loop |
 | `effectLoop.ts` | The one driver loop of the lockstep and the visit: performs effects in order and feeds every arrival back as an event |
@@ -65,7 +65,7 @@ Pure, seeded, no DOM, canvas, or clock (ADR-0001).
 | `display.ts` | Fits canvas and overlay to the stage's size, with the fit's CSS scale |
 | `fullscreen.ts` | Fullscreen availability, entering it with the orientation locked to landscape, and toggling it |
 | `assets.ts` | Sprite, font and sound loading |
-| `audio.ts` | Web Audio adapter: the audio context held back until the first user activation and suspended while the page is hidden, and the gapless music loop |
+| `audio.ts` | Web Audio adapter: the audio context held back until the first user activation and suspended while the page is hidden, the gapless music loop and the overlapping sound effects |
 | `colours.ts` | Colour tokens |
 | `scramble.ts` | Menu label scramble effect |
 

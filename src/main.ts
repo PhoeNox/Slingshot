@@ -3,7 +3,7 @@
 
 import "./style.css";
 import { loadFonts, loadSounds, loadSprites } from "./assets";
-import { bindAudioContext, loopedMusic } from "./audio";
+import { bindAudioContext, loopedMusic, soundEffectPlayer, type PlaySoundEffect } from "./audio";
 import { applyFit, applyOverlayFit, fitPlayingArea } from "./display";
 import { hudScaleFor } from "./frame";
 import { startGameLoop } from "./gameLoop";
@@ -15,7 +15,7 @@ import { bindRemoteMatchScreens, type GuestScreenElements, type HostScreenElemen
 import type { PeerConnectors } from "./remoteVisit";
 import { drawLayers } from "./renderer";
 import { nostrReplyRelay } from "./replyRelay";
-import { bindBracketFlash, bindFullscreenButton, bindFullscreenToggle, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindSettingControls, bindSettingsTabs, locateScreenElements, renderMenuItems, screenPanel, showGestureHint, showScreen, traceTitleArc } from "./screens";
+import { bindBracketFlash, bindFullscreenButton, bindFullscreenToggle, bindMainMenuButton, bindMenuButtonEffects, bindMenuFocusKeys, bindMenuSelectSound, bindSettingControls, bindSettingsTabs, locateScreenElements, renderMenuItems, screenPanel, showGestureHint, showScreen, traceTitleArc } from "./screens";
 import { localSettingsStorage } from "./settingsStorage";
 import { createSettingsStore } from "./settingsStore";
 import { createScreenSession, type ScreenSessionAdapters } from "./screenSession";
@@ -65,6 +65,12 @@ async function start(): Promise<void> {
 
   const settingsStorage = localSettingsStorage(window);
   const settings = createSettingsStore(settingsStorage);
+  const playEffect = soundEffectPlayer(audioContext, sounds);
+  const playSoundEffect: PlaySoundEffect = (effect) => {
+    if (settings.current().soundEffects) {
+      playEffect(effect);
+    }
+  };
 
   let hudScale = 1;
   const fitStage = () => {
@@ -104,6 +110,7 @@ async function start(): Promise<void> {
   const settingsTabs = settingsPanel.querySelector<HTMLElement>(".settings-tabs")!;
   bindSettingsTabs(settingsTabs);
   bindSettingControls(settingsPanel, settings);
+  bindMenuSelectSound(elements.overlay, playSoundEffect);
   const peers: PeerConnectors = { host: hostPeerConnection, join: joinPeerConnection };
   const relay = nostrReplyRelay();
   const submitReply = (replyCode: string) => {
@@ -118,6 +125,7 @@ async function start(): Promise<void> {
     peers,
     relay,
     visitScreens,
+    playSoundEffect,
   };
   const session = createScreenSession(sessionAdapters);
 
